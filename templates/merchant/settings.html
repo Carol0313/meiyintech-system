@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% block title %}账号设置{% endblock %}
+{% block page_title %}商家账号设置{% endblock %}
+{% block page_subtitle %}管理您的商家基本信息和服务区域{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                        <label class="form-label">商家名称</label>
+                        <input type="text" name="name" class="form-control" value="{{ merchant.name }}" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">商家地址</label>
+                        <textarea name="address" class="form-control" rows="3">{{ merchant.address }}</textarea>
+                    </div>
+
+                    <!-- 服务区域选择器 -->
+                    <div class="mb-4">
+                        <label class="form-label">服务区域</label>
+                        <div id="regionSelector"></div>
+                        <input type="hidden" name="service_regions" id="serviceRegionsInput" value="{{ merchant.service_regions|default:'' }}">
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label">联系电话</label>
+                            <input type="text" name="contact_phone" class="form-control" value="{{ merchant.contact_phone }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">客服微信号</label>
+                            <input type="text" name="customer_service_wechat" class="form-control" value="{{ merchant.customer_service_wechat }}">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg">保存</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/china_regions.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 解析已保存的区域数据
+    let selected = [];
+    try {
+        const raw = document.getElementById('serviceRegionsInput').value;
+        if (raw && raw.trim()) {
+            // 尝试解析JSON，如果失败则尝试旧格式（逗号分隔）
+            if (raw.startsWith('[')) {
+                selected = JSON.parse(raw);
+            } else {
+                // 旧格式：逗号分隔的省份列表
+                selected = raw.split(',').filter(Boolean).map(p => ({province: p.trim(), cities: []}));
+            }
+        }
+    } catch(e) {
+        console.log('Parse regions error:', e);
+    }
+    initRegionSelector('regionSelector', 'serviceRegionsInput', selected);
+});
+</script>
+
+<style>
+.region-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 6px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: #fff;
+}
+.region-row {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #f8fafc;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+}
+.region-row:hover {
+    border-color: var(--border-light);
+}
+.region-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.region-cities {
+    margin-top: 6px;
+    padding-top: 6px;
+    padding-left: 22px;
+    border-top: 1px dashed var(--border-light);
+    display: none;
+}
+</style>
+{% endblock %}

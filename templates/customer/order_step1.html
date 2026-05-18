@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+{% block title %}选择规格 - 下单{% endblock %}
+{% block page_title %}步骤 1/7{% endblock %}
+{% block page_subtitle %}选择产品规格参数{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <div class="step-indicator">
+            <div class="step-dot active"></div><div class="step-dot"></div><div class="step-dot"></div>
+            <div class="step-dot"></div><div class="step-dot"></div><div class="step-dot"></div><div class="step-dot"></div>
+        </div>
+        <div class="card">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-4">参数规格选择</h5>
+                <form method="post" id="step1Form">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">产品大类 <span class="text-danger">*</span></label>
+                        <select name="product_category" id="productCategory" class="form-select" required>
+                            <option value="">-- 请选择大类 --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">细分产品 <span class="text-danger">*</span></label>
+                        <select name="product_name" id="productName" class="form-select" required disabled>
+                            <option value="">-- 请先选择大类 --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">材质 <span class="text-danger">*</span></label>
+                        <select name="material" id="material" class="form-select" required disabled>
+                            <option value="">-- 请先选择产品 --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">厚度 <span class="text-danger">*</span></label>
+                        <select name="thickness" id="thickness" class="form-select" required disabled>
+                            <option value="">-- 请先选择材质 --</option>
+                        </select>
+                        <input type="hidden" name="unit_price" id="unitPrice" value="0">
+                        <div class="mt-2" id="priceDisplay" style="display:none;">
+                            <span class="badge bg-primary" style="border-radius:8px;padding:6px 12px;">单价：¥<span id="priceValue">0.00</span> / cm²</span>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">数量</label>
+                            <input type="number" name="quantity" class="form-control" value="1" min="1" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">长度 (mm)</label>
+                            <input type="number" step="0.01" name="length_mm" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">宽度 (mm)</label>
+                            <input type="number" step="0.01" name="width_mm" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="mt-4 d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">下一步：上传文件 <i class="bi bi-arrow-right ms-2"></i></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const SPEC_DATA = {{ spec_data_json|safe }};
+
+const categorySelect = document.getElementById('productCategory');
+const productSelect = document.getElementById('productName');
+const materialSelect = document.getElementById('material');
+const thicknessSelect = document.getElementById('thickness');
+const unitPriceInput = document.getElementById('unitPrice');
+const priceDisplay = document.getElementById('priceDisplay');
+const priceValue = document.getElementById('priceValue');
+
+// 初始化大类下拉
+Object.keys(SPEC_DATA).forEach(key => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = SPEC_DATA[key].label;
+    categorySelect.appendChild(opt);
+});
+
+categorySelect.addEventListener('change', function() {
+    productSelect.innerHTML = '<option value="">-- 请选择细分产品 --</option>';
+    materialSelect.innerHTML = '<option value="">-- 请先选择产品 --</option>';
+    thicknessSelect.innerHTML = '<option value="">-- 请先选择材质 --</option>';
+    productSelect.disabled = true;
+    materialSelect.disabled = true;
+    thicknessSelect.disabled = true;
+    priceDisplay.style.display = 'none';
+    unitPriceInput.value = '0';
+
+    const data = SPEC_DATA[this.value];
+    if (!data) { productSelect.disabled = true; return; }
+
+    productSelect.disabled = false;
+    Object.keys(data.products).forEach(prodKey => {
+        const opt = document.createElement('option');
+        opt.value = prodKey;
+        opt.textContent = data.products[prodKey].label;
+        productSelect.appendChild(opt);
+    });
+});
+
+productSelect.addEventListener('change', function() {
+    materialSelect.innerHTML = '<option value="">-- 请选择材质 --</option>';
+    thicknessSelect.innerHTML = '<option value="">-- 请先选择材质 --</option>';
+    materialSelect.disabled = true;
+    thicknessSelect.disabled = true;
+    priceDisplay.style.display = 'none';
+    unitPriceInput.value = '0';
+
+    const catData = SPEC_DATA[categorySelect.value];
+    if (!catData) { materialSelect.disabled = true; return; }
+    const prodData = catData.products[this.value];
+    if (!prodData) { materialSelect.disabled = true; return; }
+
+    materialSelect.disabled = false;
+    Object.keys(prodData.materials).forEach(matKey => {
+        const opt = document.createElement('option');
+        opt.value = matKey;
+        opt.textContent = prodData.materials[matKey].label;
+        materialSelect.appendChild(opt);
+    });
+});
+
+materialSelect.addEventListener('change', function() {
+    thicknessSelect.innerHTML = '<option value="">-- 请选择厚度 --</option>';
+    priceDisplay.style.display = 'none';
+    unitPriceInput.value = '0';
+
+    const catData = SPEC_DATA[categorySelect.value];
+    if (!catData) { thicknessSelect.disabled = true; return; }
+    const prodData = catData.products[productSelect.value];
+    if (!prodData) { thicknessSelect.disabled = true; return; }
+    const matData = prodData.materials[this.value];
+    if (!matData) { thicknessSelect.disabled = true; return; }
+
+    thicknessSelect.disabled = false;
+    matData.thicknesses.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.value;
+        opt.textContent = t.label + ' （¥' + t.price + '/cm²）';
+        opt.dataset.price = t.price;
+        thicknessSelect.appendChild(opt);
+    });
+});
+
+thicknessSelect.addEventListener('change', function() {
+    const selected = this.options[this.selectedIndex];
+    const price = selected.dataset.price || '0';
+    unitPriceInput.value = price;
+    priceValue.textContent = parseFloat(price).toFixed(2);
+    priceDisplay.style.display = 'inline-block';
+});
+</script>
+{% endblock %}

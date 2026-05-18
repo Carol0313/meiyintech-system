@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}权限预设{% endblock %}
+{% block page_title %}全局岗位权限预设{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th>角色</th><th>权限数</th><th>操作</th></tr></thead>
+            <tbody>
+                {% for r in roles %}
+                <tr>
+                    <td>{{ r.get_name_display }}</td>
+                    <td>{{ r.permissions|length }}</td>
+                    <td><a href="{% url 'admin_role_edit' r.id %}" class="btn btn-sm btn-outline-primary">编辑</a></td>
+                </tr>
+                {% empty %}<tr><td colspan="3" class="text-center text-muted py-3">暂无预设</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

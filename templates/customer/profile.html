@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}个人中心{% endblock %}
+{% block page_title %}个人中心{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">账号设置</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {% for field in form %}
+                    <div class="mb-3">
+                        <label class="form-label">{{ field.label }}</label>
+                        {{ field }}
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary">保存修改</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">信用额度</div>
+            <div class="card-body text-center">
+                <div class="fs-1 fw-bold text-primary">¥{{ profile.credit_remaining }}</div>
+                <div class="text-muted small">剩余额度 / ¥{{ profile.credit_limit }} 总额度</div>
+                <div class="mt-3 progress">
+                    {% widthratio profile.credit_used profile.credit_limit 100 as used_pct %}
+                    <div class="progress-bar" style="width: {{ used_pct }}%"></div>
+                </div>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">账号信息</div>
+            <div class="card-body">
+                <p><strong>手机号：</strong>{{ user.phone }}</p>
+                <p><strong>用户名：</strong>{{ user.username }}</p>
+                <p><strong>审核状态：</strong>{{ profile.get_registration_status_display }}</p>
+                <p><strong>所属商家：</strong>{{ profile.merchant.name }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

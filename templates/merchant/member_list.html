@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}会员管理{% endblock %}
+{% block page_title %}会员管理{% endblock %}
+{% block content %}
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="btn-group btn-group-sm">
+            <a href="?status=" class="btn btn-outline-secondary {% if not status_filter %}active{% endif %}">全部</a>
+            <a href="?status=pending" class="btn btn-outline-secondary {% if status_filter == 'pending' %}active{% endif %}">待审核</a>
+            <a href="?status=approved" class="btn btn-outline-secondary {% if status_filter == 'approved' %}active{% endif %}">已通过</a>
+            <a href="?status=rejected" class="btn btn-outline-secondary {% if status_filter == 'rejected' %}active{% endif %}">已拒绝</a>
+        </div>
+    </div>
+</div>
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr><th>姓名</th><th>手机号</th><th>公司</th><th>城市</th><th>额度</th><th>状态</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+                {% for m in members %}
+                <tr>
+                    <td>{{ m.real_name|default:"-" }}</td>
+                    <td>{{ m.user.phone }}</td>
+                    <td>{{ m.company_name|default:"-" }}</td>
+                    <td>{{ m.province|default:m.city|default:"-" }}<br><span class="badge bg-info" style="font-size:0.65rem;">{{ m.pricing_tier }}档价</span></td>
+                    <td>¥{{ m.credit_limit }} / 已用 ¥{{ m.credit_used }}</td>
+                    <td><span class="badge bg-{% if m.registration_status == 'approved' %}success{% elif m.registration_status == 'pending' %}warning{% else %}danger{% endif %}">{{ m.get_registration_status_display }}</span></td>
+                    <td>
+                        {% if m.registration_status == 'pending' %}
+                        <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#approveModal{{ m.id }}">通过</button>
+                        <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal{{ m.id }}">拒绝</button>
+                        {% elif m.registration_status == 'approved' %}
+                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#creditModal{{ m.id }}">调整额度</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}<tr><td colspan="7" class="text-center text-muted py-3">暂无会员</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% for m in members %}
+{% if m.registration_status == 'pending' %}
+<div class="modal fade" id="approveModal{{ m.id }}" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="post" action="{% url 'member_approve' m.id %}">
+            {% csrf_token %}
+            <div class="modal-header"><h5 class="modal-title">审核通过</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <label>初始信用额度</label>
+                <input type="number" name="credit_limit" class="form-control" value="10000" step="0.01">
+            </div>
+            <div class="modal-footer"><button type="submit" class="btn btn-success">确认通过</button></div>
+        </form>
+    </div></div>
+</div>
+<div class="modal fade" id="rejectModal{{ m.id }}" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="post" action="{% url 'member_reject' m.id %}">
+            {% csrf_token %}
+            <div class="modal-header"><h5 class="modal-title">拒绝注册</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <label>拒绝原因</label>
+                <textarea name="rejection_reason" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="modal-footer"><button type="submit" class="btn btn-danger">确认拒绝</button></div>
+        </form>
+    </div></div>
+</div>
+{% elif m.registration_status == 'approved' %}
+<div class="modal fade" id="creditModal{{ m.id }}" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="post" action="{% url 'member_adjust_credit' m.id %}">
+            {% csrf_token %}
+            <div class="modal-header"><h5 class="modal-title">调整信用额度</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <label>新额度</label>
+                <input type="number" name="credit_limit" class="form-control" value="{{ m.credit_limit }}" step="0.01">
+            </div>
+            <div class="modal-footer"><button type="submit" class="btn btn-primary">保存</button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}

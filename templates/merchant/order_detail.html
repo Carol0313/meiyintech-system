@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% block title %}订单详情 {{ order.sn }}{% endblock %}
+{% block page_title %}订单详情 {{ order.sn }}{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>
+                    订单信息
+                    {% if order.order_type == 'remake' %}
+                    <span class="badge bg-warning text-dark ms-2">补版单</span>
+                    {% endif %}
+                </span>
+                <span class="badge badge-status status-{{ order.status }}">{{ order.get_status_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>客户：</strong>{{ order.customer.phone }}</div>
+                    <div class="col-md-6"><strong>创建时间：</strong>{{ order.created_at|date:"Y-m-d H:i" }}</div>
+                    <div class="col-md-6"><strong>加急：</strong>{% if order.urgent %}是 (+10%){% else %}否{% endif %}</div>
+                    <div class="col-md-6"><strong>配送：</strong>{{ order.get_delivery_type_display|default:"-" }}</div>
+                    {% if order.order_type == 'remake' %}
+                    <div class="col-md-6"><strong>原订单：</strong><a href="{% url 'merchant_order_detail' order.original_order.id %}">{{ order.original_order.sn }}</a></div>
+                    <div class="col-md-6"><strong>补版原因：</strong>{{ order.remake_reason }}</div>
+                    <div class="col-md-6"><strong>发起人：</strong>{{ order.remake_initiator.username|default:order.remake_initiator.phone }}</div>
+                    {% endif %}
+                </div>
+                <h6>产品明细</h6>
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light"><tr><th>产品</th><th>材料</th><th>厚度</th><th>尺寸</th><th>数量</th><th>小计</th></tr></thead>
+                    <tbody>
+                        {% for item in order.items.all %}
+                        <tr>
+                            <td>{{ item.get_product_name_display }}</td><td>{{ item.get_material_display }}</td>
+                            <td>{{ item.thickness }}mm</td><td>{{ item.length_mm }}×{{ item.width_mm }}mm</td>
+                            <td>{{ item.quantity }}</td><td>¥{{ item.subtotal }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="text-end fw-bold">总金额：¥{{ order.total_amount }}</div>
+                {% if order.special_requests %}<div class="mt-2"><strong>特殊要求：</strong>{{ order.special_requests }}</div>{% endif %}
+            </div>
+        </div>
+        <!-- 沟通记录 -->
+        <div class="card mb-3">
+            <div class="card-header">沟通记录</div>
+            <div class="card-body">
+                {% for comm in order.communications.all %}
+                <div class="mb-2 pb-2 border-bottom">
+                    <span class="fw-bold small">{{ comm.sender.username|default:comm.sender.phone }}</span>
+                    <span class="text-muted small">{{ comm.created_at|date:"m-d H:i" }}</span>
+                    <div>{{ comm.content }}</div>
+                </div>
+                {% empty %}<div class="text-muted small">暂无沟通记录</div>{% endfor %}
+                <form method="post" class="mt-3">
+                    {% csrf_token %}<input type="hidden" name="action" value="communicate">
+                    <div class="input-group"><input type="text" name="content" class="form-control" placeholder="输入沟通内容..."><button type="submit" class="btn btn-primary">发送</button></div>
+                </form>
+            </div>
+        </div>
+        <!-- 生产照片 -->
+        {% if order.production_photos.all %}
+        <div class="card mb-3">
+            <div class="card-header">生产/质检照片</div>
+            <div class="card-body d-flex gap-2">
+                {% for p in order.production_photos.all %}
+                <div class="border rounded p-1 text-center">
+                    <img src="{{ p.image.url }}" style="max-height:120px;" class="img-fluid">
+                    <div class="small text-muted">{{ p.get_photo_type_display }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        <!-- 拍照对比 -->
+        <div class="card mb-3">
+            <div class="card-header">拍照对比（成品 vs 源文件）</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6 text-center border-end">
+                        <div class="text-muted small mb-2">源文件预览</div>
+                        {% with item=order.items.first %}
+                        {% if item and item.file %}
+                        <p class="small"><a href="{{ item.file.url }}" target="_blank">查看PDF</a></p>
+                        {% else %}<span class="text-muted">无源文件</span>{% endif %}
+                        {% endwith %}
+                    </div>
+                    <div class="col-6 text-center">
+                        <div class="text-muted small mb-2">成品照片</div>
+                        {% with photo=order.production_photos.first %}
+                        {% if photo %}<img src="{{ photo.image.url }}" style="max-height:150px;" class="img-fluid">{% else %}<span class="text-muted">尚未上传</span>{% endif %}
+                        {% endwith %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <!-- 操作面板 -->
+        <div class="card mb-3">
+            <div class="card-header">订单操作</div>
+            <div class="card-body">
+                {% if order.status == 'pending_confirm' %}
+                <form method="post" class="mb-2">
+                    {% csrf_token %}<input type="hidden" name="action" value="audit">
+                    <button type="submit" class="btn btn-success w-100">审核通过</button>
+                </form>
+                <form method="post" class="mb-2">
+                    {% csrf_token %}<input type="hidden" name="action" value="reject">
+                    <input type="text" name="rejection_reason" class="form-control form-control-sm mb-1" placeholder="驳回原因">
+                    <button type="submit" class="btn btn-outline-danger w-100 btn-sm">驳回</button>
+                </form>
+                {% endif %}
+                {% if order.status == 'design_confirmed' or order.status == 'paid' %}
+                <form method="post" class="mb-2">
+                    {% csrf_token %}<input type="hidden" name="action" value="assign_design">
+                    <select name="designer_id" class="form-select form-select-sm mb-1">
+                        <option value="">选择设计人员</option>
+                        {% for d in designers %}<option value="{{ d.user.id }}">{{ d.user.username|default:d.user.phone }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary w-100 btn-sm">分配设计岗</button>
+                </form>
+                {% endif %}
+                {% if order.status == 'paid' or order.status == 'design_confirmed' %}
+                <form method="post" class="mb-2">
+                    {% csrf_token %}<input type="hidden" name="action" value="arrange_production">
+                    <select name="factory_id" class="form-select form-select-sm mb-1">
+                        <option value="">选择工厂</option>
+                        {% for f in factories %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
+                    </select>
+                    <input type="number" name="production_cycle" class="form-control form-control-sm mb-1" placeholder="生产周期(小时)">
+                    <button type="submit" class="btn btn-primary w-100 btn-sm">安排生产</button>
+                </form>
+                {% endif %}
+                {% if order.status == 'in_production' %}
+                <form method="post" action="{% url 'upload_production_photo' order.id %}" enctype="multipart/form-data" class="mb-2">
+                    {% csrf_token %}
+                    <select name="photo_type" class="form-select form-select-sm mb-1">
+                        <option value="front">成品正面</option><option value="inspection">检测结果</option>
+                    </select>
+                    <input type="file" name="photo" class="form-control form-control-sm mb-1" accept="image/*">
+                    <button type="submit" class="btn btn-outline-primary w-100 btn-sm">上传照片</button>
+                </form>
+                <form method="post" class="mb-2">
+                    {% csrf_token %}<input type="hidden" name="action" value="ship">
+                    <input type="text" name="tracking_number" class="form-control form-control-sm mb-1" placeholder="物流/快递单号">
+                    <button type="submit" class="btn btn-success w-100">确认发货</button>
+                </form>
+                {% endif %}
+                {% if order.status == 'pending_payment' %}
+                <form method="post" class="mb-2">
+                    {% csrf_token %}<input type="hidden" name="action" value="mark_paid">
+                    <button type="submit" class="btn btn-warning w-100">标记线下支付（开始生产）</button>
+                </form>
+                {% endif %}
+                {% if order.order_type == 'normal' %}
+                    {% if order.status == 'shipped' or order.status == 'received' or order.status == 'in_production' %}
+                    <a href="{% url 'remake_order_create' order.id %}" class="btn btn-outline-warning w-100 mb-2">
+                        <i class="bi bi-arrow-repeat"></i> 发起补版
+                    </a>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">状态流转</div>
+            <div class="card-body small">
+                {% for log in order.status_logs.all %}
+                <div class="mb-2"><span class="text-muted">{{ log.created_at|date:"m-d H:i" }}</span><br>{{ log.get_from_status_display|default:"-" }} → {{ log.get_to_status_display }}</div>
+                {% empty %}<div class="text-muted">暂无记录</div>{% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

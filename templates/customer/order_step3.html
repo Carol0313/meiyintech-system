@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}面积计算 - 下单{% endblock %}
+{% block page_title %}步骤3：面积计算{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="mb-3">系统自动分析结果</h5>
+                <div class="p-4 bg-light rounded mb-3">
+                    <div class="text-muted small">PDF参考面积</div>
+                    <div class="fs-1 fw-bold text-primary">{{ area }} cm²</div>
+                </div>
+                <p class="text-muted small">* 面积为系统根据PDF页面尺寸自动估算，仅供参考，实际以商家核算为准。</p>
+                <a href="{% url 'order_step4' draft.id %}" class="btn btn-primary">下一步：效果预览</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

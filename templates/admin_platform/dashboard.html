@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}总平台首页{% endblock %}
+{% block page_title %}平台运营中心{% endblock %}
+{% block page_subtitle %}管理商家、权限与系统配置{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="stat-icon primary"><i class="bi bi-shop"></i></div>
+            <div class="stat-label">入驻商家总数</div>
+            <div class="stat-value">{{ merchant_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="stat-icon warning"><i class="bi bi-hourglass-split"></i></div>
+            <div class="stat-label">待审核商家</div>
+            <div class="stat-value" style="color:#d97706;">{{ pending_merchants }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="stat-icon info"><i class="bi bi-journal-text"></i></div>
+            <div class="stat-label">平台订单总数</div>
+            <div class="stat-value" style="color:#2563eb;">{{ order_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">快捷入口</div>
+    <div class="card-body d-flex gap-3 flex-wrap">
+        <a href="{% url 'admin_merchants' %}" class="btn btn-outline-primary">
+            <i class="bi bi-shop me-2"></i>商家管理
+        </a>
+        <a href="{% url 'admin_roles' %}" class="btn btn-outline-primary">
+            <i class="bi bi-shield-lock me-2"></i>权限预设
+        </a>
+        <a href="{% url 'admin_spec_requests' %}" class="btn btn-outline-primary">
+            <i class="bi bi-box-seam me-2"></i>非标申请
+        </a>
+    </div>
+</div>
+{% endblock %}

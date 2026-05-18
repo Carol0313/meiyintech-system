@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}工厂管理{% endblock %}
+{% block page_title %}工厂管理{% endblock %}
+{% block content %}
+<div class="mb-3">
+    <a href="{% url 'factory_add' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 添加工厂</a>
+</div>
+<div class="row g-3">
+    {% for f in factories %}
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <h5>{{ f.name }}</h5>
+                    {% if f.is_active %}<span class="badge bg-success">启用</span>{% else %}<span class="badge bg-secondary">禁用</span>{% endif %}
+                </div>
+                <p class="text-muted small mb-1">{{ f.address|default:"-" }}</p>
+                <p class="small mb-0">联系人：{{ f.contact_person|default:"-" }} {{ f.contact_phone|default:"-" }}</p>
+                <a href="{% url 'factory_edit' f.id %}" class="btn btn-sm btn-outline-primary mt-2">编辑</a>
+            </div>
+        </div>
+    </div>
+    {% empty %}<div class="col-12"><div class="alert alert-info">暂无工厂信息</div></div>{% endfor %}
+</div>
+{% endblock %}

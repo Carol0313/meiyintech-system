@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}编辑权限 - {{ role.get_name_display }}{% endblock %}
+{% block page_title %}编辑 {{ role.get_name_display }} 全局权限{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-body">
+                <div class="alert alert-info small">修改后，所有商家的对应角色权限将自动同步更新。</div>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">权限配置（多选）</label>
+                        <div class="row">
+                            {% for val, label in all_permissions %}
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="permissions" value="{{ val }}" id="perm_{{ val }}" {% if val in current_perms %}checked{% endif %}>
+                                    <label class="form-check-label" for="perm_{{ val }}">{{ label }}</label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">保存并同步</button>
+                    <a href="{% url 'admin_roles' %}" class="btn btn-outline-secondary">返回</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

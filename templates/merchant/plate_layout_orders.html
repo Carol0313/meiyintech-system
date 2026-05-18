@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% block title %}拼版工具{% endblock %}
+{% block page_title %}拼版工作台{% endblock %}
+{% block page_subtitle %}系统自动拼版后，设计师确认或微调{% endblock %}
+
+{% block content %}
+<style>
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .badge-auto { background: #dbeafe; color: #1e40af; }
+    .badge-manual { background: #fef3c7; color: #92400e; }
+    .order-row-auto { background: #f8fbff; }
+    .btn-confirm { background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; }
+    .btn-confirm:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.3); }
+</style>
+
+<!-- 待确认拼版（系统自动生成） -->
+<div class="mb-4">
+    <div class="section-title">
+        <i class="bi bi-magic" style="color: #3b82f6;"></i>
+        待确认拼版
+        <span class="badge badge-auto">{{ pending_confirm.count }}</span>
+        <span class="small text-muted ms-2">系统已自动拼版，请设计师确认或微调</span>
+    </div>
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr><th>订单号</th><th>客户</th><th>产品</th><th>分配时间</th><th>拼版状态</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                    {% for o in pending_confirm %}
+                    <tr class="order-row-auto">
+                        <td><strong>{{ o.sn }}</strong></td>
+                        <td>{{ o.customer.phone }}</td>
+                        <td>
+                            {% for item in o.items.all %}
+                            <span class="small">{{ item.get_product_name_display }} {{ item.thickness }}mm</span>{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        </td>
+                        <td>{{ o.updated_at|date:"m-d H:i" }}</td>
+                        <td><span class="badge badge-auto">已自动拼版</span></td>
+                        <td>
+                            <a href="{% url 'plate_layout_work' o.id %}" class="btn btn-sm btn-primary">
+                                <i class="bi bi-check2-square"></i> 确认拼版
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-3 d-block mb-2" style="opacity:0.3;"></i>
+                        暂无待确认拼版的订单
+                    </td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 待拼版（还未生成） -->
+<div class="mb-4">
+    <div class="section-title">
+        <i class="bi bi-pencil-square" style="color: #f59e0b;"></i>
+        待手动拼版
+        <span class="badge badge-manual">{{ pending_work.count }}</span>
+        <span class="small text-muted ms-2">需要设计师从零开始拼版</span>
+    </div>
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr><th>订单号</th><th>客户</th><th>产品</th><th>分配时间</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                    {% for o in pending_work %}
+                    <tr>
+                        <td>{{ o.sn }}</td>
+                        <td>{{ o.customer.phone }}</td>
+                        <td>
+                            {% for item in o.items.all %}
+                            <span class="small">{{ item.get_product_name_display }} {{ item.thickness }}mm</span>{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        </td>
+                        <td>{{ o.updated_at|date:"m-d H:i" }}</td>
+                        <td><a href="{% url 'plate_layout_work' o.id %}" class="btn btn-sm btn-outline-primary">开始拼版</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-3 d-block mb-2" style="opacity:0.3;"></i>
+                        暂无待拼版订单
+                    </td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

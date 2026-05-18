@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+{% block title %}拼版工作台 {{ order.sn }}{% endblock %}
+{% block page_title %}拼版工作台{% endblock %}
+{% block page_subtitle %}订单 {{ order.sn }} | 客户：{{ order.customer.phone }}{% endblock %}
+
+{% block content %}
+<style>
+    .plate-alert {
+        padding: 14px 20px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .plate-alert.auto {
+        background: linear-gradient(135deg, #dbeafe, #eff6ff);
+        border: 1px solid #bfdbfe;
+        color: #1e40af;
+    }
+    .plate-alert.auto i { font-size: 1.25rem; }
+    .action-bar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+    }
+    .btn-confirm-plate {
+        background: linear-gradient(135deg, #10b981, #059669);
+        border: none;
+        color: white;
+        padding: 10px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    .btn-confirm-plate:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(16,185,129,0.3);
+    }
+    .btn-reject-plate {
+        background: white;
+        border: 1.5px solid #ef4444;
+        color: #ef4444;
+        padding: 10px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    .btn-reject-plate:hover {
+        background: #fef2f2;
+    }
+    .btn-save-plate {
+        background: linear-gradient(135deg, var(--primary), #3b82f6);
+        border: none;
+        color: white;
+        padding: 10px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    .btn-save-plate:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(30,64,175,0.3);
+    }
+</style>
+
+{% if order.plate_status == 'auto_generated' %}
+<div class="plate-alert auto">
+    <i class="bi bi-magic"></i>
+    <div>
+        <strong>系统自动拼版已完成</strong>
+        <div class="small">系统已根据产品尺寸自动生成拼版建议，请设计师确认或进行微调。确认后订单将自动下发到工厂生产。</div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">订单产品信息</div>
+            <div class="card-body">
+                {% for item in items %}
+                <div class="mb-2 pb-2 border-bottom">
+                    <div class="fw-bold">{{ item.get_product_name_display }} {{ item.get_material_display }}</div>
+                    <div class="small text-muted">尺寸: {{ item.length_mm }}×{{ item.width_mm }}mm | 数量: {{ item.quantity }}</div>
+                    {% if item.plate_type %}
+                    <div class="small mt-1"><span class="badge bg-info">版类：{{ item.plate_type }}</span></div>
+                    {% endif %}
+                    {% if item.red_box_data %}
+                    <div class="small mt-1"><span class="badge bg-warning text-dark">已识别PDF红框</span></div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- PDF预检报告 -->
+        {% if preflight_reports %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>PDF预检报告</span>
+                <span class="badge bg-primary">{{ preflight_reports|length }} 个文件</span>
+            </div>
+            <div class="card-body p-2">
+                {% for pr in preflight_reports %}
+                <div class="mb-2">
+                    <div class="small fw-bold mb-1">{{ pr.item_label }}</div>
+                    {{ pr.report_html|safe }}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% if suggestion %}
+        <div class="card mb-3">
+            <div class="card-header">系统拼版建议</div>
+            <div class="card-body small">
+                <p>大版尺寸: {{ suggestion.plate_width }}×{{ suggestion.plate_height }}mm</p>
+                <p>排列数量: {{ suggestion.placed_count }} 个</p>
+                <p>材料利用率: {{ suggestion.usage_rate|floatformat:1 }}%</p>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="applySuggestion()">应用建议</button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">拼版画布</div>
+            <div class="card-body">
+                <div id="canvasContainer" class="border bg-light position-relative" style="width:100%; height:500px; overflow:hidden;">
+                    {% for rect in suggestion.rectangles|default:layout_data_parsed.rectangles|default:'' %}
+                    <div class="position-absolute border border-dark bg-white d-flex align-items-center justify-content-center" style="left:{{ rect.x }}px; top:{{ rect.y }}px; width:{{ rect.width }}px; height:{{ rect.height }}px; font-size:10px;">
+                        {{ rect.label }}
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <form method="post" class="mt-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="layout_data" id="layoutData" value='{{ layout.layout_data|default:"{}"|safe }}'>
+                    <div class="mb-3">
+                        <label class="form-label">设计师备注</label>
+                        <textarea name="designer_note" class="form-control" rows="2">{{ layout.designer_note|default:'' }}</textarea>
+                    </div>
+
+                    <div class="action-bar">
+                        <button type="submit" name="action" value="save" class="btn-save-plate">
+                            <i class="bi bi-save"></i> 保存拼版
+                        </button>
+
+                        {% if order.plate_status == 'auto_generated' %}
+                        <button type="submit" name="action" value="confirm_plate" class="btn-confirm-plate" onclick="return confirm('确认后订单将自动下发到工厂生产，是否继续？')">
+                            <i class="bi bi-check-lg"></i> 确认拼版并下发工厂
+                        </button>
+
+                        <button type="button" class="btn-reject-plate" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                            <i class="bi bi-x-lg"></i> 驳回拼版
+                        </button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 驳回弹窗 -->
+{% if order.plate_status == 'auto_generated' %}
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">驳回拼版</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="reject_plate">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">驳回原因</label>
+                        <textarea name="reject_reason" class="form-control" rows="3" placeholder="请说明驳回原因，以便重新安排拼版" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-danger">确认驳回</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function applySuggestion() {
+    const data = {{ suggestion_json|safe }};
+    document.getElementById('layoutData').value = JSON.stringify(data);
+    alert('建议已应用到表单，点击保存即可');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,198 @@
+{% extends 'base.html' %}
+{% block title %}订单详情 {{ order.sn }}{% endblock %}
+{% block page_title %}订单详情{% endblock %}
+
+{% block content %}
+{% with progress=order.get_customer_progress %}
+<div class="row">
+    <div class="col-md-8">
+        <!-- 进度条 -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>订单进度</span>
+                {% if progress.is_abnormal %}
+                <span class="badge bg-danger">{{ progress.abnormal_status }}</span>
+                {% else %}
+                <span class="badge bg-primary">{{ progress.current_label }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="progress-tracker">
+                    {% for step in progress.steps %}
+                    <div class="progress-step {% if step.active %}active{% elif step.done %}done{% endif %}">
+                        <div class="step-icon"><i class="bi {{ step.icon }}"></i></div>
+                        <div class="step-label">{{ step.label }}</div>
+                    </div>
+                    {% if not forloop.last %}
+                    <div class="progress-line {% if step.done %}done{% endif %}"></div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 订单信息 -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between">
+                <span>订单 {{ order.sn }}</span>
+                <span class="badge badge-status status-{{ order.status }}">{{ order.get_status_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>所属商家：</strong>{{ order.merchant.name }}</div>
+                    <div class="col-md-6"><strong>创建时间：</strong>{{ order.created_at|date:"Y-m-d H:i" }}</div>
+                    <div class="col-md-6"><strong>配送方式：</strong>{{ order.get_delivery_type_display|default:"-" }}</div>
+                    <div class="col-md-6"><strong>加急：</strong>{% if order.urgent %}是 (+10%){% else %}否{% endif %}</div>
+                    {% if order.tracking_number %}
+                    <div class="col-md-6"><strong>物流单号：</strong>{{ order.tracking_number }}</div>
+                    {% endif %}
+                    {% if order.factory %}
+                    <div class="col-md-6"><strong>生产工厂：</strong>{{ order.factory.name }}</div>
+                    {% endif %}
+                </div>
+                <h6>产品明细</h6>
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light"><tr><th>产品</th><th>材料</th><th>厚度</th><th>尺寸</th><th>数量</th><th>面积</th><th>小计</th></tr></thead>
+                    <tbody>
+                        {% for item in order.items.all %}
+                        <tr>
+                            <td>{{ item.get_product_name_display }}</td>
+                            <td>{{ item.get_material_display }}</td>
+                            <td>{{ item.thickness }}mm</td>
+                            <td>{{ item.length_mm }}×{{ item.width_mm }}mm</td>
+                            <td>{{ item.quantity }}</td>
+                            <td>{{ item.area }}cm²</td>
+                            <td>¥{{ item.subtotal }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="text-end fw-bold fs-5">订单总金额：¥{{ order.total_amount }}</div>
+                {% if order.special_requests %}
+                <div class="mt-3"><strong>特殊要求：</strong>{{ order.special_requests }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 生产/质检照片 -->
+        {% if order.production_photos.all %}
+        <div class="card mb-3">
+            <div class="card-header">生产/质检照片</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for p in order.production_photos.all %}
+                    <div class="col-md-4">
+                        <div class="border rounded p-2 text-center">
+                            <img src="{{ p.image.url }}" class="img-fluid rounded" style="max-height:160px;">
+                            <div class="small text-muted mt-1">{{ p.get_photo_type_display }}</div>
+                            <div class="small text-muted">{{ p.uploaded_at|date:"m-d H:i" }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 沟通记录 -->
+        {% if order.communications.all %}
+        <div class="card">
+            <div class="card-header">沟通记录</div>
+            <div class="card-body">
+                {% for comm in order.communications.all %}
+                <div class="mb-2 pb-2 border-bottom">
+                    <span class="fw-bold">{{ comm.sender.username|default:comm.sender.phone }}</span>
+                    <span class="text-muted small">{{ comm.created_at|date:"m-d H:i" }}</span>
+                    <div>{{ comm.content }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="col-md-4">
+        <!-- 状态流转 -->
+        <div class="card mb-3">
+            <div class="card-header">状态流转记录</div>
+            <div class="card-body small">
+                {% for log in order.status_logs.all %}
+                <div class="mb-2">
+                    <span class="text-muted">{{ log.created_at|date:"m-d H:i" }}</span><br>
+                    {{ log.get_from_status_display|default:"-" }} → {{ log.get_to_status_display }}
+                </div>
+                {% empty %}
+                <div class="text-muted">暂无状态记录</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% if order.can_cancel %}
+        <a href="{% url 'cancel_order' order.id %}" class="btn btn-outline-danger w-100" onclick="return confirm('确定取消该订单吗？')">取消订单</a>
+        {% endif %}
+    </div>
+</div>
+{% endwith %}
+
+<style>
+.progress-tracker {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 8px;
+}
+.progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 64px;
+}
+.progress-step .step-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    transition: all 0.3s;
+}
+.progress-step .step-label {
+    font-size: 0.65rem;
+    color: #94a3b8;
+    text-align: center;
+    margin-top: 6px;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+.progress-step.done .step-icon {
+    background: #10b981;
+    color: white;
+}
+.progress-step.done .step-label {
+    color: #10b981;
+    font-weight: 600;
+}
+.progress-step.active .step-icon {
+    background: #1e40af;
+    color: white;
+    box-shadow: 0 0 0 4px rgba(30,64,175,0.15);
+}
+.progress-step.active .step-label {
+    color: #1e40af;
+    font-weight: 700;
+}
+.progress-line {
+    flex-grow: 1;
+    height: 3px;
+    background: #e2e8f0;
+    margin: 0 4px;
+    border-radius: 2px;
+    transform: translateY(-14px);
+}
+.progress-line.done {
+    background: #10b981;
+}
+</style>
+{% endblock %}

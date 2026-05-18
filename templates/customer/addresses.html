@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}地址管理{% endblock %}
+{% block page_title %}收货地址管理{% endblock %}
+{% block content %}
+<div class="mb-3">
+    <a href="{% url 'address_add' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 添加新地址</a>
+</div>
+<div class="row g-3">
+    {% for addr in addresses %}
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <strong>{{ addr.contact_name }}</strong>
+                    {% if addr.is_default %}<span class="badge bg-primary">默认</span>{% endif %}
+                </div>
+                <p class="mb-1">{{ addr.phone }}</p>
+                <p class="text-muted small">{{ addr.province }}{{ addr.city }}{{ addr.district }} {{ addr.detail }}</p>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'address_edit' addr.id %}" class="btn btn-sm btn-outline-primary">编辑</a>
+                    <a href="{% url 'address_delete' addr.id %}" class="btn btn-sm btn-outline-danger" onclick="return confirm('删除该地址？')">删除</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12"><div class="alert alert-info">暂无收货地址</div></div>
+    {% endfor %}
+</div>
+{% endblock %}

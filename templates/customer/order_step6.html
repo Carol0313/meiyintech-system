@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}交货时间 - 下单{% endblock %}
+{% block page_title %}步骤6：交货时间选择{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="form-check mb-3 p-3 border rounded">
+                        <input class="form-check-input" type="radio" name="urgent" id="normal" value="" checked>
+                        <label class="form-check-label" for="normal">
+                            <strong>正常订单</strong>
+                            <span class="text-muted d-block">生产周期约10小时</span>
+                        </label>
+                    </div>
+                    <div class="form-check mb-3 p-3 border rounded border-warning">
+                        <input class="form-check-input" type="radio" name="urgent" id="urgent" value="on">
+                        <label class="form-check-label" for="urgent">
+                            <strong>加急订单 <span class="badge bg-warning text-dark">+10%</span></strong>
+                            <span class="text-muted d-block">生产周期约3小时，订单总价自动增加10%</span>
+                        </label>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">下一步：选择配送方式</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

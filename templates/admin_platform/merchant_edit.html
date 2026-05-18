@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}编辑商家{% endblock %}
+{% block page_title %}编辑商家信息{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3"><label class="form-label">商家名称</label><input type="text" name="name" class="form-control" value="{{ merchant.name }}" required></div>
+                    <div class="mb-3"><label class="form-label">子账号上限</label><input type="number" name="max_sub_accounts" class="form-control" value="{{ merchant.max_sub_accounts }}" min="1"></div>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                    <a href="{% url 'admin_merchants' %}" class="btn btn-outline-secondary">返回</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

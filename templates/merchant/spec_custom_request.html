@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}申请非标规格{% endblock %}
+{% block page_title %}申请非标规格{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3"><label class="form-label">材料</label><input type="text" name="material" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label">加工方式</label><input type="text" name="process_type" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label">厚度</label><input type="text" name="thickness" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label">申请说明</label><textarea name="description" class="form-control" rows="3"></textarea></div>
+                    <button type="submit" class="btn btn-primary">提交申请</button>
+                    <a href="{% url 'spec_list' %}" class="btn btn-outline-secondary">返回</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

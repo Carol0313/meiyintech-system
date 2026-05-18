@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}效果预览 - 下单{% endblock %}
+{% block page_title %}步骤4：效果预览{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="mb-3">源文件预览</h5>
+                {% if preview_url %}
+                <div class="border rounded p-2 mb-3 text-center">
+                    <img src="{{ preview_url }}" class="img-fluid" style="max-height:300px;" alt="PDF预览">
+                </div>
+                {% else %}
+                <div class="alert alert-warning">预览生成失败，但不影响下单。</div>
+                {% endif %}
+                <h5 class="mb-3">凹凸版效果示意</h5>
+                <div class="border rounded p-2 mb-3 text-center bg-light">
+                    <p class="text-muted mb-0">此处为示意效果展示区域</p>
+                    <p class="small text-muted">（初期版本为静态示意，非高精度3D渲染）</p>
+                    <i class="bi bi-image fs-1 text-muted"></i>
+                </div>
+                <div class="d-grid">
+                    <a href="{% url 'order_step5' draft.id %}" class="btn btn-primary">下一步：填写特殊要求</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,418 @@
+{% extends 'base.html' %}
+{% block title %}工厂生产看板{% endblock %}
+{% block page_title %}工厂生产看板{% endblock %}
+{% block page_subtitle %}每小时整点自动刷新，当前工作时段显示{% endblock %}
+
+{% block content %}
+<style>
+    .board-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+    .refresh-timer {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: linear-gradient(135deg, #dbeafe, #fef3c7);
+        border-radius: 100px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--primary);
+    }
+    .refresh-timer i {
+        animation: spin 2s linear infinite;
+    }
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    .stat-row {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 28px;
+    }
+    .stat-box {
+        flex: 1;
+        padding: 20px 24px;
+        border-radius: var(--radius-lg);
+        background: white;
+        box-shadow: var(--shadow-md);
+        text-align: center;
+        min-width: 140px;
+    }
+    .stat-box.pending { border-top: 3px solid #f59e0b; }
+    .stat-box.active { border-top: 3px solid #3b82f6; }
+    .stat-box.completed { border-top: 3px solid #10b981; }
+    .stat-number {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    .stat-box.pending .stat-number { color: #f59e0b; }
+    .stat-box.active .stat-number { color: #3b82f6; }
+    .stat-box.completed .stat-number { color: #10b981; }
+    .stat-label {
+        font-size: 0.8125rem;
+        color: var(--text-muted);
+        font-weight: 500;
+    }
+
+    .board-section {
+        margin-bottom: 32px;
+    }
+    .board-section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .board-section-title .badge {
+        font-size: 0.75rem;
+    }
+
+    .order-card {
+        background: white;
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-md);
+        padding: 20px 24px;
+        margin-bottom: 16px;
+        transition: box-shadow 0.2s;
+    }
+    .order-card:hover {
+        box-shadow: var(--shadow-lg);
+    }
+    .order-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+    .order-sn {
+        font-weight: 700;
+        color: var(--primary);
+        font-size: 0.9375rem;
+    }
+    .order-time {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+    .order-products {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+    .product-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: #f8fafc;
+        border-radius: 8px;
+        font-size: 0.8125rem;
+        color: var(--text-main);
+    }
+    .order-files {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+    .file-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        background: #eff6ff;
+        color: var(--primary);
+        border-radius: 8px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    .file-link:hover {
+        background: #dbeafe;
+    }
+    .order-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .btn-start {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        border: none;
+        color: white;
+        padding: 8px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.875rem;
+        transition: all 0.2s;
+    }
+    .btn-start:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }
+    .btn-complete {
+        background: linear-gradient(135deg, #10b981, #059669);
+        border: none;
+        color: white;
+        padding: 8px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.875rem;
+        transition: all 0.2s;
+    }
+    .btn-complete:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+    .progress-bar-wrap {
+        width: 100%;
+        height: 4px;
+        background: #e2e8f0;
+        border-radius: 2px;
+        margin-top: 8px;
+        overflow: hidden;
+    }
+    .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary), var(--accent));
+        border-radius: 2px;
+        transition: width 0.5s ease;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 48px 24px;
+        color: var(--text-muted);
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 12px;
+        display: block;
+        opacity: 0.3;
+    }
+</style>
+
+<div class="board-header">
+    <div>
+        <div class="refresh-timer">
+            <i class="bi bi-arrow-repeat"></i>
+            <span>下次刷新：<strong id="countdown">--:--</strong></span>
+            <span style="color:#94a3b8;">|</span>
+            <span>当前时间：<strong id="current-time">--:--:--</strong></span>
+        </div>
+    </div>
+</div>
+
+<!-- 统计栏 -->
+<div class="stat-row">
+    <div class="stat-box pending">
+        <div class="stat-number">{{ stats.pending }}</div>
+        <div class="stat-label">待生产</div>
+    </div>
+    <div class="stat-box active">
+        <div class="stat-number">{{ stats.active }}</div>
+        <div class="stat-label">生产中</div>
+    </div>
+    <div class="stat-box completed">
+        <div class="stat-number">{{ stats.completed }}</div>
+        <div class="stat-label">已完成待发货</div>
+    </div>
+</div>
+
+<!-- 待生产 -->
+<div class="board-section">
+    <div class="board-section-title">
+        <i class="bi bi-hourglass-split" style="color:#f59e0b;"></i>
+        待生产
+        <span class="badge bg-warning">{{ stats.pending }}</span>
+    </div>
+    {% for order in pending_orders %}
+    <div class="order-card">
+        <div class="order-card-header">
+            <div>
+                <div class="order-sn">{{ order.sn }}</div>
+                <div class="order-time">客户：{{ order.customer.phone }} | 下单：{{ order.created_at|date:"m-d H:i" }}</div>
+            </div>
+            <span class="badge bg-warning">待开始</span>
+        </div>
+        <div class="order-products">
+            {% for item in order.items.all %}
+            <span class="product-tag">
+                <i class="bi bi-box-seam"></i>
+                {{ item.get_product_name_display }} {{ item.get_material_display }} {{ item.thickness }}mm × {{ item.quantity }}
+            </span>
+            {% endfor %}
+        </div>
+        <div class="order-files">
+            {% if order.plate_layout and order.plate_layout.layout_file %}
+            <a class="file-link" href="{{ order.plate_layout.layout_file.url }}" target="_blank">
+                <i class="bi bi-download"></i> 下载拼版文件
+            </a>
+            {% endif %}
+            {% for item in order.items.all %}
+                {% if item.file %}
+                <a class="file-link" href="{{ item.file.url }}" target="_blank">
+                    <i class="bi bi-file-earmark-pdf"></i> 原始文件 #{{ forloop.counter }}
+                </a>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <form method="post" class="order-actions">
+            {% csrf_token %}
+            <input type="hidden" name="order_id" value="{{ order.id }}">
+            <input type="hidden" name="action" value="start">
+            <button type="submit" class="btn-start">
+                <i class="bi bi-play-fill"></i> 开始生产
+            </button>
+        </form>
+    </div>
+    {% empty %}
+    <div class="empty-state">
+        <i class="bi bi-inbox"></i>
+        <p>当前没有待生产的订单</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 生产中 -->
+<div class="board-section">
+    <div class="board-section-title">
+        <i class="bi bi-gear-wide-connected" style="color:#3b82f6;"></i>
+        生产中
+        <span class="badge bg-primary">{{ stats.active }}</span>
+    </div>
+    {% for order in active_orders %}
+    <div class="order-card">
+        <div class="order-card-header">
+            <div>
+                <div class="order-sn">{{ order.sn }}</div>
+                <div class="order-time">
+                    客户：{{ order.customer.phone }} |
+                    开始生产：{{ order.production_started_at|date:"m-d H:i" }}
+                </div>
+            </div>
+            <span class="badge bg-primary">生产中</span>
+        </div>
+        <div class="order-products">
+            {% for item in order.items.all %}
+            <span class="product-tag">
+                <i class="bi bi-box-seam"></i>
+                {{ item.get_product_name_display }} {{ item.get_material_display }} {{ item.thickness }}mm × {{ item.quantity }}
+            </span>
+            {% endfor %}
+        </div>
+        <div class="order-files">
+            {% if order.plate_layout and order.plate_layout.layout_file %}
+            <a class="file-link" href="{{ order.plate_layout.layout_file.url }}" target="_blank">
+                <i class="bi bi-download"></i> 下载拼版文件
+            </a>
+            {% endif %}
+            {% for item in order.items.all %}
+                {% if item.file %}
+                <a class="file-link" href="{{ item.file.url }}" target="_blank">
+                    <i class="bi bi-file-earmark-pdf"></i> 原始文件 #{{ forloop.counter }}
+                </a>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <form method="post" class="order-actions" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="order_id" value="{{ order.id }}">
+            <input type="hidden" name="action" value="complete">
+            <div class="d-flex align-items-center gap-2">
+                <input type="file" name="photo" accept="image/*" class="form-control form-control-sm" style="max-width:220px;font-size:0.8125rem;" title="上传成品照片">
+                <button type="submit" class="btn-complete">
+                    <i class="bi bi-check-lg"></i> 生产完成
+                </button>
+            </div>
+        </form>
+    </div>
+    {% empty %}
+    <div class="empty-state">
+        <i class="bi bi-inbox"></i>
+        <p>当前没有生产中的订单</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 已完成待发货 -->
+<div class="board-section">
+    <div class="board-section-title">
+        <i class="bi bi-check-circle" style="color:#10b981;"></i>
+        已完成待发货
+        <span class="badge bg-success">{{ stats.completed }}</span>
+    </div>
+    {% for order in completed_orders %}
+    <div class="order-card">
+        <div class="order-card-header">
+            <div>
+                <div class="order-sn">{{ order.sn }}</div>
+                <div class="order-time">
+                    客户：{{ order.customer.phone }} |
+                    生产完成：{{ order.production_completed_at|date:"m-d H:i" }}
+                </div>
+            </div>
+            <span class="badge bg-success">待发货</span>
+        </div>
+        <div class="order-products">
+            {% for item in order.items.all %}
+            <span class="product-tag">
+                <i class="bi bi-box-seam"></i>
+                {{ item.get_product_name_display }} {{ item.get_material_display }} {{ item.thickness }}mm × {{ item.quantity }}
+            </span>
+            {% endfor %}
+        </div>
+        <div class="order-files">
+            {% if order.plate_layout and order.plate_layout.layout_file %}
+            <a class="file-link" href="{{ order.plate_layout.layout_file.url }}" target="_blank">
+                <i class="bi bi-download"></i> 下载拼版文件
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="empty-state">
+        <i class="bi bi-inbox"></i>
+        <p>当前没有已完成待发货的订单</p>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+(function() {
+    let secondsUntilRefresh = {{ seconds_until_refresh }};
+
+    function pad(n) {
+        return n < 10 ? '0' + n : n;
+    }
+
+    function updateCountdown() {
+        const min = Math.floor(secondsUntilRefresh / 60);
+        const sec = secondsUntilRefresh % 60;
+        document.getElementById('countdown').textContent = pad(min) + ':' + pad(sec);
+
+        const now = new Date();
+        document.getElementById('current-time').textContent =
+            pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+
+        if (secondsUntilRefresh <= 0) {
+            location.reload();
+        } else {
+            secondsUntilRefresh--;
+        }
+    }
+
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+})();
+</script>
+{% endblock %}

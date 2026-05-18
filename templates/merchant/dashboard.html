@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}商家首页{% endblock %}
+{% block page_title %}商家工作台{% endblock %}
+{% block page_subtitle %} overview of your business {% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="stat-icon warning"><i class="bi bi-hourglass-split"></i></div>
+            <div class="stat-label">待审核订单</div>
+            <div class="stat-value" style="color:#d97706;">{{ pending_orders }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="stat-icon info"><i class="bi bi-gear-wide-connected"></i></div>
+            <div class="stat-label">生产中</div>
+            <div class="stat-value" style="color:#2563eb;">{{ in_production }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="stat-icon success"><i class="bi bi-people"></i></div>
+            <div class="stat-label">会员数量</div>
+            <div class="stat-value" style="color:#16a34a;">{{ customer_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="stat-icon primary"><i class="bi bi-shop"></i></div>
+            <div class="stat-label">商家状态</div>
+            <div class="stat-value" style="font-size:1.1rem;">{{ merchant.get_status_display }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>最近订单</span>
+        <a href="{% url 'merchant_orders' %}" class="small fw-semibold" style="color:var(--primary);">查看全部 <i class="bi bi-chevron-right small"></i></a>
+    </div>
+    <div class="table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>订单号</th><th>客户</th><th>状态</th><th>金额</th><th>时间</th></tr></thead>
+            <tbody>
+                {% for o in recent_orders %}
+                <tr>
+                    <td><a href="{% url 'merchant_order_detail' o.id %}" class="fw-semibold" style="color:var(--primary);">{{ o.sn }}</a></td>
+                    <td style="color:var(--text-muted);">{{ o.customer.phone }}</td>
+                    <td><span class="badge badge-status status-{{ o.status }}">{{ o.get_status_display }}</span></td>
+                    <td class="fw-semibold">¥{{ o.total_amount }}</td>
+                    <td style="color:var(--text-muted);">{{ o.created_at|date:"m-d H:i" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center text-muted py-5">
+                    <i class="bi bi-inbox fs-1 d-block mb-2" style="color:var(--border-light);"></i>
+                    暂无订单
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}配送方式 - 下单{% endblock %}
+{% block page_title %}步骤7：配送方式选择{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">配送方式</label>
+                        <select name="delivery_type" class="form-select" required>
+                            <option value="express">快递</option>
+                            <option value="flash">跑腿</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">收货地址</label>
+                        {% if addresses %}
+                        <div class="list-group">
+                            {% for addr in addresses %}
+                            <label class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <input class="form-check-input me-2" type="radio" name="address_id" value="{{ addr.id }}" {% if addr.is_default %}checked{% endif %}>
+                                    {{ addr.contact_name }} {{ addr.phone }}<br>
+                                    <small class="text-muted">{{ addr.province }}{{ addr.city }}{{ addr.district }} {{ addr.detail }}</small>
+                                    {% if addr.is_default %}<span class="badge bg-primary ms-2">默认</span>{% endif %}
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="alert alert-warning">您还没有收货地址，<a href="{% url 'address_add' %}">去添加</a></div>
+                        {% endif %}
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">保存到草稿列表</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

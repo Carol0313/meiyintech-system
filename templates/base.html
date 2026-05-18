@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ app_name }}{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 280px;
+            --primary: #1e40af;
+            --primary-light: #dbeafe;
+            --primary-hover: #1e3a8a;
+            --accent: #f59e0b;
+            --accent-light: #fef3c7;
+            --bg-main: #f8fafc;
+            --bg-card: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border-light: #e2e8f0;
+            --radius-sm: 12px;
+            --radius-md: 16px;
+            --radius-lg: 20px;
+            --radius-xl: 24px;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.04);
+        }
+
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+
+        body {
+            background: var(--bg-main);
+            color: var(--text-main);
+            font-size: 0.9375rem;
+            line-height: 1.6;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            min-height: 100vh;
+            background: var(--bg-card);
+            position: fixed;
+            top: 0; left: 0; z-index: 1000;
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-light);
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0 12px 24px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .sidebar-brand-logo {
+            width: 44px; height: 44px;
+            object-fit: contain;
+            border-radius: var(--radius-sm);
+        }
+
+        .sidebar-brand-text {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: -0.02em;
+        }
+
+        .sidebar-brand-sub {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .nav-section {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 16px 12px 8px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            margin: 4px 0;
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .nav-link:hover {
+            background: #f1f5f9;
+            color: var(--text-main);
+        }
+
+        .nav-link.active {
+            background: var(--primary-light);
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .nav-link i {
+            width: 22px;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            padding: 16px 12px 0;
+            border-top: 1px solid var(--border-light);
+        }
+
+        .user-pill {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: #f8fafc;
+            border-radius: var(--radius-md);
+        }
+
+        .user-avatar {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 0.875rem; font-weight: 600;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+            padding: 24px 32px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.02em;
+        }
+
+        .page-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: none;
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-md);
+            transition: box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        .card-header {
+            background: transparent;
+            border-bottom: 1px solid var(--border-light);
+            padding: 20px 24px;
+            font-weight: 600;
+            font-size: 0.9375rem;
+            color: var(--text-main);
+        }
+
+        .card-body {
+            padding: 24px;
+        }
+
+        /* Stat Cards */
+        .stat-card {
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+
+        .stat-label {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.02em;
+        }
+
+        .stat-icon {
+            position: absolute;
+            top: 20px; right: 20px;
+            width: 44px; height: 44px;
+            border-radius: var(--radius-sm);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .stat-icon.primary { background: #dbeafe; color: var(--primary); }
+        .stat-icon.info { background: #fef3c7; color: #d97706; }
+        .stat-icon.warning { background: #eff6ff; color: #2563eb; }
+        .stat-icon.success { background: #f0fdf4; color: #16a34a; }
+
+        /* Buttons */
+        .btn {
+            font-weight: 500;
+            border-radius: 10px;
+            padding: 0.5rem 1.25rem;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), #3b82f6);
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, var(--primary-hover), #2563eb);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+        }
+
+        .btn-outline-primary {
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-outline-primary:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-success {
+            background: #10b981;
+            border-color: #10b981;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+            border-color: #059669;
+            transform: translateY(-1px);
+        }
+
+        .btn-lg {
+            border-radius: 12px;
+            padding: 0.75rem 1.5rem;
+        }
+
+        /* Tables */
+        .table {
+            font-size: 0.875rem;
+        }
+
+        .table thead th {
+            background: #f8fafc;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .table tbody td {
+            padding: 16px 20px;
+            color: var(--text-main);
+            vertical-align: middle;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .table tbody tr:hover td {
+            background: #f8fafc;
+        }
+
+        /* Badges */
+        .badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.4em 0.8em;
+            border-radius: 8px;
+        }
+
+        .badge-status {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.35em 0.75em;
+            border-radius: 8px;
+        }
+
+        .status-draft { background: #f1f5f9; color: #64748b; }
+        .status-pending_confirm { background: #fef3c7; color: #92400e; }
+        .status-design_confirmed { background: #dbeafe; color: #1e40af; }
+        .status-pending_payment { background: #fce7f3; color: #9d174d; }
+        .status-paid { background: #d1fae5; color: #065f46; }
+        .status-in_production { background: #c7d2fe; color: #3730a3; }
+        .status-shipped { background: #e0e7ff; color: #4338ca; }
+        .status-received { background: #dcfce7; color: #166534; }
+        .status-info_error { background: #fee2e2; color: #991b1b; }
+        .status-cancelled { background: #f3f4f6; color: #6b7280; }
+
+        /* Forms */
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 1.5px solid var(--border-light);
+            padding: 0.6rem 0.875rem;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+        }
+
+        .form-label {
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-main);
+            margin-bottom: 6px;
+        }
+
+        /* Alert */
+        .alert {
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 14px 18px;
+            font-size: 0.875rem;
+        }
+
+        /* Step indicator */
+        .step-indicator {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .step-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--border-light);
+            transition: all 0.3s;
+        }
+
+        .step-dot.active {
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            width: 24px;
+            border-radius: 4px;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); transition: transform .3s ease; }
+            .sidebar.show { transform: translateX(0); }
+            .main-content { margin-left: 0; padding: 16px; }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-brand">
+            <img src="/static/images/logo.png" alt="闪电制版" class="sidebar-brand-logo" onerror="this.style.display='none';this.nextElementSibling.style.marginLeft='0';">
+            <div>
+                <div class="sidebar-brand-text">闪电制版</div>
+                <div class="sidebar-brand-sub">LIGHTNING PLATE TECH</div>
+            </div>
+        </div>
+        <div class="flex-grow-1" style="overflow-y:auto;">
+            {% if user.is_authenticated %}
+                {% include 'common/menu.html' %}
+            {% endif %}
+        </div>
+        <div class="sidebar-footer">
+            {% if user.is_authenticated %}
+                <div class="user-pill">
+                    <div class="user-avatar">{{ user.username|first|upper }}</div>
+                    <div class="flex-grow-1" style="min-width:0;">
+                        <div class="small fw-semibold text-truncate">{{ user.username|default:user.phone }}</div>
+                        <div class="small" style="color:var(--text-muted);font-size:0.7rem;">{{ user_type_display }}</div>
+                    </div>
+                    <a href="{% url 'logout' %}" class="text-muted" style="font-size:1.1rem;"><i class="bi bi-box-arrow-right"></i></a>
+                </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="topbar">
+            <div>
+                <div class="page-title">{% block page_title %}首页{% endblock %}</div>
+                <div class="page-subtitle">{% block page_subtitle %}{% endblock %}</div>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary d-md-none" id="sidebarToggle" style="border-radius:8px;"><i class="bi bi-list"></i></button>
+        </div>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show mb-4" role="alert" style="background:{% if message.tags == 'success' %}#ecfdf5;color:#065f46;{% elif message.tags == 'error' %}#fef2f2;color:#991b1b;{% elif message.tags == 'warning' %}#fffbeb;color:#92400e;{% else %}#eff6ff;color:#1e40af;{% endif %};">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" style="padding:14px;"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('sidebarToggle')?.addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.toggle('show');
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

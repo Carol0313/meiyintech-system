@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3"><label class="form-label">工厂名称</label><input type="text" name="name" class="form-control" value="{{ factory.name|default:'' }}" required></div>
+                    <div class="mb-3"><label class="form-label">地址</label><textarea name="address" class="form-control" rows="2">{{ factory.address|default:'' }}</textarea></div>
+                    <div class="mb-3"><label class="form-label">联系人</label><input type="text" name="contact_person" class="form-control" value="{{ factory.contact_person|default:'' }}"></div>
+                    <div class="mb-3"><label class="form-label">联系电话</label><input type="text" name="contact_phone" class="form-control" value="{{ factory.contact_phone|default:'' }}"></div>
+                    {% if factory %}
+                    <div class="mb-3 form-check"><input type="checkbox" name="is_active" class="form-check-input" id="isActive" {% if factory.is_active %}checked{% endif %}><label class="form-check-label" for="isActive">启用</label></div>
+                    {% endif %}
+                    <button type="submit" class="btn btn-primary">保存</button>
+                    <a href="{% url 'factory_list' %}" class="btn btn-outline-secondary">返回</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
