@@ -39,7 +39,7 @@
                     <td><span class="badge badge-status status-{{ o.status }}">{{ o.get_status_display }}</span></td>
                     <td class="fw-semibold">{% if o.order_type == 'remake' %}<span class="text-success">¥0.00</span>{% else %}¥{{ o.total_amount }}{% endif %}</td>
                     <td style="color:var(--text-muted);">{{ o.created_at|date:"m-d H:i" }}</td>
-                    <td class="pe-4"><a href="{% url 'merchant_order_detail' o.id %}" class="btn btn-sm btn-outline-primary" style="border-radius:8px;">详情</a></td>
+                    <td class="pe-4"><a href="{% url 'merchant_order_detail' o.id %}" class="btn btn-sm btn-outline-primary">详情</a></td>
                 </tr>
                 {% empty %}
                 <tr><td colspan="6" class="text-center text-muted py-5">

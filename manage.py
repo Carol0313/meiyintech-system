@@ -2,6 +2,18 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+import socket
+
+# 修复 Windows 中文计算机名导致的 socket.getfqdn() 编码错误
+_orig_getfqdn = socket.getfqdn
+
+def _patched_getfqdn(name=''):
+    try:
+        return _orig_getfqdn(name)
+    except UnicodeDecodeError:
+        return name or 'localhost'
+
+socket.getfqdn = _patched_getfqdn
 
 
 def main():

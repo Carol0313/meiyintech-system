@@ -51,16 +51,52 @@ def customer_dashboard(request):
 @login_required
 @customer_required
 def place_order(request):
-    """下单入口 - 显示草稿订单列表和新建按钮"""
-    session_key = f"order_drafts_{request.user.id}"
-    drafts = request.session.get(session_key, [])
-    default_address = request.user.addresses.filter(is_default=True).first()
-    ctx = {
-        'drafts': drafts,
+    """单页下单：产品选择 -> 上传文件 -> 自动识别尺寸 -> 确认提交"""
+    profile = request.user.customer_profile
+    from utils.pricing_tiers import get_etching_price, is_etching_product, get_product_category
+    tier = profile.pricing_tier
+
+    if request.method == 'POST':
+        return _handle_quick_order_post(request, profile, tier)
+
+    # GET: 构建规格数据
+    specs = ProductSpec.objects.filter(is_platform_preset=True, is_active=True)
+    spec_data = {}
+    for s in specs:
+        category = get_product_category(s.product_name)
+        if category not in spec_data:
+            spec_data[category] = {'label': category, 'products': {}}
+        prod_key = s.product_name
+        if prod_key not in spec_data[category]['products']:
+            spec_data[category]['products'][prod_key] = {
+                'label': s.get_product_name_display(),
+                'materials': {}
+            }
+        mat_key = s.material
+        if mat_key not in spec_data[category]['products'][prod_key]['materials']:
+            spec_data[category]['products'][prod_key]['materials'][mat_key] = {
+                'label': s.get_material_display(),
+                'thicknesses': []
+            }
+        if is_etching_product(s.product_name):
+            price = str(get_etching_price(tier, s.thickness))
+        else:
+            price = str(s.unit_price)
+        spec_data[category]['products'][prod_key]['materials'][mat_key]['thicknesses'].append({
+            'value': s.thickness,
+            'label': s.get_thickness_display(),
+            'price': price,
+        })
+
+    addresses = request.user.addresses.all()
+    default_address = addresses.filter(is_default=True).first()
+    import json
+    return render(request, 'customer/place_order.html', {
+        'spec_data_json': json.dumps(spec_data),
+        'addresses': addresses,
         'default_address': default_address,
-        'specs': ProductSpec.objects.filter(is_platform_preset=True, is_active=True),
-    }
-    return render(request, 'customer/place_order.html', ctx)
+        'last_note': profile.last_order_note,
+    })
 
 
 @login_required
@@ -153,12 +189,44 @@ def order_step3(request, draft_id):
     if not draft or not draft.get('file_path'):
         messages.error(request, '文件信息缺失')
         return redirect('place_order')
-    # 计算PDF面积
+    # 计算PDF面积（优先红框，其次页面尺寸）
     file_full_path = os.path.join(settings.MEDIA_ROOT, draft['file_path'])
     area = _calculate_pdf_area(file_full_path)
     draft['area'] = str(area)
     request.session[f"draft_{draft_id}"] = draft
-    return render(request, 'customer/order_step3.html', {'draft': draft, 'area': area})
+
+    # 获取PDF页面尺寸，与用户填写尺寸做差异对比
+    pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(file_full_path)
+    user_l = float(draft.get('length_mm', 0) or 0)
+    user_w = float(draft.get('width_mm', 0) or 0)
+
+    # 差异预警：如果PDF页面尺寸与用户填写尺寸相差超过20%，提示核对
+    size_mismatch = False
+    mismatch_msg = ''
+    if pdf_w_mm and pdf_h_mm and user_l > 0 and user_w > 0:
+        pdf_ratio = max(pdf_w_mm, pdf_h_mm) / min(pdf_w_mm, pdf_h_mm)
+        user_ratio = max(user_l, user_w) / min(user_l, user_w)
+        # 对比长边和短边
+        pdf_sides = sorted([pdf_w_mm, pdf_h_mm])
+        user_sides = sorted([user_l, user_w])
+        long_diff = abs(pdf_sides[1] - user_sides[1]) / user_sides[1] if user_sides[1] > 0 else 0
+        short_diff = abs(pdf_sides[0] - user_sides[0]) / user_sides[0] if user_sides[0] > 0 else 0
+        if long_diff > 0.20 or short_diff > 0.20:
+            size_mismatch = True
+            mismatch_msg = (
+                f'PDF页面尺寸为 {pdf_w_mm/10:.1f}×{pdf_h_mm/10:.1f}cm，'
+                f'与您填写的 {user_l/10:.1f}×{user_w/10:.1f}cm 差异较大。'
+                f'系统优先按红框识别或PDF页面计算参考面积，实际制版尺寸以您填写的规格为准。'
+            )
+
+    return render(request, 'customer/order_step3.html', {
+        'draft': draft,
+        'area': area,
+        'pdf_width_cm': round(pdf_w_mm / 10, 1) if pdf_w_mm else None,
+        'pdf_height_cm': round(pdf_h_mm / 10, 1) if pdf_h_mm else None,
+        'size_mismatch': size_mismatch,
+        'mismatch_msg': mismatch_msg,
+    })
 
 
 @login_required
@@ -372,8 +440,19 @@ def _draft_summary(draft):
 
 
 def _calculate_pdf_area(file_path):
-    """计算PDF第一页面积（cm²）"""
+    """
+    计算PDF参考面积（cm²）
+    优先使用红框识别的内容区域尺寸，没有红框时回退到PDF页面尺寸
+    """
     try:
+        # 先尝试红框识别（更准确的制版内容区域）
+        from utils.pdf_red_box import extract_red_box_area_mm
+        red_box_mm = extract_red_box_area_mm(file_path)
+        if red_box_mm:
+            length_mm, width_mm = red_box_mm
+            return round((length_mm * width_mm) / 100.0, 2)
+
+        # 无红框时回退到PDF页面尺寸
         doc = fitz.open(file_path)
         page = doc[0]
         rect = page.rect
@@ -385,6 +464,21 @@ def _calculate_pdf_area(file_path):
         return round(area_cm2, 2)
     except Exception as e:
         return 0
+
+
+def _get_pdf_page_dimensions(file_path):
+    """获取PDF页面尺寸（mm），用于与用户填写尺寸对比"""
+    try:
+        doc = fitz.open(file_path)
+        page = doc[0]
+        rect = page.rect
+        pt_to_mm = 25.4 / 72.0
+        width_mm = round(rect.width * pt_to_mm, 1)
+        height_mm = round(rect.height * pt_to_mm, 1)
+        doc.close()
+        return width_mm, height_mm
+    except Exception:
+        return None, None
 
 
 # ==================== 订单管理 ====================
@@ -430,6 +524,156 @@ def cancel_order(request, order_id):
         profile.save(update_fields=['credit_used'])
     order.transition_status('cancelled', operator=request.user, remark='用户主动取消')
     messages.success(request, '订单已取消')
+    return redirect('my_orders')
+
+
+# ==================== 快捷单页下单 ====================
+
+@login_required
+@customer_required
+def quick_order(request):
+    """兼容旧入口，重定向到统一下单页"""
+    return redirect('place_order')
+
+
+@login_required
+@customer_required
+def quick_order_upload(request):
+    """AJAX：上传PDF并返回识别的尺寸信息"""
+    if request.method != 'POST' or not request.FILES.get('pdf_file'):
+        return JsonResponse({'success': False, 'error': '请上传PDF文件'})
+
+    file = request.FILES['pdf_file']
+    ext = os.path.splitext(file.name)[1].lower()
+    if ext != '.pdf':
+        return JsonResponse({'success': False, 'error': '仅支持PDF格式文件'})
+
+    try:
+        filename = f"order_files/{request.user.id}/{uuid.uuid4().hex}{ext}"
+        path = default_storage.save(filename, file)
+        full_path = os.path.join(settings.MEDIA_ROOT, path)
+
+        # 计算面积
+        area = _calculate_pdf_area(full_path)
+
+        # 获取页面尺寸
+        pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(full_path)
+
+        # 生成预览图
+        preview_url = None
+        try:
+            preview_filename = f"previews/{uuid.uuid4().hex}.png"
+            preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
+            os.makedirs(os.path.dirname(preview_path), exist_ok=True)
+            doc = fitz.open(full_path)
+            page = doc[0]
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            pix.save(preview_path)
+            preview_url = settings.MEDIA_URL + preview_filename
+            doc.close()
+        except Exception:
+            pass
+
+        return JsonResponse({
+            'success': True,
+            'file_path': path,
+            'file_name': file.name,
+            'area': area,
+            'pdf_width_mm': pdf_w_mm,
+            'pdf_height_mm': pdf_h_mm,
+            'preview_url': preview_url,
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@transaction.atomic
+def _handle_quick_order_post(request, profile, tier):
+    """处理单页下单的POST请求"""
+    from utils.pricing_tiers import is_etching_product, get_etching_price
+
+    # 基础字段
+    product_name = request.POST.get('product_name')
+    material = request.POST.get('material')
+    thickness = request.POST.get('thickness')
+    quantity = int(request.POST.get('quantity', 1))
+    length_mm = Decimal(request.POST.get('length_mm', 0) or 0)
+    width_mm = Decimal(request.POST.get('width_mm', 0) or 0)
+    unit_price_str = request.POST.get('unit_price', '0')
+
+    # 文件
+    file_path = request.POST.get('file_path', '')
+    file_processed = request.POST.get('file_processed') == 'on'
+    file_standard_checked = request.POST.get('file_standard_checked') == 'on'
+
+    # 其他
+    special_requests = request.POST.get('special_requests', '')
+    preset_options = request.POST.getlist('preset_options')
+    urgent = request.POST.get('urgent') == 'on'
+    delivery_type = request.POST.get('delivery_type', 'express')
+    address_id = request.POST.get('address_id')
+
+    # 定价
+    if is_etching_product(product_name):
+        unit_price = get_etching_price(profile.pricing_tier, thickness)
+    else:
+        unit_price = Decimal(unit_price_str or '0')
+
+    # 创建订单
+    order = Order.objects.create(
+        customer=request.user,
+        merchant=profile.merchant,
+        status='pending_confirm',
+        urgent=urgent,
+        delivery_type=delivery_type,
+        special_requests=special_requests,
+        preset_options=preset_options,
+        is_submitted=True,
+    )
+
+    # 地址
+    if address_id:
+        try:
+            order.delivery_address = Address.objects.get(pk=address_id, user=request.user)
+            order.save(update_fields=['delivery_address'])
+        except Address.DoesNotExist:
+            pass
+
+    # 创建订单明细
+    item = OrderItem.objects.create(
+        order=order,
+        product_name=product_name,
+        material=material,
+        thickness=thickness,
+        length_mm=length_mm,
+        width_mm=width_mm,
+        quantity=quantity,
+        unit_price=unit_price,
+        file=file_path,
+        file_processed=file_processed,
+        file_standard_checked=file_standard_checked,
+    )
+    order.update_total()
+
+    # 保存常用备注
+    if special_requests:
+        profile.last_order_note = special_requests
+        profile.save(update_fields=['last_order_note'])
+
+    # 信用额度支付
+    if order.total_amount <= profile.credit_remaining:
+        profile.credit_used += order.total_amount
+        profile.save(update_fields=['credit_used'])
+        order.transition_status('paid', operator=request.user, remark='信用额度支付')
+        from utils.plate_layout import auto_generate_plate_layout_for_order
+        auto_generate_plate_layout_for_order(order)
+        order.plate_status = 'auto_generated'
+        order.save(update_fields=['plate_status'])
+        messages.success(request, f'订单 {order.sn} 提交成功，已使用信用额度支付。')
+    else:
+        order.transition_status('pending_payment', operator=request.user, remark='信用额度不足')
+        messages.warning(request, f'订单 {order.sn} 提交成功，但信用额度不足，订单状态为待支付。')
+
     return redirect('my_orders')
 
 

@@ -5,194 +5,132 @@
 
 {% block extra_css %}
 <style>
-    /* 登录页专用：隐藏 sidebar，全屏布局 */
     .sidebar { display: none !important; }
     .main-content { margin-left: 0 !important; padding: 0 !important; }
     .topbar { display: none !important; }
 
-    /* 登录页背景 */
     .login-page {
         min-height: 100vh;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: linear-gradient(160deg, #faf8f5 0%, #f5f3ef 50%, #f0ede8 100%);
-        position: relative;
-        overflow: hidden;
+        background: var(--bg-main);
         padding: 40px 20px;
     }
 
-    /* 角落装饰插画 - 左下角 */
-    .deco-bottom-left {
-        position: absolute;
-        bottom: -40px;
-        left: -40px;
-        width: 380px;
-        height: 380px;
-        opacity: 0.12;
-        pointer-events: none;
-        z-index: 0;
-    }
-
-    /* 角落装饰插画 - 右上角 */
-    .deco-top-right {
-        position: absolute;
-        top: -30px;
-        right: -30px;
-        width: 320px;
-        height: 320px;
-        opacity: 0.10;
-        pointer-events: none;
-        z-index: 0;
-    }
-
-    /* 登录卡片 */
     .login-card {
-        position: relative;
-        z-index: 1;
         width: 100%;
-        max-width: 460px;
+        max-width: 420px;
         background: #ffffff;
-        border-radius: 28px;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 20px 40px -10px rgba(0,0,0,0.06);
-        overflow: hidden;
-        animation: cardFadeIn 0.6s ease-out;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
     }
 
-    @keyframes cardFadeIn {
-        from { opacity: 0; transform: translateY(16px); }
-        to { opacity: 1; transform: translateY(0); }
+    .login-card-header {
+        height: 4px;
+        background: var(--primary);
     }
 
-    /* 顶部品牌渐变条 */
-    .login-card-header-bar {
-        height: 5px;
-        background: linear-gradient(90deg, var(--primary) 0%, #3b82f6 40%, var(--accent) 100%);
-    }
-
-    /* 卡片内容区 */
     .login-card-body {
-        padding: 44px 48px 40px;
+        padding: 36px 36px 32px;
     }
 
-    /* Logo 区域 */
     .login-brand {
         text-align: center;
-        margin-bottom: 32px;
+        margin-bottom: 28px;
     }
 
     .login-brand-icon {
-        width: 72px;
-        height: 72px;
-        margin: 0 auto 16px;
-        border-radius: 20px;
-        background: linear-gradient(135deg, var(--primary), #3b82f6);
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 12px;
+        border-radius: var(--radius-md);
+        background: var(--primary);
         display: flex;
         align-items: center;
         justify-content: center;
         color: white;
-        font-size: 2rem;
-        box-shadow: 0 8px 24px -4px rgba(30, 64, 175, 0.25);
+        font-size: 28px;
     }
 
     .login-brand-title {
-        font-size: 1.5rem;
-        font-weight: 700;
+        font-size: 20px;
+        font-weight: 600;
         color: var(--text-main);
-        letter-spacing: -0.02em;
-        margin-bottom: 6px;
+        margin-bottom: 4px;
     }
 
     .login-brand-subtitle {
-        font-size: 0.875rem;
+        font-size: 14px;
         color: var(--text-muted);
-        font-weight: 400;
     }
 
-    /* 表单区域 */
     .login-form .form-group {
-        margin-bottom: 22px;
+        margin-bottom: 18px;
     }
 
     .login-form .form-label {
-        font-size: 0.8125rem;
-        font-weight: 600;
-        color: var(--text-main);
-        margin-bottom: 8px;
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
         display: block;
     }
 
     .login-form .form-control {
-        border-radius: 14px;
-        border: 1.5px solid #e8e4df;
-        padding: 0.85rem 1.1rem;
-        font-size: 0.9375rem;
-        background: #fafaf9;
-        transition: all 0.25s ease;
-    }
-
-    .login-form .form-control:hover {
-        border-color: #d4cfc8;
-        background: #ffffff;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-input);
+        padding: 0.65rem 0.9rem;
+        font-size: 15px;
+        background: #fff;
     }
 
     .login-form .form-control:focus {
         border-color: var(--primary);
-        background: #ffffff;
-        box-shadow: 0 0 0 4px rgba(30, 64, 175, 0.08);
+        box-shadow: 0 0 0 2px rgba(25,118,210,0.15);
     }
 
-    /* 登录按钮 */
     .login-btn {
         width: 100%;
-        padding: 0.9rem;
-        border-radius: 14px;
-        font-size: 1rem;
-        font-weight: 600;
+        padding: 0.7rem;
+        border-radius: var(--radius-sm);
+        font-size: 15px;
+        font-weight: 500;
         border: none;
-        background: linear-gradient(135deg, var(--primary), #3b82f6);
+        background: var(--primary);
         color: white;
         cursor: pointer;
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        margin-top: 8px;
+        margin-top: 4px;
     }
 
     .login-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 28px -6px rgba(30, 64, 175, 0.35);
+        background: var(--primary-hover);
     }
 
-    .login-btn:active {
-        transform: translateY(0);
-    }
-
-    /* 辅助链接 */
     .login-links {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-top: 18px;
-        font-size: 0.8125rem;
+        margin-top: 16px;
+        font-size: 13px;
     }
 
     .login-links a {
         color: var(--text-muted);
         text-decoration: none;
-        transition: color 0.2s;
     }
 
     .login-links a:hover {
         color: var(--primary);
     }
 
-    /* 分割线 + 注册入口 */
     .login-divider {
         display: flex;
         align-items: center;
-        gap: 14px;
-        margin: 28px 0 20px;
+        gap: 12px;
+        margin: 24px 0 18px;
         color: var(--text-muted);
-        font-size: 0.75rem;
+        font-size: 13px;
     }
 
     .login-divider::before,
@@ -200,21 +138,20 @@
         content: '';
         flex: 1;
         height: 1px;
-        background: linear-gradient(90deg, transparent, #e8e4df, transparent);
+        background: var(--border-color);
     }
 
     .login-register {
         text-align: center;
-        font-size: 0.8125rem;
+        font-size: 13px;
         color: var(--text-muted);
     }
 
     .login-register a {
         color: var(--primary);
-        font-weight: 600;
+        font-weight: 500;
         text-decoration: none;
         margin: 0 4px;
-        transition: color 0.2s;
     }
 
     .login-register a:hover {
@@ -222,94 +159,17 @@
         text-decoration: underline;
     }
 
-    /* 小装饰点 */
-    .dot-pattern {
-        position: absolute;
-        width: 200px;
-        height: 200px;
-        background-image: radial-gradient(circle, #d4c4a8 1px, transparent 1px);
-        background-size: 20px 20px;
-        opacity: 0.15;
-        pointer-events: none;
-    }
-
-    .dot-pattern-1 {
-        top: 10%;
-        left: 8%;
-    }
-
-    .dot-pattern-2 {
-        bottom: 15%;
-        right: 10%;
-    }
-
     @media (max-width: 576px) {
-        .login-card-body { padding: 32px 24px 28px; }
-        .deco-bottom-left, .deco-top-right { display: none; }
+        .login-card-body { padding: 28px 24px 24px; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="login-page">
-    <!-- 点阵纹理装饰 -->
-    <div class="dot-pattern dot-pattern-1"></div>
-    <div class="dot-pattern dot-pattern-2"></div>
-
-    <!-- 左下角装饰插画：蚀刻板/印刷元素线稿 -->
-    <svg class="deco-bottom-left" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <!-- 蚀刻板矩形 -->
-        <rect x="20" y="40" width="120" height="80" rx="4" stroke="#b89b6c" stroke-width="1.5" fill="none"/>
-        <rect x="30" y="50" width="100" height="60" rx="2" stroke="#b89b6c" stroke-width="0.8" fill="none"/>
-        <!-- 蚀刻纹理线条 -->
-        <line x1="40" y1="60" x2="120" y2="60" stroke="#b89b6c" stroke-width="0.6"/>
-        <line x1="40" y1="70" x2="110" y2="70" stroke="#b89b6c" stroke-width="0.6"/>
-        <line x1="40" y1="80" x2="100" y2="80" stroke="#b89b6c" stroke-width="0.6"/>
-        <line x1="40" y1="90" x2="115" y2="90" stroke="#b89b6c" stroke-width="0.6"/>
-        <line x1="40" y1="100" x2="105" y2="100" stroke="#b89b6c" stroke-width="0.6"/>
-        <!-- 滚筒 -->
-        <circle cx="160" cy="140" r="28" stroke="#b89b6c" stroke-width="1.5" fill="none"/>
-        <circle cx="160" cy="140" r="18" stroke="#b89b6c" stroke-width="0.8" fill="none"/>
-        <line x1="160" y1="112" x2="160" y2="168" stroke="#b89b6c" stroke-width="0.6"/>
-        <line x1="132" y1="140" x2="188" y2="140" stroke="#b89b6c" stroke-width="0.6"/>
-        <!-- 小圆点装饰 -->
-        <circle cx="50" cy="140" r="3" stroke="#b89b6c" stroke-width="0.8" fill="none"/>
-        <circle cx="65" cy="155" r="5" stroke="#b89b6c" stroke-width="0.8" fill="none"/>
-        <circle cx="80" cy="145" r="2.5" stroke="#b89b6c" stroke-width="0.8" fill="none"/>
-        <!-- 波浪线 -->
-        <path d="M30 170 Q50 160, 70 170 T110 170 T150 170" stroke="#b89b6c" stroke-width="0.8" fill="none"/>
-    </svg>
-
-    <!-- 右上角装饰插画 -->
-    <svg class="deco-top-right" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <!-- 放大镜/质检 -->
-        <circle cx="120" cy="80" r="35" stroke="#b89b6c" stroke-width="1.5" fill="none"/>
-        <line x1="145" y1="105" x2="170" y2="130" stroke="#b89b6c" stroke-width="2.5" stroke-linecap="round"/>
-        <circle cx="120" cy="80" r="20" stroke="#b89b6c" stroke-width="0.8" fill="none"/>
-        <!-- 小齿轮 -->
-        <circle cx="50" cy="60" r="18" stroke="#b89b6c" stroke-width="1.2" fill="none"/>
-        <circle cx="50" cy="60" r="8" stroke="#b89b6c" stroke-width="0.8" fill="none"/>
-        <line x1="50" y1="38" x2="50" y2="30" stroke="#b89b6c" stroke-width="1.2" stroke-linecap="round"/>
-        <line x1="50" y1="82" x2="50" y2="90" stroke="#b89b6c" stroke-width="1.2" stroke-linecap="round"/>
-        <line x1="28" y1="60" x2="20" y2="60" stroke="#b89b6c" stroke-width="1.2" stroke-linecap="round"/>
-        <line x1="72" y1="60" x2="80" y2="60" stroke="#b89b6c" stroke-width="1.2" stroke-linecap="round"/>
-        <!-- 尺子/刻度 -->
-        <rect x="30" y="140" width="100" height="16" rx="2" stroke="#b89b6c" stroke-width="1" fill="none"/>
-        <line x1="40" y1="140" x2="40" y2="148" stroke="#b89b6c" stroke-width="0.8"/>
-        <line x1="55" y1="140" x2="55" y2="148" stroke="#b89b6c" stroke-width="0.8"/>
-        <line x1="70" y1="140" x2="70" y2="148" stroke="#b89b6c" stroke-width="0.8"/>
-        <line x1="85" y1="140" x2="85" y2="148" stroke="#b89b6c" stroke-width="0.8"/>
-        <line x1="100" y1="140" x2="100" y2="148" stroke="#b89b6c" stroke-width="0.8"/>
-        <line x1="115" y1="140" x2="115" y2="148" stroke="#b89b6c" stroke-width="0.8"/>
-        <!-- 弧线装饰 -->
-        <path d="M160 160 Q170 140, 180 160 T200 160" stroke="#b89b6c" stroke-width="0.8" fill="none"/>
-    </svg>
-
-    <!-- 登录卡片 -->
     <div class="login-card">
-        <div class="login-card-header-bar"></div>
+        <div class="login-card-header"></div>
         <div class="login-card-body">
-            <!-- 品牌 -->
             <div class="login-brand">
                 <div class="login-brand-icon">
                     <i class="bi bi-lightning-charge-fill"></i>
@@ -318,7 +178,6 @@
                 <div class="login-brand-subtitle">登录您的账户，开始高效下单</div>
             </div>
 
-            <!-- 表单 -->
             <form method="post" novalidate class="login-form">
                 {% csrf_token %}
                 <div class="form-group">
@@ -332,16 +191,14 @@
                 <button type="submit" class="login-btn">登录</button>
             </form>
 
-            <!-- 辅助链接 -->
             <div class="login-links">
                 <a href="{% url 'forget_password' %}">忘记密码？</a>
             </div>
 
-            <!-- 注册入口 -->
             <div class="login-divider">还没有账号</div>
             <div class="login-register">
                 <a href="{% url 'customer_register' %}">终端用户注册</a>
-                <span style="color:#d1d5db;">|</span>
+                <span style="color:var(--border-color);">|</span>
                 <a href="{% url 'merchant_register' %}">商家入驻</a>
             </div>
         </div>

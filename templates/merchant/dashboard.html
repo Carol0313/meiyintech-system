@@ -9,21 +9,21 @@
         <div class="card stat-card">
             <div class="stat-icon warning"><i class="bi bi-hourglass-split"></i></div>
             <div class="stat-label">待审核订单</div>
-            <div class="stat-value" style="color:#d97706;">{{ pending_orders }}</div>
+            <div class="stat-value" style="color:var(--orange);">{{ pending_orders }}</div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card stat-card">
             <div class="stat-icon info"><i class="bi bi-gear-wide-connected"></i></div>
             <div class="stat-label">生产中</div>
-            <div class="stat-value" style="color:#2563eb;">{{ in_production }}</div>
+            <div class="stat-value" style="color:var(--primary);">{{ in_production }}</div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card stat-card">
             <div class="stat-icon success"><i class="bi bi-people"></i></div>
             <div class="stat-label">会员数量</div>
-            <div class="stat-value" style="color:#16a34a;">{{ customer_count }}</div>
+            <div class="stat-value" style="color:var(--green);">{{ customer_count }}</div>
         </div>
     </div>
     <div class="col-md-3">

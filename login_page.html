@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}{{ app_name }}{% endblock %}</title>
+    <title>登录 - 闪电制版</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <style>
@@ -529,7 +529,167 @@
             .content-body { padding: 16px; }
         }
     </style>
-    {% block extra_css %}{% endblock %}
+    
+<style>
+    .sidebar { display: none !important; }
+    .main-content { margin-left: 0 !important; padding: 0 !important; }
+    .topbar { display: none !important; }
+
+    .login-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-main);
+        padding: 40px 20px;
+    }
+
+    .login-card {
+        width: 100%;
+        max-width: 420px;
+        background: #ffffff;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+    }
+
+    .login-card-header {
+        height: 4px;
+        background: var(--primary);
+    }
+
+    .login-card-body {
+        padding: 36px 36px 32px;
+    }
+
+    .login-brand {
+        text-align: center;
+        margin-bottom: 28px;
+    }
+
+    .login-brand-icon {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 12px;
+        border-radius: var(--radius-md);
+        background: var(--primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 28px;
+    }
+
+    .login-brand-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin-bottom: 4px;
+    }
+
+    .login-brand-subtitle {
+        font-size: 14px;
+        color: var(--text-muted);
+    }
+
+    .login-form .form-group {
+        margin-bottom: 18px;
+    }
+
+    .login-form .form-label {
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+        display: block;
+    }
+
+    .login-form .form-control {
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-input);
+        padding: 0.65rem 0.9rem;
+        font-size: 15px;
+        background: #fff;
+    }
+
+    .login-form .form-control:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(25,118,210,0.15);
+    }
+
+    .login-btn {
+        width: 100%;
+        padding: 0.7rem;
+        border-radius: var(--radius-sm);
+        font-size: 15px;
+        font-weight: 500;
+        border: none;
+        background: var(--primary);
+        color: white;
+        cursor: pointer;
+        margin-top: 4px;
+    }
+
+    .login-btn:hover {
+        background: var(--primary-hover);
+    }
+
+    .login-links {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 16px;
+        font-size: 13px;
+    }
+
+    .login-links a {
+        color: var(--text-muted);
+        text-decoration: none;
+    }
+
+    .login-links a:hover {
+        color: var(--primary);
+    }
+
+    .login-divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 24px 0 18px;
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+
+    .login-divider::before,
+    .login-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border-color);
+    }
+
+    .login-register {
+        text-align: center;
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .login-register a {
+        color: var(--primary);
+        font-weight: 500;
+        text-decoration: none;
+        margin: 0 4px;
+    }
+
+    .login-register a:hover {
+        color: var(--primary-hover);
+        text-decoration: underline;
+    }
+
+    @media (max-width: 576px) {
+        .login-card-body { padding: 28px 24px 24px; }
+    }
+</style>
+
 </head>
 <body>
     <!-- Sidebar -->
@@ -539,21 +699,10 @@
             <div class="sidebar-brand-text">闪电制版</div>
         </div>
         <div class="flex-grow-1" style="overflow-y:auto;">
-            {% if user.is_authenticated %}
-                {% include 'common/menu.html' %}
-            {% endif %}
+            
         </div>
         <div class="sidebar-footer">
-            {% if user.is_authenticated %}
-                <div class="user-pill">
-                    <div class="user-avatar">{{ user.username|first|upper }}</div>
-                    <div class="flex-grow-1" style="min-width:0;">
-                        <div class="small fw-medium text-truncate" style="color:#fff;font-size:13px;">{{ user.username|default:user.phone }}</div>
-                        <div class="small" style="color:rgba(255,255,255,0.6);font-size:12px;">{{ user_type_display }}</div>
-                    </div>
-                    <a href="{% url 'logout' %}" style="color:rgba(255,255,255,0.7);font-size:16px;"><i class="bi bi-box-arrow-right"></i></a>
-                </div>
-            {% endif %}
+            
         </div>
     </nav>
 
@@ -561,23 +710,55 @@
     <div class="main-content">
         <div class="topbar">
             <div>
-                <div class="page-title">{% block page_title %}首页{% endblock %}</div>
-                <div class="page-subtitle">{% block page_subtitle %}{% endblock %}</div>
+                <div class="page-title"></div>
+                <div class="page-subtitle"></div>
             </div>
             <button class="btn btn-sm btn-outline-secondary d-md-none" id="sidebarToggle"><i class="bi bi-list"></i></button>
         </div>
 
         <div class="content-body">
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show mb-3" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" style="padding:12px;"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
+            
 
-            {% block content %}{% endblock %}
+            
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-card-header"></div>
+        <div class="login-card-body">
+            <div class="login-brand">
+                <div class="login-brand-icon">
+                    <i class="bi bi-lightning-charge-fill"></i>
+                </div>
+                <div class="login-brand-title">闪电制版</div>
+                <div class="login-brand-subtitle">登录您的账户，开始高效下单</div>
+            </div>
+
+            <form method="post" novalidate class="login-form">
+                <input type="hidden" name="csrfmiddlewaretoken" value="1pLAlMdSyu5HYzOUq99eWRngUJFzrWb2pEFcjQfeHzrCiElFQ950uxNrvo4pt4Iw">
+                <div class="form-group">
+                    <label class="form-label" for="id_username">手机号</label>
+                    <input type="text" name="username" id="id_username" class="form-control" placeholder="请输入手机号" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_password">密码</label>
+                    <input type="password" name="password" id="id_password" class="form-control" placeholder="请输入密码" required>
+                </div>
+                <button type="submit" class="login-btn">登录</button>
+            </form>
+
+            <div class="login-links">
+                <a href="/forget-password/">忘记密码？</a>
+            </div>
+
+            <div class="login-divider">还没有账号</div>
+            <div class="login-register">
+                <a href="/register/customer/">终端用户注册</a>
+                <span style="color:var(--border-color);">|</span>
+                <a href="/register/merchant/">商家入驻</a>
+            </div>
+        </div>
+    </div>
+</div>
+
         </div>
     </div>
 
@@ -587,6 +768,6 @@
             document.querySelector('.sidebar').classList.toggle('show');
         });
     </script>
-    {% block extra_js %}{% endblock %}
+    
 </body>
 </html>

@@ -46,9 +46,9 @@
                     <td>{% if o.urgent %}<span class="badge bg-warning text-dark">加急</span>{% else %}<span style="color:var(--text-muted);">-</span>{% endif %}</td>
                     <td style="color:var(--text-muted);">{{ o.created_at|date:"Y-m-d H:i" }}</td>
                     <td class="pe-4">
-                        <a href="{% url 'order_detail' o.id %}" class="btn btn-sm btn-outline-primary" style="border-radius:8px;">详情</a>
+                        <a href="{% url 'order_detail' o.id %}" class="btn btn-sm btn-outline-primary">详情</a>
                         {% if o.can_cancel %}
-                        <a href="{% url 'cancel_order' o.id %}" class="btn btn-sm btn-outline-danger ms-1" style="border-radius:8px;" onclick="return confirm('确定取消该订单吗？')">取消</a>
+                        <a href="{% url 'cancel_order' o.id %}" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('确定取消该订单吗？')">取消</a>
                         {% endif %}
                     </td>
                 </tr>

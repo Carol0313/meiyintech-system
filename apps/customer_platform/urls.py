@@ -4,6 +4,8 @@ from . import views
 urlpatterns = [
     path('', views.customer_dashboard, name='customer_dashboard'),
     path('place-order/', views.place_order, name='place_order'),
+    path('place-order/quick/', views.quick_order, name='quick_order'),
+    path('place-order/quick/upload/', views.quick_order_upload, name='quick_order_upload'),
     path('place-order/step1/', views.order_step1, name='order_step1'),
     path('place-order/step2/<uuid:draft_id>/', views.order_step2, name='order_step2'),
     path('place-order/step3/<uuid:draft_id>/', views.order_step3, name='order_step3'),
