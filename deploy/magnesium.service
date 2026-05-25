@@ -1,0 +1,30 @@
+[Unit]
+Description=Magnesium Order Platform Gunicorn Daemon
+After=network.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/home/magnesium/magnesium_order_platform
+Environment="PATH=/home/magnesium/magnesium_order_platform/venv/bin"
+Environment="DJANGO_DEBUG=False"
+Environment="DJANGO_ALLOWED_HOSTS=your-domain.com,www.your-domain.com"
+Environment="DJANGO_SECRET_KEY=your-production-secret-key-here-change-it"
+Environment="DB_ENGINE=postgresql"
+Environment="DB_NAME=magnesium_order_db"
+Environment="DB_USER=magnesium_user"
+Environment="DB_PASSWORD=your-db-password"
+Environment="DB_HOST=localhost"
+Environment="DB_PORT=5432"
+Environment="KUAIDI100_KEY=your-kuaidi100-key"
+Environment="KUAIDI100_CUSTOMER=your-kuaidi100-customer"
+ExecStart=/home/magnesium/magnesium_order_platform/venv/bin/gunicorn -c deploy/gunicorn.conf.py magnesium_order_platform.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

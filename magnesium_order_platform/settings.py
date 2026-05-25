@@ -2,18 +2,37 @@
 Django settings for magnesium_order_platform project.
 """
 
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-b0kloytxexei@ms7yq&zd#y08li&^x41d6rkya!!w*p@he#s@0'
+# ==================== 安全设置 ====================
+# 生产环境必须通过环境变量传入，严禁使用默认密钥
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-b0kloytxexei@ms7yq&zd#y08li&^x41d6rkya!!w*p@he#s@0')
 
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = ['*']
+# 生产环境必须配置具体域名
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
 # 允许同站点嵌入（用于PDF文件预览）
 X_FRAME_OPTIONS = 'SAMEORIGIN'
+
+# 生产环境必须配置CSRF可信来源（HTTPS部署时）
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    'CSRF_TRUSTED_ORIGINS',
+    'http://127.0.0.1,http://localhost'
+).split(',')
+
+# 生产环境安全设置
+if not DEBUG:
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    # 使用HTTPS时取消下面注释
+    # SECURE_SSL_REDIRECT = True
+    # SESSION_COOKIE_SECURE = True
+    # CSRF_COOKIE_SECURE = True
 
 # Application definition
 INSTALLED_APPS = [
@@ -64,25 +83,28 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'magnesium_order_platform.wsgi.application'
 
-# Database - SQLite for development, switch to PostgreSQL in production
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# ==================== 数据库配置 ====================
+# 开发环境默认SQLite，生产环境通过环境变量切换PostgreSQL
+DB_ENGINE = os.environ.get('DB_ENGINE', 'sqlite3')
 
-# PostgreSQL configuration (commented out for easy switching)
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'magnesium_order_db',
-#         'USER': 'db_user',
-#         'PASSWORD': 'db_password',
-#         'HOST': 'localhost',
-#         'PORT': '5432',
-#     }
-# }
+if DB_ENGINE == 'postgresql':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('DB_NAME', 'magnesium_order_db'),
+            'USER': os.environ.get('DB_USER', 'magnesium_user'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -98,6 +120,8 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+# 生产环境执行 collectstatic 后收集到此目录
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'

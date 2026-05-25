@@ -33,6 +33,19 @@ media/previews/
 media/avatars/
 media/plate_layouts/
 media/production_photos/
+media/customer_previews/
+media/plate_previews/
+staticfiles/
+
+# Environment variables & secrets
+.env
+*.env
+
+# Excel temp files
+~$*.xlsx
+~$*.xls
+~$*.docx
+~$*.doc
 
 # Virtual environments
 venv/
