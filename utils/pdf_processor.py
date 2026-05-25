@@ -56,9 +56,29 @@ def convert_pdf_to_black(input_path, output_path=None, threshold=240):
     doc = fitz.open(input_path)
     new_doc = fitz.open()
     
-    for page in doc:
-        # 渲染为灰度图，高DPI保证质量
-        pix = page.get_pixmap(colorspace=fitz.CS_GRAY, dpi=300)
+    # 安全限制1：最多处理前 10 页，防止多页大文件拖垮服务器
+    max_pages = 10
+    page_count = min(len(doc), max_pages)
+    
+    # 安全限制2：单页最大渲染像素限制（约 16MP，平衡质量与内存）
+    MAX_PIXELS = 4000 * 4000  # 1600万像素
+    
+    for page_idx in range(page_count):
+        page = doc[page_idx]
+        
+        # 根据页面尺寸动态计算安全 DPI，避免内存爆炸
+        rect = page.rect
+        page_w_in = rect.width / 72.0
+        page_h_in = rect.height / 72.0
+        estimated_pixels = (page_w_in * 300) * (page_h_in * 300)
+        
+        if estimated_pixels > MAX_PIXELS:
+            # 动态降低 DPI，确保不超过安全像素上限
+            safe_dpi = max(72, int(300 * (MAX_PIXELS / estimated_pixels) ** 0.5))
+        else:
+            safe_dpi = 300
+        
+        pix = page.get_pixmap(colorspace=fitz.CS_GRAY, dpi=safe_dpi)
         img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
         
         # 二值化：所有非纯白内容转为纯黑，纯白保持白色
@@ -72,8 +92,8 @@ def convert_pdf_to_black(input_path, output_path=None, threshold=240):
         img_bytes.seek(0)
         
         # 在新PDF中创建同尺寸页面并插入处理后的图片
-        new_page = new_doc.new_page(width=page.rect.width, height=page.rect.height)
-        new_page.insert_image(page.rect, stream=img_bytes.read())
+        new_page = new_doc.new_page(width=rect.width, height=rect.height)
+        new_page.insert_image(rect, stream=img_bytes.read())
     
     new_doc.save(output_path)
     new_doc.close()
@@ -101,17 +121,23 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
         mat = fitz.Matrix(zoom, zoom)
         
         if black_only:
-            # 灰度渲染 + 二值化
-            cs = fitz.Colorspace(fitz.CS_GRAY)
-            pix = page.get_pixmap(matrix=mat, colorspace=cs)
-            img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
-            img_bw = img.point(lambda x: 0 if x < 240 else 255, 'L')
-            img_rgb = img_bw.convert("RGB")
-            img_rgb.save(output_path)
+            try:
+                # 统一使用 fitz.CS_GRAY 整数枚举，避免 Colorspace 对象兼容问题
+                pix = page.get_pixmap(matrix=mat, colorspace=fitz.CS_GRAY)
+                img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
+                img_bw = img.point(lambda x: 0 if x < 240 else 255, 'L')
+                img_rgb = img_bw.convert("RGB")
+                img_rgb.save(output_path)
+            except Exception as e:
+                # 灰度渲染失败时回退到普通 RGB 渲染
+                print(f"[generate_pdf_preview] 灰度渲染失败，回退到RGB: {e}")
+                pix = page.get_pixmap(matrix=mat)
+                pix.save(output_path)
         else:
             pix = page.get_pixmap(matrix=mat)
             pix.save(output_path)
         doc.close()
         return settings.MEDIA_URL + output_filename
     except Exception as e:
+        print(f"[generate_pdf_preview] 生成预览图失败: {e}")
         return None

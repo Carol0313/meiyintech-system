@@ -262,7 +262,7 @@
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="file_type" id="fileProcessed" value="processed" checked required>
-                            <label class="form-check-label" for="fileProcessed">需要处理文件</label>
+                            <label class="form-check-label" for="fileProcessed">需要客服处理文件</label>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="file_type" id="fileImage" value="image" required>
@@ -284,9 +284,6 @@
                             </label>
                             <label class="preset-option" data-value="no_cut">
                                 <input type="checkbox" name="preset_options" value="no_cut"> 不需要裁切
-                            </label>
-                            <label class="preset-option" data-value="double_check">
-                                <input type="checkbox" name="preset_options" value="double_check"> 要求复检
                             </label>
                             <label class="preset-option" data-value="special_pack">
                                 <input type="checkbox" name="preset_options" value="special_pack"> 特殊包装
@@ -650,9 +647,52 @@ function renderRecognizedFiles() {
         const previewHtml = f.preview_url
             ? `<img src="${f.preview_url}" class="img-fluid rounded" style="max-height:120px;" alt="预览">`
             : `<div class="text-muted py-3"><i class="bi bi-file-earmark-pdf" style="font-size:36px;"></i><br>PDF</div>`;
+
+        // 多框时：为每个框渲染一组输入框
+        let dimensionsHtml = '';
+        if (f.boxes && f.boxes.length > 1) {
+            dimensionsHtml = f.boxes.map((box, bidx) => `
+                <div class="row g-2 mt-1 box-row" data-box-index="${bidx}">
+                    <div class="col-1 d-flex align-items-end pb-1">
+                        <span class="badge bg-secondary">框${bidx + 1}</span>
+                    </div>
+                    <div class="col-3">
+                        <label class="form-label small mb-0">长(mm)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm file-length-box" data-index="${idx}" data-box-index="${bidx}" value="${box.length_mm ? box.length_mm.toFixed(1) : ''}">
+                    </div>
+                    <div class="col-3">
+                        <label class="form-label small mb-0">宽(mm)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm file-width-box" data-index="${idx}" data-box-index="${bidx}" value="${box.width_mm ? box.width_mm.toFixed(1) : ''}">
+                    </div>
+                    <div class="col-3">
+                        <label class="form-label small mb-0">数量</label>
+                        <input type="number" min="1" class="form-control form-control-sm file-qty-box" data-index="${idx}" data-box-index="${bidx}" value="${box.quantity || 1}">
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            // 单框或无框时：保持原有的一组输入框
+            dimensionsHtml = `
+                <div class="row g-2 mt-1">
+                    <div class="col-4">
+                        <label class="form-label small mb-0">长(mm)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm file-length" data-index="${idx}" value="${f.length_mm ? f.length_mm.toFixed(1) : ''}">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small mb-0">宽(mm)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm file-width" data-index="${idx}" value="${f.width_mm ? f.width_mm.toFixed(1) : ''}">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small mb-0">数量</label>
+                        <input type="number" min="1" class="form-control form-control-sm file-qty" data-index="${idx}" value="${f.quantity}">
+                    </div>
+                </div>`;
+        }
+
         const boxInfo = f.box_count > 0
             ? `<div class="small text-info mt-1"><i class="bi bi-bounding-box"></i> 检测到 ${f.box_count} 个内容框</div>`
             : '';
+
         return `
         <div class="card mb-2 file-result-card" data-index="${idx}">
             <div class="card-body py-2 px-3">
@@ -665,20 +705,7 @@ function renderRecognizedFiles() {
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
-                        <div class="row g-2 mt-1">
-                            <div class="col-4">
-                                <label class="form-label small mb-0">长(mm)</label>
-                                <input type="number" step="0.01" class="form-control form-control-sm file-length" data-index="${idx}" value="${f.length_mm ? f.length_mm.toFixed(1) : ''}">
-                            </div>
-                            <div class="col-4">
-                                <label class="form-label small mb-0">宽(mm)</label>
-                                <input type="number" step="0.01" class="form-control form-control-sm file-width" data-index="${idx}" value="${f.width_mm ? f.width_mm.toFixed(1) : ''}">
-                            </div>
-                            <div class="col-4">
-                                <label class="form-label small mb-0">数量</label>
-                                <input type="number" min="1" class="form-control form-control-sm file-qty" data-index="${idx}" value="${f.quantity}">
-                            </div>
-                        </div>
+                        ${dimensionsHtml}
                         ${boxInfo}
                     </div>
                 </div>
@@ -686,7 +713,7 @@ function renderRecognizedFiles() {
         </div>`;
     }).join('');
 
-    // 绑定输入事件
+    // 绑定单框输入事件
     filesResultArea.querySelectorAll('.file-length, .file-width, .file-qty').forEach(input => {
         input.addEventListener('input', () => {
             const idx = parseInt(input.dataset.index);
@@ -694,6 +721,26 @@ function renderRecognizedFiles() {
             recognizedFiles[idx].length_mm = parseFloat(card.querySelector('.file-length').value) || 0;
             recognizedFiles[idx].width_mm = parseFloat(card.querySelector('.file-width').value) || 0;
             recognizedFiles[idx].quantity = parseInt(card.querySelector('.file-qty').value) || 1;
+            calcPrice();
+        });
+    });
+
+    // 绑定多框输入事件
+    filesResultArea.querySelectorAll('.file-length-box, .file-width-box, .file-qty-box').forEach(input => {
+        input.addEventListener('input', () => {
+            const idx = parseInt(input.dataset.index);
+            const boxIdx = parseInt(input.dataset.boxIndex);
+            const card = filesResultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
+            const row = card.querySelector(`.box-row[data-box-index="${boxIdx}"]`);
+            recognizedFiles[idx].boxes[boxIdx].length_mm = parseFloat(row.querySelector('.file-length-box').value) || 0;
+            recognizedFiles[idx].boxes[boxIdx].width_mm = parseFloat(row.querySelector('.file-width-box').value) || 0;
+            recognizedFiles[idx].boxes[boxIdx].quantity = parseInt(row.querySelector('.file-qty-box').value) || 1;
+            // 同步第一个框的值到顶层字段，保持兼容
+            if (boxIdx === 0) {
+                recognizedFiles[idx].length_mm = recognizedFiles[idx].boxes[0].length_mm;
+                recognizedFiles[idx].width_mm = recognizedFiles[idx].boxes[0].width_mm;
+                recognizedFiles[idx].quantity = recognizedFiles[idx].boxes[0].quantity;
+            }
             calcPrice();
         });
     });

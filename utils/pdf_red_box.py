@@ -9,19 +9,28 @@ import fitz
 
 def find_colored_rectangles(file_path):
     """
-    识别PDF页面中的有效制版框（排除文字笔画、装饰元素等干扰）
+    识别PDF页面中的有效制版框（排除文字笔画、装饰元素、内嵌描边等干扰）
     返回 [{x, y, width, height, area}, ...] 列表，按面积从大到小排序
     
     过滤策略：
-    1. 最小尺寸阈值 30pt（约10.6mm），过滤掉文字笔画
-    2. 面积比例过滤，只保留面积 >= 最大框面积30% 的框
-    3. 最多返回5个框
+    1. 最小尺寸放宽到 15x10pt（约5.3x3.5mm），保留小制版框
+    2. 排除页面边框/裁切框（与页面边界重合或面积超过页面90%）
+    3. 排除极端细长条（宽高比>20）和路径过于复杂的图形（>20个items）
+    4. 排除嵌套在内的大面积内边框（面积>外层60%的内嵌框）
+    5. 最多返回5个框
     """
     doc = fitz.open(file_path)
     colored_rects = []
 
     for page_num in range(len(doc)):
         page = doc[page_num]
+        page_rect = page.rect
+        page_area = page_rect.width * page_rect.height
+        
+        # 获取页面文字块，用于排除文字区域被误认为框
+        text_blocks = page.get_text("blocks")
+        text_rects = [fitz.Rect(b[:4]) for b in text_blocks]
+        
         # 方法1: 通过绘图路径识别
         drawings = page.get_drawings()
         for d in drawings:
@@ -33,16 +42,58 @@ def find_colored_rectangles(file_path):
 
             if is_colored_stroke or is_colored_fill:
                 rect = d.get('rect')
-                # 最小尺寸阈值 30pt（约10.6mm），过滤文字笔画
-                if rect and rect.width >= 30 and rect.height >= 30:
-                    colored_rects.append({
-                        'page': page_num,
-                        'x': round(rect.x0, 2),
-                        'y': round(rect.y0, 2),
-                        'width': round(rect.width, 2),
-                        'height': round(rect.height, 2),
-                        'area': round(rect.width * rect.height, 2),
-                    })
+                items = d.get('items', [])
+                
+                if not rect:
+                    continue
+                
+                # 过滤1：基本尺寸（放宽到 15x10pt，约 5.3x3.5mm）
+                if rect.width < 15 or rect.height < 10:
+                    continue
+                
+                rect_area = rect.width * rect.height
+                
+                # 过滤2：面积不能太小（排除零散细线）
+                if rect_area < 200:
+                    continue
+                
+                # 过滤3：排除极端细长条（宽高比 > 20）
+                if rect.width / rect.height > 20 or rect.height / rect.width > 20:
+                    continue
+                
+                # 过滤4：排除路径过于复杂的图形（文字轮廓/复杂装饰通常 items 很多）
+                # 简单矩形框通常 items <= 10；收紧到 15 以过滤短文字轮廓
+                if len(items) > 15:
+                    continue
+                
+                # 过滤5：排除页面边框
+                if rect_area > page_area * 0.9:
+                    continue
+                # 排除与页面边界几乎重合的矩形（裁切框/出血框）
+                if (abs(rect.x0 - page_rect.x0) < 5 and 
+                    abs(rect.y0 - page_rect.y0) < 5 and
+                    abs(rect.x1 - page_rect.x1) < 5 and
+                    abs(rect.y1 - page_rect.y1) < 5):
+                    continue
+                
+                # 过滤6：排除与文字块高度重叠的区域（客户备注/文字注释）
+                is_text_area = False
+                for tr in text_rects:
+                    intersect = rect & tr
+                    if intersect and intersect.get_area() > rect_area * 0.75:
+                        is_text_area = True
+                        break
+                if is_text_area:
+                    continue
+                
+                colored_rects.append({
+                    'page': page_num,
+                    'x': round(rect.x0, 2),
+                    'y': round(rect.y0, 2),
+                    'width': round(rect.width, 2),
+                    'height': round(rect.height, 2),
+                    'area': round(rect.width * rect.height, 2),
+                })
 
         # 方法2: 通过注释(Annotation)识别
         for annot in page.annots():
@@ -50,7 +101,21 @@ def find_colored_rectangles(file_path):
                 color = annot.colors.get('stroke') or annot.colors.get('fill')
                 if _is_colored_box(color):
                     rect = annot.rect
-                    if rect.width >= 30 and rect.height >= 30:
+                    if rect.width >= 15 and rect.height >= 10:
+                        rect_area = rect.width * rect.height
+                        if rect_area < 200:
+                            continue
+                        # 排除极端细长条
+                        if rect.width / rect.height > 20 or rect.height / rect.width > 20:
+                            continue
+                        # 同样排除页面边框
+                        if rect_area > page_area * 0.9:
+                            continue
+                        if (abs(rect.x0 - page_rect.x0) < 5 and 
+                            abs(rect.y0 - page_rect.y0) < 5 and
+                            abs(rect.x1 - page_rect.x1) < 5 and
+                            abs(rect.y1 - page_rect.y1) < 5):
+                            continue
                         colored_rects.append({
                             'page': page_num,
                             'x': round(rect.x0, 2),
@@ -67,11 +132,26 @@ def find_colored_rectangles(file_path):
     # 按面积从大到小排序
     colored_rects.sort(key=lambda r: r['area'], reverse=True)
 
-    # 过滤掉明显偏小的框（小于最大框面积30%的视为文字笔画/装饰元素）
-    if len(colored_rects) > 1:
-        max_area = colored_rects[0]['area']
-        min_area_threshold = max_area * 0.3
-        colored_rects = [r for r in colored_rects if r['area'] >= min_area_threshold]
+    # 过滤嵌套内边框：如果一个框完全包含在另一个框内，且面积 > 外层框的 60%，
+    # 则认为是内边框/描边副本，予以排除
+    filtered = []
+    for i, r in enumerate(colored_rects):
+        is_inner_border = False
+        for j, outer in enumerate(colored_rects):
+            if i == j:
+                continue
+            # 检查 r 是否几乎完全在 outer 内部
+            if (r['x'] >= outer['x'] - 2 and 
+                r['y'] >= outer['y'] - 2 and
+                r['x'] + r['width'] <= outer['x'] + outer['width'] + 2 and
+                r['y'] + r['height'] <= outer['y'] + outer['height'] + 2):
+                # 面积接近外层框，认为是内边框/描边副本
+                if r['area'] > outer['area'] * 0.6:
+                    is_inner_border = True
+                    break
+        if not is_inner_border:
+            filtered.append(r)
+    colored_rects = filtered
 
     # 最多返回5个框
     return colored_rects[:5]
@@ -208,17 +288,22 @@ def smart_extract_boxes(file_path):
             'width_mm': width_mm,
             'quantity': quantity,
             'nearby_text': nearby_text.strip().replace('\n', ' ')[:200],
+            'x': r['x'],
+            'y': r['y'],
         })
 
     doc.close()
 
-    # 去重：尺寸相同（误差±1mm）的框视为同一内容，保留第一个
+    # 去重：坐标和尺寸都相近（误差±1mm/±2pt）的框视为同一内容，保留第一个
+    # 修正：原逻辑只比较尺寸，会误删同一文件中多个相同尺寸的制版框
     unique = []
     for item in results:
         is_dup = False
         for u in unique:
             if (abs(item['length_mm'] - u['length_mm']) <= 1.0 and
-                abs(item['width_mm'] - u['width_mm']) <= 1.0):
+                abs(item['width_mm'] - u['width_mm']) <= 1.0 and
+                abs(item.get('x', 0) - u.get('x', 0)) <= 2.0 and
+                abs(item.get('y', 0) - u.get('y', 0)) <= 2.0):
                 is_dup = True
                 break
         if not is_dup:
