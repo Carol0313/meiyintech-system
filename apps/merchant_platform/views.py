@@ -742,7 +742,7 @@ def merchant_order_detail(request, order_id):
             order.tracking_company = request.POST.get('tracking_company', '')
             order.shipped_at = timezone.now()
             order.save(update_fields=['tracking_number', 'tracking_company', 'shipped_at'])
-            order.transition_status('received', operator=request.user, remark='已发货')
+            order.transition_status('shipped', operator=request.user, remark='已发货')
             messages.success(request, '订单已发货')
         elif action == 'mark_paid':
             old_status = order.status
@@ -1007,7 +1007,7 @@ def batch_process_orders(request):
                         order.tracking_company = company
                         order.shipped_at = timezone.now()
                         order.save(update_fields=['tracking_number', 'tracking_company', 'shipped_at'])
-                        order.transition_status('received', operator=request.user, remark='批量发货')
+                        order.transition_status('shipped', operator=request.user, remark='批量发货')
                         success_count += 1
                     else:
                         error_msgs.append(f'{order.sn}: 当前状态不支持发货')
@@ -1429,7 +1429,7 @@ def factory_production_board(request):
             remark = '快递发货' if ship_method == 'express' else '自行派送'
             order.shipped_at = timezone.now()
             order.save(update_fields=['shipped_at'])
-            order.transition_status('received', operator=request.user, remark=remark)
+            order.transition_status('shipped', operator=request.user, remark=remark)
             messages.success(request, f'订单 {order.sn} 已发货（{remark}）')
         elif action == 'extend_delivery':
             order_id = request.POST.get('order_id')
@@ -1500,7 +1500,7 @@ def factory_production_board(request):
                     order.shipped_at = timezone.now()
                     order.save(update_fields=['delivery_type', 'tracking_company', 'shipped_at'])
                     remark = '快递发货' if ship_method == 'express' else '自行派送'
-                    order.transition_status('received', operator=request.user, remark=remark)
+                    order.transition_status('shipped', operator=request.user, remark=remark)
                     shipped_count += 1
             if shipped_count > 0:
                 messages.success(request, f'已成功批量发货 {shipped_count} 个订单')
