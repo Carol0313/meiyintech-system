@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% block title %}拼版批次{% endblock %}
+{% block page_title %}拼版批次管理{% endblock %}
+{% block page_subtitle %}跨订单智能拼版{% endblock %}
+
+{% block content %}
+<style>
+    .batch-card {
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: #fff;
+        overflow: hidden;
+        transition: box-shadow 0.2s;
+    }
+    .batch-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .batch-card-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .batch-card-body {
+        padding: 0;
+    }
+    .batch-card-body img {
+        width: 100%;
+        height: 180px;
+        object-fit: cover;
+        display: block;
+        background: #f5f5f5;
+    }
+    .batch-card-footer {
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-color);
+    }
+    .batch-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 6px;
+    }
+    .batch-meta span {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .stat-card {
+        background: #fff;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 16px;
+        text-align: center;
+    }
+    .stat-value {
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--primary);
+    }
+    .stat-label {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 4px;
+    }
+</style>
+
+<!-- 统计栏 -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total }}</div>
+            <div class="stat-label">全部批次</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" style="color:var(--primary);">{{ stats.auto_generated }}</div>
+            <div class="stat-label">待确认</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" style="color:var(--green);">{{ stats.confirmed }}</div>
+            <div class="stat-label">已确认</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" style="color:var(--orange);">{{ stats.in_production }}</div>
+            <div class="stat-label">生产中</div>
+        </div>
+    </div>
+</div>
+
+<!-- 操作栏 -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <form method="get" class="d-flex gap-2">
+        <select name="status" class="form-select form-select-sm" style="width:auto;min-width:140px;" onchange="this.form.submit()">
+            <option value="" {% if not status_filter %}selected{% endif %}>全部状态</option>
+            <option value="auto_generated" {% if status_filter == 'auto_generated' %}selected{% endif %}>待确认</option>
+            <option value="confirmed" {% if status_filter == 'confirmed' %}selected{% endif %}>已确认</option>
+            <option value="in_production" {% if status_filter == 'in_production' %}selected{% endif %}>生产中</option>
+            <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>已驳回</option>
+        </select>
+    </form>
+    <form method="post" action="{% url 'plate_batch_generate' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-magic"></i> 自动跨订单拼版
+        </button>
+    </form>
+</div>
+
+<!-- 批次卡片网格 -->
+{% if batches %}
+<div class="row g-3">
+    {% for batch in batches %}
+    <div class="col-12 col-md-6 col-xl-4">
+        <div class="batch-card">
+            <div class="batch-card-header">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge
+                        {% if batch.status == 'auto_generated' %}bg-primary
+                        {% elif batch.status == 'confirmed' %}bg-success
+                        {% elif batch.status == 'in_production' %}bg-warning text-dark
+                        {% elif batch.status == 'rejected' %}bg-danger
+                        {% else %}bg-secondary{% endif %}">
+                        {{ batch.get_status_display }}
+                    </span>
+                    <span class="small fw-medium">{{ batch.plate_spec_name }}</span>
+                </div>
+                <div class="d-flex gap-1">
+                    {% if batch.production_pdf %}
+                    <a href="{{ batch.production_pdf.url }}" class="btn btn-sm btn-outline-danger" target="_blank" title="下载生产PDF">
+                        <i class="bi bi-file-earmark-pdf"></i> PDF
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'plate_batch_detail' batch.id %}" class="btn btn-sm btn-outline-primary">查看</a>
+                </div>
+            </div>
+            <div class="batch-card-body">
+                {% if batch.layout_image %}
+                <a href="{% url 'plate_batch_detail' batch.id %}">
+                    <img src="{{ batch.layout_image.url }}" alt="拼版效果图" loading="lazy">
+                </a>
+                {% else %}
+                <div style="height:180px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;color:#999;">
+                    <i class="bi bi-image" style="font-size:32px;"></i>
+                </div>
+                {% endif %}
+            </div>
+            <div class="batch-card-footer">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="small fw-medium">
+                        {{ batch.product_name }}
+                        <span class="text-muted">· {{ batch.material }} {{ batch.thickness }}mm</span>
+                    </div>
+                    <div class="small" style="color:var(--green);font-weight:600;">
+                        {% if batch.usage_rate %}{{ batch.usage_rate|floatformat:1 }}%{% endif %}
+                    </div>
+                </div>
+                <div class="batch-meta">
+                    <span><i class="bi bi-layers"></i> {{ batch.items.count }} 件</span>
+                    <span><i class="bi bi-clock"></i> {{ batch.created_at|date:"m-d H:i" }}</span>
+                    <span><i class="bi bi-telephone"></i> {{ batch.customer_count }} 位客户</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-grid-3x3-gap" style="font-size:48px;color:#ddd;"></i>
+    <p class="mt-3 text-muted">暂无拼版批次</p>
+    <form method="post" action="{% url 'plate_batch_generate' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary btn-sm mt-2">
+            <i class="bi bi-magic"></i> 点击自动生成
+        </button>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

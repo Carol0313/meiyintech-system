@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+{% block title %}批量处理订单{% endblock %}
+{% block page_title %}批量处理订单{% endblock %}
+{% block page_subtitle %}勾选要执行的操作后统一提交{% endblock %}
+
+{% block content %}
+<style>
+    .bp-card {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+        margin-bottom: 16px;
+    }
+    .bp-card-header {
+        padding: 14px 20px;
+        background: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .bp-product-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 6px 0;
+        border-bottom: 1px dashed #e2e8f0;
+    }
+    .bp-product-row:last-child { border-bottom: none; }
+    .bp-product-row .pi-badge {
+        background: #f1f5f9;
+        padding: 3px 10px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: #475569;
+        white-space: nowrap;
+    }
+    .bp-action-area {
+        background: #fafafa;
+        padding: 16px 20px;
+    }
+    .sticky-bottom-bar {
+        position: sticky;
+        bottom: 0;
+        background: rgba(255,255,255,0.95);
+        backdrop-filter: blur(8px);
+        border-top: 1px solid #e2e8f0;
+        padding: 16px 24px;
+        z-index: 100;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .status-overview .so-badge {
+        padding: 4px 12px;
+        border-radius: 100px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: #f1f5f9;
+        color: #64748b;
+    }
+</style>
+
+<!-- 顶部概览 -->
+<div class="card mb-3">
+    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h5 class="mb-1 fw-bold">批量处理订单</h5>
+            <div class="text-muted small">共选中 <strong>{{ orders|length }}</strong> 个订单</div>
+        </div>
+        <div class="status-overview d-flex gap-2 flex-wrap">
+            {% for status, count in status_counts.items %}
+            <span class="so-badge">{{ status }}: {{ count }}个</span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- 订单处理表单 -->
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="hidden" name="order_ids" value="{{ order_ids_str }}">
+
+    {% for order in orders %}
+    <div class="bp-card">
+        <div class="bp-card-header">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-3">
+                    <strong style="font-family:monospace; font-size:1rem;">{{ order.sn }}</strong>
+                    <span class="text-muted small">{{ order.customer.phone }}</span>
+                    {% if order.order_type == 'remake' %}
+                    <span class="badge bg-warning text-dark" style="font-size:0.65rem;">补版</span>
+                    {% endif %}
+                </div>
+                <div class="d-flex gap-2">
+                    <span class="badge badge-status status-{{ order.status }}">{{ order.get_status_display }}</span>
+                    {% if order.plate_status != 'none' %}
+                    <span class="badge bg-info">{{ order.get_plate_status_display }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body pb-0">
+            <h6 class="small text-muted mb-2 fw-bold">产品明细</h6>
+            {% for item in order.items.all %}
+            <div class="bp-product-row">
+                <span class="pi-badge" title="{{ item.get_product_name_display }}">{{ item.get_product_name_display|truncatechars:14 }}</span>
+                <span class="pi-badge">{{ item.get_material_display }}</span>
+                <span class="pi-badge">{{ item.thickness }}mm</span>
+                <span class="pi-badge">{{ item.length_mm }}×{{ item.width_mm }}mm</span>
+                <span class="pi-badge">数量 ×{{ item.quantity }}</span>
+                {% if item.file %}
+                <a href="{{ item.file.url }}" target="_blank" class="small text-primary">查看文件</a>
+                {% else %}
+                <span class="small text-muted">无文件</span>
+                {% endif %}
+            </div>
+            {% empty %}
+            <div class="text-muted small py-2">暂无产品明细</div>
+            {% endfor %}
+
+            <!-- 拼版信息 -->
+            {% if order.plate_batch_items.all %}
+            <div class="mt-2 mb-1 small text-success">
+                <i class="bi bi-check-circle-fill"></i>
+                <a href="{% url 'plate_batch_detail' order.plate_batch_items.first.plate_batch.id %}">
+                    已拼版：批次 {{ order.plate_batch_items.first.plate_batch.id.hex|slice:":8" }}
+                </a>
+                {% if order.plate_batch_items.first.plate_batch.usage_rate %}
+                （利用率: {{ order.plate_batch_items.first.plate_batch.usage_rate|floatformat:1 }}%）
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 操作区 -->
+        <div class="bp-action-area">
+            <h6 class="small fw-bold mb-2" style="color:#334155;">可执行操作</h6>
+
+            {% if order.status == 'pending_confirm' %}
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="do_audit_{{ order.id }}" value="1" id="audit_{{ order.id }}" checked>
+                <label class="form-check-label" for="audit_{{ order.id }}">
+                    <strong>审核通过</strong> <span class="text-muted small">（自动拼版并生成拼版建议）</span>
+                </label>
+            </div>
+            {% elif order.plate_status == 'auto_generated' %}
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="do_confirm_{{ order.id }}" value="1" id="cp_{{ order.id }}" checked>
+                <label class="form-check-label" for="cp_{{ order.id }}">
+                    <strong>确认拼版并下发工厂生产</strong> <span class="text-muted small">（自动分配工厂）</span>
+                </label>
+            </div>
+            {% elif order.status == 'paid' or order.status == 'design_confirmed' %}
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted">生产工厂 <span class="text-danger">*</span></label>
+                    <select name="factory_{{ order.id }}" class="form-select form-select-sm">
+                        <option value="">选择工厂</option>
+                        {% for f in factories %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small text-muted">发货时效 <span class="text-danger">*</span></label>
+                    <select name="cycle_{{ order.id }}" class="form-select form-select-sm">
+                        <option value="">选择时效</option>
+                        <option value="6">6点前寄出</option>
+                        <option value="9">9点前寄出</option>
+                        <option value="24">次日寄出</option>
+                        <option value="18">下班后送货</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" name="do_arrange_{{ order.id }}" value="1" id="ap_{{ order.id }}" checked>
+                        <label class="form-check-label" for="ap_{{ order.id }}"><strong>安排生产</strong></label>
+                    </div>
+                </div>
+            </div>
+            {% elif order.status == 'in_production' %}
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small text-muted">物流/快递单号</label>
+                    <input type="text" name="tracking_{{ order.id }}" class="form-control form-control-sm" placeholder="请输入单号">
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" name="do_ship_{{ order.id }}" value="1" id="ship_{{ order.id }}">
+                        <label class="form-check-label" for="ship_{{ order.id }}"><strong>确认发货</strong></label>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-muted small">当前状态无可执行批量操作</div>
+            {% endif %}
+
+            <!-- 文件重新上传 -->
+            {% for item in order.items.all %}
+                {% if item.file %}
+                <div class="mt-3 pt-2" style="border-top:1px dashed #ddd;">
+                    <label class="form-label small text-muted mb-1">
+                        重新上传 <strong>{{ item.get_product_name_display }}</strong> 的文件（PDF/AI）
+                    </label>
+                    <div class="input-group input-group-sm" style="max-width:400px;">
+                        <input type="file" name="file_{{ order.id }}_{{ item.id }}" class="form-control" accept=".pdf,.ai">
+                    </div>
+                    <div class="form-text small text-muted">选择文件后将自动替换原文件并重新拼版</div>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="text-center text-muted py-5">
+        <i class="bi bi-inbox fs-1 d-block mb-2" style="color:var(--border-light);"></i>
+        未选择任何订单
+    </div>
+    {% endfor %}
+
+    <!-- 底部提交栏 -->
+    <div class="sticky-bottom-bar">
+        <div>
+            <span class="fw-bold fs-5">{{ orders|length }}</span>
+            <span class="text-muted">个订单待处理</span>
+        </div>
+        <div>
+            <a href="{% url 'merchant_orders' %}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> 返回列表
+            </a>
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="bi bi-lightning-charge"></i> 执行批量操作
+            </button>
+        </div>
+    </div>
+</form>
+{% endblock %}

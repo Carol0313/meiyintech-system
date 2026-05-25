@@ -1,9 +1,75 @@
 {% extends 'base.html' %}
 {% block title %}商家首页{% endblock %}
-{% block page_title %}商家工作台{% endblock %}
+{% block page_title %}闪电制版管理中心{% endblock %}
 {% block page_subtitle %} overview of your business {% endblock %}
 
+{% block extra_css %}
+<style>
+    .daily-tip-bar {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 20px;
+        background: linear-gradient(135deg, #fff9e6, #fff3cd);
+        border: 1px solid #ffe082;
+        border-radius: 10px;
+        position: relative;
+        overflow: hidden;
+    }
+    .daily-tip-bar::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: linear-gradient(180deg, #ffc107, #ff9800);
+    }
+    .daily-tip-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #ffc107, #ff9800);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+    }
+    .daily-tip-content {
+        flex: 1;
+        min-width: 0;
+    }
+    .daily-tip-label {
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: #e65100;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
+    }
+    .daily-tip-text {
+        font-size: 0.9375rem;
+        color: #5d4037;
+        font-weight: 500;
+        line-height: 1.5;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
+
+<!-- 每日一句 -->
+<div class="daily-tip-bar mb-4">
+    <div class="daily-tip-icon"><i class="bi bi-lightbulb-fill"></i></div>
+    <div class="daily-tip-content">
+        <div class="daily-tip-label">每日一句 · 制版小知识</div>
+        <div class="daily-tip-text">{{ daily_tip }}</div>
+    </div>
+</div>
+
 <div class="row g-4 mb-4">
     <div class="col-md-3">
         <div class="card stat-card">

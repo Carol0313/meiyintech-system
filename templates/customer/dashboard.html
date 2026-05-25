@@ -4,6 +4,17 @@
 {% block page_subtitle %}查看您的信用额度和最新订单动态{% endblock %}
 
 {% block content %}
+<!-- 每日一句 -->
+<div class="card mb-4" style="background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%); border: 1px solid #bae6fd;">
+    <div class="card-body d-flex align-items-center gap-3 py-3">
+        <div class="fs-3" style="color: #0284c7;"><i class="bi bi-quote"></i></div>
+        <div>
+            <div class="fw-medium" style="color: #0c4a6e; font-size: 1rem;">{{ daily_quote }}</div>
+            <div class="small mt-1" style="color: #64748b;">— 每日一句 · 印刷制版行业</div>
+        </div>
+    </div>
+</div>
+
 <!-- 统计卡片 -->
 <div class="row g-4 mb-4">
     <div class="col-md-4">

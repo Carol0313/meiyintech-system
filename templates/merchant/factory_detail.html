@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+{% block title %}{{ factory.name }} - 工厂管理{% endblock %}
+{% block page_title %}{{ factory.name }}{% endblock %}
+{% block page_subtitle %}设备状态与库存管理{% endblock %}
+
+{% block content %}
+<style>
+    .status-card { border-left: 4px solid #10b981; }
+    .status-card.warning { border-left-color: #f59e0b; }
+    .status-card.danger { border-left-color: #ef4444; }
+    .inventory-table th { background: #f8fafc; white-space: nowrap; }
+    .inventory-table td { vertical-align: middle; }
+</style>
+
+<!-- 顶部导航 -->
+<div class="mb-3">
+    <a href="{% url 'factory_list' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> 返回工厂列表
+    </a>
+    <a href="{% url 'factory_edit' factory.id %}" class="btn btn-outline-primary btn-sm ms-2">
+        <i class="bi bi-pencil"></i> 编辑工厂信息
+    </a>
+</div>
+
+<div class="row g-3">
+    <!-- 基本信息 -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">基本信息</div>
+            <div class="card-body">
+                <h5>{{ factory.name }}</h5>
+                <p class="text-muted small mb-1">{{ factory.address|default:"-" }}</p>
+                <p class="small mb-1">联系人：{{ factory.contact_person|default:"-" }}</p>
+                <p class="small mb-0">电话：{{ factory.contact_phone|default:"-" }}</p>
+                <div class="mt-2">
+                    {% if factory.is_active %}<span class="badge bg-success">启用</span>{% else %}<span class="badge bg-secondary">禁用</span>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设备运行状态 -->
+    <div class="col-md-8">
+        <div class="card status-card {% if '正常' in equipment_status.status_text %}status-card{% elif '故障' in equipment_status.status_text or '异常' in equipment_status.status_text %}danger{% else %}warning{% endif %}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-cpu"></i> 设备运行状态</span>
+                <span class="text-muted small">更新于 {{ equipment_status.updated_at|date:"m-d H:i" }}</span>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_equipment">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label small text-muted">当前状态</label>
+                            <input type="text" name="status_text" class="form-control" value="{{ equipment_status.status_text }}" placeholder="如：一切正常">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-muted">备注</label>
+                            <input type="text" name="notes" class="form-control" value="{{ equipment_status.notes }}" placeholder="补充说明...">
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="bi bi-check-lg"></i> 保存
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 库存管理 -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-box-seam"></i> 库存 / 物料管理</span>
+                <div>
+                    {% if inventories %}
+                    <a href="{% url 'export_inventory' factory.id %}" class="btn btn-outline-success btn-sm me-2">
+                        <i class="bi bi-file-earmark-excel"></i> 导出盘点表
+                    </a>
+                    {% endif %}
+                    <span class="badge bg-primary">{{ inventories.count }} 项</span>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if inventories %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered inventory-table">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>分类</th>
+                                <th>数量</th>
+                                <th>单位</th>
+                                <th>备注</th>
+                                <th>更新时间</th>
+                                <th style="width:120px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for inv in inventories %}
+                            <tr>
+                                <form method="post" id="inv-form-{{ inv.id }}" style="display:contents;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="update_inventory">
+                                    <input type="hidden" name="inventory_id" value="{{ inv.id }}">
+                                </form>
+                                <td><input form="inv-form-{{ inv.id }}" type="text" name="name" class="form-control form-control-sm" value="{{ inv.name }}"></td>
+                                <td><input form="inv-form-{{ inv.id }}" type="text" name="category" class="form-control form-control-sm" value="{{ inv.category }}"></td>
+                                <td><input form="inv-form-{{ inv.id }}" type="text" name="quantity" class="form-control form-control-sm" value="{{ inv.quantity }}"></td>
+                                <td><input form="inv-form-{{ inv.id }}" type="text" name="unit" class="form-control form-control-sm" value="{{ inv.unit }}"></td>
+                                <td><input form="inv-form-{{ inv.id }}" type="text" name="notes" class="form-control form-control-sm" value="{{ inv.notes }}"></td>
+                                <td class="text-muted small">{{ inv.updated_at|date:"m-d H:i" }}</td>
+                                <td>
+                                    <button type="submit" form="inv-form-{{ inv.id }}" class="btn btn-sm btn-outline-success" title="保存">
+                                        <i class="bi bi-check-lg"></i>
+                                    </button>
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete_inventory">
+                                        <input type="hidden" name="inventory_id" value="{{ inv.id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="删除" onclick="return confirm('确认删除该库存项吗？');">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                    暂无库存记录
+                </div>
+                {% endif %}
+
+                <!-- 新增库存项 -->
+                <div class="mt-3 pt-3 border-top">
+                    <h6 class="small fw-bold mb-2">新增库存项</h6>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="add_inventory">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted">名称 <span class="text-danger">*</span></label>
+                                <input type="text" name="name" class="form-control form-control-sm" placeholder="如：雕刻刀具" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted">分类</label>
+                                <input type="text" name="category" class="form-control form-control-sm" placeholder="如：工具">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted">数量</label>
+                                <input type="text" name="quantity" class="form-control form-control-sm" placeholder="如：50">
+                            </div>
+                            <div class="col-md-1">
+                                <label class="form-label small text-muted">单位</label>
+                                <input type="text" name="unit" class="form-control form-control-sm" placeholder="把">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted">备注</label>
+                                <input type="text" name="notes" class="form-control form-control-sm" placeholder="补充说明">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary btn-sm w-100">
+                                    <i class="bi bi-plus-lg"></i> 添加
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

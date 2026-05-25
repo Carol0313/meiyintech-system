@@ -1,0 +1,516 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}拼版批次 {{ batch.id.hex|slice:":8" }}{% endblock %}
+{% block page_title %}拼版工作台{% endblock %}
+{% block page_subtitle %}批次 {{ batch.id.hex|slice:":8" }} | {{ batch.plate_spec_name }} | 利用率 {{ batch.usage_rate|floatformat:1 }}%{% endblock %}
+
+{% block content %}
+<style>
+    .plate-alert {
+        padding: 12px 16px;
+        border-radius: var(--radius-sm);
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid transparent;
+    }
+    .plate-alert.auto {
+        background: var(--primary-light);
+        border-color: #BBDEFB;
+        color: var(--primary-dark);
+    }
+    .plate-alert.auto i { font-size: 18px; }
+
+    .batch-sidebar .card { margin-bottom: 12px; }
+    .batch-sidebar .card-header { font-size: 13px; font-weight: 500; }
+
+    .item-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 0;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 12px;
+    }
+    .item-row:last-child { border-bottom: none; }
+    .item-color-dot {
+        width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 6px;
+        border: 1px solid rgba(0,0,0,0.15);
+    }
+
+    /* 画布 */
+    .plate-canvas-wrap {
+        background: #e8e8e8;
+        border-radius: var(--radius-sm);
+        padding: 16px;
+        overflow: auto;
+        min-height: 700px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .plate-canvas {
+        background-color: #fafafa;
+        background-image:
+            linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+        background-size: 20px 20px;
+        position: relative;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        flex-shrink: 0;
+    }
+    .plate-rect {
+        position: absolute;
+        border: 1px solid rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 500;
+        overflow: hidden;
+        cursor: grab;
+        user-select: none;
+        transition: box-shadow 0.15s;
+    }
+    .plate-rect-img {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        object-fit: contain;
+        pointer-events: none;
+        opacity: 1.0;
+        background: #fff;
+    }
+    .plate-rect-rotate {
+        position: absolute;
+        top: 2px; right: 2px;
+        width: 20px; height: 20px;
+        border: none;
+        border-radius: 3px;
+        background: rgba(255,255,255,0.85);
+        color: #333;
+        font-size: 12px;
+        line-height: 1;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        padding: 0;
+    }
+    .plate-rect:hover .plate-rect-rotate {
+        display: flex;
+    }
+    .plate-rect-rotate:hover {
+        background: #fff;
+        color: var(--primary);
+    }
+    .plate-rect:active {
+        cursor: grabbing;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 100;
+    }
+    .plate-rect.dragging {
+        opacity: 0.85;
+        z-index: 100;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .plate-rect-content {
+        pointer-events: none;
+        text-align: center;
+        line-height: 1.2;
+        padding: 1px 2px;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(255,255,255,0.88);
+        font-size: 9px;
+        z-index: 2;
+        border-top: 1px solid rgba(0,0,0,0.1);
+    }
+    .plate-rect-label {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        font-size: 9px;
+        color: #333;
+        font-weight: 600;
+        white-space: nowrap;
+        background: rgba(255,255,255,0.92);
+        padding: 1px 4px;
+        border-radius: 2px;
+        z-index: 3;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }
+    .plate-dim-label {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        font-size: 9px;
+        color: #666;
+        background: rgba(255,255,255,0.8);
+        padding: 0 3px;
+        border-radius: 2px;
+    }
+    .action-bar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+    }
+    .btn-confirm-plate {
+        background: var(--green); border: 1px solid var(--green); color: white;
+        padding: 8px 20px; border-radius: var(--radius-sm); font-weight: 500; font-size: 14px;
+    }
+    .btn-confirm-plate:hover { background: var(--green-hover); border-color: var(--green-hover); }
+    .btn-reject-plate {
+        background: #fff; border: 1px solid var(--red); color: var(--red);
+        padding: 8px 20px; border-radius: var(--radius-sm); font-weight: 500; font-size: 14px;
+    }
+    .btn-reject-plate:hover { background: #FFEBEE; }
+    .btn-save-plate {
+        background: var(--primary); border: 1px solid var(--primary); color: white;
+        padding: 8px 20px; border-radius: var(--radius-sm); font-weight: 500; font-size: 14px;
+    }
+    .btn-save-plate:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+</style>
+
+{% if batch.status == 'auto_generated' %}
+<div class="plate-alert auto">
+    <i class="bi bi-magic"></i>
+    <div>
+        <strong>系统自动拼版已完成</strong>
+        <div class="small">系统已根据产品尺寸自动生成拼版建议，请确认或拖拽微调。确认后订单将自动下发到工厂生产。</div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row g-3">
+    <!-- 左侧：订单信息 -->
+    <div class="col-md-3 batch-sidebar">
+        <div class="card">
+            <div class="card-header py-2">批次信息</div>
+            <div class="card-body p-2 small" style="font-size:12px;">
+                <div class="mb-1"><strong>产品：</strong>{{ batch.product_name }}</div>
+                <div class="mb-1"><strong>材质：</strong>{{ batch.material }} {{ batch.thickness }}mm</div>
+                <div class="mb-1"><strong>板材：</strong>{{ batch.plate_spec_name }} ({{ batch.plate_width }}×{{ batch.plate_height }}mm)</div>
+                <div class="mb-1"><strong>利用率：</strong><span style="color:var(--green);font-weight:600;">{{ batch.usage_rate|floatformat:1 }}%</span></div>
+                <div class="mb-1"><strong>件数：</strong>{{ batch.items.count }} 件 / {{ batch.customer_count }} 位客户</div>
+                <div><strong>状态：</strong><span class="badge
+                    {% if batch.status == 'auto_generated' %}bg-primary
+                    {% elif batch.status == 'confirmed' %}bg-success
+                    {% elif batch.status == 'in_production' %}bg-warning text-dark
+                    {% elif batch.status == 'rejected' %}bg-danger
+                    {% else %}bg-secondary{% endif %}">{{ batch.get_status_display }}</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header py-2">包含订单</div>
+            <div class="card-body p-2">
+                {% for sitem in sidebar_items %}
+                <div class="item-row">
+                    <div>
+                        <span class="item-color-dot" style="background: hsl({{ sitem.color_hue }}deg 70% 85%);"></span>
+                        <span class="small">{{ sitem.order_sn }}</span>
+                    </div>
+                    <div class="text-muted small">{{ sitem.length_mm }}×{{ sitem.width_mm }}mm</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header py-2">操作</div>
+            <div class="card-body p-2">
+                {% if batch.production_pdf %}
+                <a href="{{ batch.production_pdf.url }}" class="btn btn-outline-danger btn-sm w-100 mb-2" target="_blank">
+                    <i class="bi bi-file-earmark-pdf"></i> 下载生产PDF
+                </a>
+                {% endif %}
+                {% if batch.status == 'auto_generated' %}
+                <form method="post" action="{% url 'plate_batch_confirm' batch.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success btn-sm w-100 mb-2" onclick="return confirm('确认后订单将自动下发到工厂生产，是否继续？')">
+                        <i class="bi bi-check-lg"></i> 确认拼版
+                    </button>
+                </form>
+                <button type="button" class="btn btn-outline-danger btn-sm w-100" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                    <i class="bi bi-x-lg"></i> 驳回拼版
+                </button>
+                {% else %}
+                <div class="text-muted small text-center mt-2">当前批次已{{ batch.get_status_display }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧：画布 -->
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span>拼版画布（可拖拽微调）</span>
+                <div class="d-flex gap-2 align-items-center">
+                    {% if batch.status == 'auto_generated' %}
+                    <form method="get" class="d-flex align-items-center gap-2">
+                        <input type="hidden" name="recalculate" value="1">
+                        <label class="form-label mb-0" style="font-size:12px;color:#666;white-space:nowrap;">算法：</label>
+                        <select name="algorithm" class="form-select form-select-sm" style="width:auto;min-width:140px;font-size:12px;" onchange="this.form.submit();">
+                            {% for key, label in algorithms %}
+                            <option value="{{ key }}" {% if algorithm == key %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="plate-canvas-wrap">
+                    <div id="plateCanvas" class="plate-canvas border"
+                         style="width:{{ scaled_plate_width }}px; height:{{ scaled_plate_height }}px;"
+                         data-pwidth="{{ batch.plate_width }}" data-pheight="{{ batch.plate_height }}"
+                         data-scale="{{ scale }}">
+                        {% for rect in scaled_rectangles %}
+                        <div class="plate-rect" id="rect-{{ rect.id }}"
+                             style="left:{{ rect.x }}px; top:{{ rect.y }}px; width:{{ rect.width }}px; height:{{ rect.height }}px; background: hsl({{ rect.color_hue }}deg 70% 85%);"
+                             data-hue="{{ rect.color_hue }}"
+                             data-rid="{{ rect.id }}"
+                             data-mm-width="{{ rect.mm_width }}"
+                             data-mm-height="{{ rect.mm_height }}"
+                             data-rotation="{{ rect.rotation }}">
+                            {% if rect.preview_url %}
+                            <img class="plate-rect-img" src="{{ rect.preview_url }}" alt="" draggable="false">
+                            {% endif %}
+                            <div class="plate-rect-content">
+                                <div>{{ rect.order_sn }}</div>
+                                {% if rect.width > 60 and rect.height > 35 %}
+                                <div style="font-size:9px;color:#666;margin-top:2px;">{{ rect.customer_phone|default:''|slice:"-4:" }}</div>
+                                {% endif %}
+                            </div>
+                            <span class="plate-rect-label">{{ rect.order_sn }}</span>
+                            <span class="plate-dim-label" data-dim>{{ rect.mm_width|floatformat:0 }}×{{ rect.mm_height|floatformat:0 }}</span>
+                            <button type="button" class="plate-rect-rotate" title="旋转90°" onclick="event.stopPropagation(); rotateRect(this.parentElement);">↻</button>
+                        </div>
+                        {% empty %}
+                        <div class="text-center text-muted">
+                            <i class="bi bi-grid-3x3-gap" style="font-size:48px; opacity:0.3;"></i>
+                            <p class="mt-2 mb-0">暂无拼版数据</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <form method="post" class="mt-3" id="plateForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="layout_data" id="layoutData" value='{{ batch.layout_data|default:"{}"|safe }}'>
+                    <div class="mb-3">
+                        <label class="form-label">设计师备注</label>
+                        <textarea name="designer_note" class="form-control" rows="2">{{ batch.designer_note|default:'' }}</textarea>
+                    </div>
+                    <div class="action-bar">
+                        <button type="submit" name="action" value="save" class="btn-save-plate">
+                            <i class="bi bi-save"></i> 保存布局
+                        </button>
+                        {% if batch.status == 'auto_generated' %}
+                        <button type="submit" name="action" value="confirm" class="btn-confirm-plate" onclick="return confirm('确认后订单将自动下发到工厂生产，是否继续？')">
+                            <i class="bi bi-check-lg"></i> 确认拼版并下发工厂
+                        </button>
+                        <button type="button" class="btn-reject-plate" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                            <i class="bi bi-x-lg"></i> 驳回拼版
+                        </button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 驳回弹窗 -->
+{% if batch.status == 'auto_generated' %}
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-medium">驳回拼版</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="reject">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">驳回原因</label>
+                        <textarea name="reject_reason" class="form-control" rows="3" placeholder="请说明驳回原因" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-danger">确认驳回</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+(function() {
+    const canvas = document.getElementById('plateCanvas');
+    if (!canvas) return;
+
+    const scale = parseFloat(canvas.dataset.scale) || 1;
+    let isDragging = false;
+    let currentRect = null;
+    let startX = 0, startY = 0;
+    let origLeft = 0, origTop = 0;
+
+    function getPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+            x: clientX - rect.left,
+            y: clientY - rect.top
+        };
+    }
+
+    function onPointerDown(e) {
+        if (e.target.closest('.plate-rect-rotate')) return;
+        const el = e.target.closest('.plate-rect');
+        if (!el) return;
+        e.preventDefault();
+        isDragging = true;
+        currentRect = el;
+        currentRect.classList.add('dragging');
+
+        const pos = getPos(e);
+        startX = pos.x;
+        startY = pos.y;
+        origLeft = parseFloat(el.style.left);
+        origTop = parseFloat(el.style.top);
+    }
+
+    function onPointerMove(e) {
+        if (!isDragging || !currentRect) return;
+        e.preventDefault();
+        const pos = getPos(e);
+        const dx = pos.x - startX;
+        const dy = pos.y - startY;
+        currentRect.style.left = (origLeft + dx) + 'px';
+        currentRect.style.top = (origTop + dy) + 'px';
+    }
+
+    function onPointerUp(e) {
+        if (!isDragging || !currentRect) return;
+        isDragging = false;
+        currentRect.classList.remove('dragging');
+        updateLayoutData(currentRect);
+        currentRect = null;
+    }
+
+    // 双击旋转
+    canvas.addEventListener('dblclick', function(e) {
+        const el = e.target.closest('.plate-rect');
+        if (el) {
+            e.preventDefault();
+            rotateRect(el);
+        }
+    });
+
+    // 全局暴露 rotateRect 函数
+    window.rotateRect = function(el) {
+        const rid = el.dataset.rid;
+        let rotation = parseInt(el.dataset.rotation || 0);
+        rotation = (rotation + 90) % 360;
+        el.dataset.rotation = rotation;
+
+        // 交换 CSS 宽高
+        const oldW = parseFloat(el.style.width);
+        const oldH = parseFloat(el.style.height);
+        el.style.width = oldH + 'px';
+        el.style.height = oldW + 'px';
+
+        // 交换 mm 宽高
+        const mmW = parseFloat(el.dataset.mmWidth);
+        const mmH = parseFloat(el.dataset.mmHeight);
+        el.dataset.mmWidth = mmH;
+        el.dataset.mmHeight = mmW;
+
+        // 更新尺寸标签
+        const dimLabel = el.querySelector('.plate-dim-label');
+        if (dimLabel) {
+            dimLabel.textContent = Math.round(mmH) + '×' + Math.round(mmW);
+        }
+
+        updateLayoutData(el, { rotation: rotation, swapSize: true });
+    };
+
+    function updateLayoutData(el, opts) {
+        opts = opts || {};
+        const layoutInput = document.getElementById('layoutData');
+        let data = {};
+        try {
+            data = JSON.parse(layoutInput.value || '{}');
+        } catch (e) {
+            data = {};
+        }
+
+        const rid = el.dataset.rid;
+        const newLeft = parseFloat(el.style.left);
+        const newTop = parseFloat(el.style.top);
+
+        const mmX = Math.round((newLeft / scale) * 100) / 100;
+        const mmY = Math.round((newTop / scale) * 100) / 100;
+
+        const rects = data.rectangles || [];
+        const found = rects.find(r => r.id === rid);
+        if (found) {
+            found.x = mmX;
+            found.y = mmY;
+            if (opts.swapSize) {
+                const tmpW = found.width;
+                found.width = found.height;
+                found.height = tmpW;
+            }
+            if (opts.rotation !== undefined) {
+                found.rotation = opts.rotation;
+            }
+        }
+        data.rectangles = rects;
+        layoutInput.value = JSON.stringify(data);
+
+        autoSave(data);
+    }
+
+    let saveTimer = null;
+    function autoSave(data) {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+            fetch("{% url 'plate_batch_update_layout' batch.id %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({ rectangles: data.rectangles })
+            }).then(r => r.json()).then(res => {
+                if (res.success) {
+                    console.log('自动保存成功');
+                }
+            }).catch(err => console.error('自动保存失败', err));
+        }, 800);
+    }
+
+    canvas.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('mousemove', onPointerMove);
+    document.addEventListener('mouseup', onPointerUp);
+
+    canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+    document.addEventListener('touchmove', onPointerMove, { passive: false });
+    document.addEventListener('touchend', onPointerUp);
+})();
+</script>
+{% endblock %}

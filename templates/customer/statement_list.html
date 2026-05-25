@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}我的对账单{% endblock %}
+{% block page_title %}我的对账单{% endblock %}
+{% block page_subtitle %}查看月度对账单，确认并跟踪付款状态{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small text-muted">对账状态</label>
+                <select name="status" class="form-select" onchange="this.form.submit()">
+                    <option value="">全部状态</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <a href="{% url 'customer_statements' %}" class="btn btn-outline-secondary">重置</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th class="ps-4">对账单号</th><th>周期</th><th>金额</th><th>状态</th><th>创建时间</th><th class="pe-4">操作</th></tr></thead>
+            <tbody>
+                {% for s in statements %}
+                <tr>
+                    <td class="ps-4">
+                        <a href="{% url 'customer_statement_detail' s.id %}" class="fw-semibold" style="color:var(--primary);">{{ s.sn }}</a>
+                    </td>
+                    <td style="color:var(--text-muted);">{{ s.period_start|date:"Y-m-d" }} ~ {{ s.period_end|date:"Y-m-d" }}</td>
+                    <td class="fw-semibold">¥{{ s.total_amount }}</td>
+                    <td>
+                        {% if s.status == 'pending' %}<span class="badge badge-status status-pending_payment">待对账</span>
+                        {% elif s.status == 'confirmed' %}<span class="badge badge-status status-design_confirmed">已确认</span>
+                        {% elif s.status == 'paid' %}<span class="badge badge-status status-paid">已付款</span>
+                        {% elif s.status == 'settled' %}<span class="badge badge-status status-received">已结清</span>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--text-muted);">{{ s.created_at|date:"Y-m-d H:i" }}</td>
+                    <td class="pe-4">
+                        <a href="{% url 'customer_statement_detail' s.id %}" class="btn btn-sm btn-outline-primary">详情</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center text-muted py-5">
+                    <i class="bi bi-inbox fs-1 d-block mb-2" style="color:var(--border-light);"></i>
+                    暂无对账单
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

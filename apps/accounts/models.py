@@ -42,6 +42,13 @@ class User(AbstractUser):
             return getattr(self, 'staff_profile', None)
         return None
 
+    def get_effective_customer_profile(self):
+        """获取实际业务用的 CustomerProfile（子账号返回父账号的）"""
+        profile = getattr(self, 'customer_profile', None)
+        if profile and not profile.is_main_account and profile.parent:
+            return profile.parent
+        return profile
+
 
 class Merchant(models.Model):
     """商家（商户）资料"""
@@ -115,7 +122,14 @@ class CustomerProfile(models.Model):
     rejection_reason = models.TextField('拒绝原因', blank=True)
     province = models.CharField('所在省份', max_length=50, blank=True)
     pricing_tier = models.PositiveSmallIntegerField('价格档位', default=3)
+    custom_prices = models.TextField('客户自定义报价', default='{}', blank=True)
     last_order_note = models.TextField('上次订单备注', blank=True)  # 用于一键带入
+    is_main_account = models.BooleanField('是否主账号', default=True)
+    parent = models.ForeignKey(
+        'self', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='sub_accounts', verbose_name='所属主账号'
+    )
+    max_sub_accounts = models.PositiveIntegerField('子账号上限', default=10)
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 

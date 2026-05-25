@@ -76,37 +76,36 @@
 </div>
 {% endif %}
 
-<div class="row">
-    <div class="col-md-4">
-        <div class="card mb-3">
-            <div class="card-header">订单产品信息</div>
-            <div class="card-body">
+<div class="row g-2">
+    <div class="col-md-3">
+        <div class="card mb-2">
+            <div class="card-header py-2">订单产品信息</div>
+            <div class="card-body p-2">
                 {% for item in items %}
-                <div class="mb-2 pb-2 border-bottom">
-                    <div class="fw-medium">{{ item.get_product_name_display }} {{ item.get_material_display }}</div>
-                    <div class="small text-muted">尺寸: {{ item.length_mm }}×{{ item.width_mm }}mm | 数量: {{ item.quantity }}</div>
+                <div class="mb-1 pb-1 border-bottom">
+                    <div class="fw-medium small">{{ item.get_product_name_display }} {{ item.get_material_display }}</div>
+                    <div class="small text-muted" style="font-size:12px;">尺寸: {{ item.length_mm }}×{{ item.width_mm }}mm | 数量: {{ item.quantity }}</div>
                     {% if item.plate_type %}
-                    <div class="small mt-1"><span class="badge bg-info">版类：{{ item.plate_type }}</span></div>
+                    <div style="font-size:11px;"><span class="badge bg-info">版类：{{ item.plate_type }}</span></div>
                     {% endif %}
                     {% if item.red_box_data %}
-                    <div class="small mt-1"><span class="badge bg-warning text-dark">已识别PDF红框</span></div>
+                    <div style="font-size:11px;"><span class="badge bg-warning text-dark">已识别PDF红框</span></div>
                     {% endif %}
                 </div>
                 {% endfor %}
             </div>
         </div>
 
-        <!-- PDF预检报告 -->
         {% if preflight_reports %}
-        <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>PDF预检报告</span>
-                <span class="badge bg-primary">{{ preflight_reports|length }} 个文件</span>
+        <div class="card mb-2">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span>PDF预检</span>
+                <span class="badge bg-primary">{{ preflight_reports|length }}</span>
             </div>
             <div class="card-body p-2">
                 {% for pr in preflight_reports %}
-                <div class="mb-2">
-                    <div class="small fw-medium mb-1">{{ pr.item_label }}</div>
+                <div class="mb-1">
+                    <div class="small fw-medium" style="font-size:12px;">{{ pr.item_label }}</div>
                     {{ pr.report_html|safe }}
                 </div>
                 {% endfor %}
@@ -114,27 +113,110 @@
         </div>
         {% endif %}
         {% if suggestion %}
-        <div class="card mb-3">
-            <div class="card-header">系统拼版建议</div>
-            <div class="card-body small">
-                <p>大版尺寸: {{ suggestion.plate_width }}×{{ suggestion.plate_height }}mm</p>
-                <p>排列数量: {{ suggestion.placed_count }} 个</p>
-                <p>材料利用率: {{ suggestion.usage_rate|floatformat:1 }}%</p>
-                <button type="button" class="btn btn-sm btn-outline-primary" onclick="applySuggestion()">应用建议</button>
+        <div class="card mb-2">
+            <div class="card-header py-2">拼版建议</div>
+            <div class="card-body p-2 small" style="font-size:12px;">
+                <div class="mb-1">算法: <span class="badge bg-info">{{ suggestion.algorithm|default:"shelf" }}</span></div>
+                <div class="mb-1">大版: {{ suggestion.plate_width }}×{{ suggestion.plate_height }}mm</div>
+                <div class="mb-1">数量: {{ suggestion.placed_count }} 个</div>
+                <div class="mb-1">利用率: <strong style="color:var(--green);">{{ suggestion.usage_rate|floatformat:1 }}%</strong></div>
+                <button type="button" class="btn btn-sm btn-outline-primary py-1" style="font-size:12px;" onclick="applySuggestion()">应用建议</button>
             </div>
         </div>
         {% endif %}
     </div>
-    <div class="col-md-8">
+    <div class="col-md-9">
         <div class="card">
-            <div class="card-header">拼版画布</div>
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span>拼版画布</span>
+                <form method="get" class="d-flex align-items-center gap-2" id="algoForm">
+                    <label class="form-label mb-0" style="font-size:12px;color:#666;white-space:nowrap;">拼版算法：</label>
+                    <select name="algorithm" class="form-select form-select-sm" style="width:auto;min-width:160px;font-size:13px;" onchange="document.getElementById('algoForm').submit();">
+                        {% for key, label in algorithms %}
+                        <option value="{{ key }}" {% if algorithm == key %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
             <div class="card-body">
-                <div id="canvasContainer" class="border bg-light position-relative" style="width:100%; height:500px; overflow:hidden;">
-                    {% for rect in suggestion.rectangles|default:layout_data_parsed.rectangles|default:'' %}
-                    <div class="position-absolute border border-dark bg-white d-flex align-items-center justify-content-center" style="left:{{ rect.x }}px; top:{{ rect.y }}px; width:{{ rect.width }}px; height:{{ rect.height }}px; font-size:10px;">
-                        {{ rect.label }}
+                <style>
+                    .plate-canvas {
+                        background-color: #f0f0f0;
+                        background-image:
+                            linear-gradient(rgba(0,0,0,0.06) 1px, transparent 1px),
+                            linear-gradient(90deg, rgba(0,0,0,0.06) 1px, transparent 1px);
+                        background-size: 20px 20px;
+                        position: relative;
+                        overflow: hidden;
+                    }
+                    .plate-outline {
+                        position: absolute;
+                        border: 1px solid #555;
+                        background: #fff;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                    }
+                    .plate-outline::before {
+                        content: attr(data-width) ' × ' attr(data-height) 'mm';
+                        position: absolute;
+                        bottom: -22px;
+                        right: 0;
+                        font-size: 11px;
+                        color: #666;
+                        white-space: nowrap;
+                    }
+                    .plate-rect {
+                        position: absolute;
+                        border: 1px solid #000;
+                        background: #ffffff;
+                        color: #000;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        font-weight: 500;
+                        overflow: hidden;
+                        padding: 0;
+                        text-align: center;
+                        line-height: 1.2;
+                    }
+                    .plate-rect img {
+                        width: 100%;
+                        height: 100%;
+                        object-fit: contain;
+                        display: block;
+                        background: #fff;
+                    }
+                    .plate-label {
+                        position: absolute;
+                        top: -18px;
+                        left: 0;
+                        font-size: 11px;
+                        color: #333;
+                        font-weight: 500;
+                        white-space: nowrap;
+                    }
+                </style>
+                <div id="canvasContainer" class="plate-canvas border d-flex align-items-center justify-content-center" style="width:100%; height:calc(100vh - 240px); min-height:480px;">
+                    {% if scaled_rectangles %}
+                    <div class="plate-outline" style="width:{{ scaled_plate_width }}px; height:{{ scaled_plate_height }}px;" data-width="{{ suggestion.plate_width }}" data-height="{{ suggestion.plate_height }}">
+                        {% for rect in scaled_rectangles %}
+                        <div class="plate-rect" style="left:{{ rect.x }}px; top:{{ rect.y }}px; width:{{ rect.width }}px; height:{{ rect.height }}px;">
+                            {% if rect.preview_url %}
+                            <img src="{{ rect.preview_url }}" alt="{{ rect.label }}">
+                            {% else %}
+                            <span style="pointer-events:none;">{{ rect.label }}</span>
+                            {% endif %}
+                        </div>
+                        <span class="plate-label" style="left:{{ rect.x }}px; top:{{ rect.y|add:-18 }}px;">{{ rect.label }}</span>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
+                    {% else %}
+                    <div class="text-center text-muted">
+                        <i class="bi bi-grid-3x3-gap" style="font-size:48px; opacity:0.3;"></i>
+                        <p class="mt-2 mb-0">暂无拼版数据</p>
+                        <p class="small">请先生成拼版建议</p>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <form method="post" class="mt-3">

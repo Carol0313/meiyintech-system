@@ -4,6 +4,74 @@
 {% block content %}
 <div class="row">
     <div class="col-md-8">
+        <!-- 物流轨迹 -->
+        {% if tracking_data %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-truck"></i> 物流信息</span>
+                <span class="badge {% if tracking_data.is_signed %}bg-success{% else %}bg-primary{% endif %}">
+                    {{ tracking_data.state_label }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="small text-muted mb-2">
+                    {{ tracking_data.company }} | 单号：{{ tracking_data.tracking_number }}
+                </div>
+                <div class="tracking-timeline">
+                    {% for t in tracking_data.tracks %}
+                    <div class="tracking-item {% if forloop.first %}latest{% endif %}">
+                        <div class="tracking-time">{{ t.time }}</div>
+                        <div class="tracking-context">{{ t.context }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% elif order.tracking_number %}
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-truck"></i> 物流信息</div>
+            <div class="card-body text-muted small">
+                物流单号：{{ order.tracking_number }}（正在查询中，请稍后再试）
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 文件预览 -->
+        {% with item=order.items.first %}
+        {% if item and item.file %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-file-earmark"></i> 文件预览</span>
+                <a href="{{ item.file.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-download"></i> 下载源文件
+                </a>
+            </div>
+            <div class="card-body">
+                {% if item.file.name|lower|slice:"-4:" == '.pdf' %}
+                <object data="{{ item.file.url }}" type="application/pdf" width="100%" height="500px" style="border-radius:8px; border:1px solid #e0e0e0;">
+                    <div class="text-center py-5">
+                        <i class="bi bi-file-earmark-pdf" style="font-size:48px; color:var(--primary);"></i>
+                        <div class="mt-2 text-muted small">无法预览该PDF文件</div>
+                        <a href="{{ item.file.url }}" target="_blank" class="btn btn-sm btn-primary mt-2">
+                            <i class="bi bi-box-arrow-up-right"></i> 点击下载源文件查看
+                        </a>
+                    </div>
+                </object>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-file-earmark-image" style="font-size:48px; color:var(--primary);"></i>
+                    <div class="mt-2 text-muted small">{{ item.file.name|cut:"order_files/" }}</div>
+                    <div class="mt-1 text-muted small">AI文件请在设计软件中打开预览</div>
+                    <a href="{{ item.file.url }}" target="_blank" class="btn btn-sm btn-primary mt-2">
+                        <i class="bi bi-download"></i> 下载源文件
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span>
@@ -26,15 +94,31 @@
                     <div class="col-md-6"><strong>发起人：</strong>{{ order.remake_initiator.username|default:order.remake_initiator.phone }}</div>
                     {% endif %}
                 </div>
+
+                {% if has_file_issues %}
+                <div class="alert alert-warning d-flex align-items-center mb-3">
+                    <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+                    <div>
+                        <div class="fw-bold">文件需处理</div>
+                        <div class="small">该订单包含的PDF/AI文件预检未通过（单黑检测或线条粗细不符合标准），请设计师处理后重新上传。</div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <h6>产品明细</h6>
                 <table class="table table-sm table-bordered">
-                    <thead class="table-light"><tr><th>产品</th><th>材料</th><th>厚度</th><th>尺寸</th><th>数量</th><th>小计</th></tr></thead>
+                    <thead class="table-light"><tr><th>产品</th><th>材料</th><th>厚度</th><th>尺寸</th><th>数量</th><th>小计</th><th>文件</th></tr></thead>
                     <tbody>
                         {% for item in order.items.all %}
                         <tr>
                             <td>{{ item.get_product_name_display }}</td><td>{{ item.get_material_display }}</td>
                             <td>{{ item.thickness }}mm</td><td>{{ item.length_mm }}×{{ item.width_mm }}mm</td>
                             <td>{{ item.quantity }}</td><td>¥{{ item.subtotal }}</td>
+                            <td>
+                                {% if item.file %}
+                                <a href="{{ item.file.url }}" target="_blank" class="small">查看文件</a>
+                                {% else %}<span class="text-muted">无</span>{% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -43,23 +127,43 @@
                 {% if order.special_requests %}<div class="mt-2"><strong>特殊要求：</strong>{{ order.special_requests }}</div>{% endif %}
             </div>
         </div>
-        <!-- 沟通记录 -->
+
+        <!-- PDF预检报告 -->
+        {% if preflight_reports %}
         <div class="card mb-3">
-            <div class="card-header">沟通记录</div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clipboard-check"></i> PDF预检报告</span>
+                <span class="badge bg-primary">{{ preflight_reports|length }}</span>
+            </div>
             <div class="card-body">
-                {% for comm in order.communications.all %}
-                <div class="mb-2 pb-2 border-bottom">
-                    <span class="fw-bold small">{{ comm.sender.username|default:comm.sender.phone }}</span>
-                    <span class="text-muted small">{{ comm.created_at|date:"m-d H:i" }}</span>
-                    <div>{{ comm.content }}</div>
+                {% for pr in preflight_reports %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-medium small">{{ pr.item_label }}</span>
+                        {% if pr.pass %}
+                        <span class="badge bg-success">通过</span>
+                        {% else %}
+                        <span class="badge bg-danger">需处理</span>
+                        {% endif %}
+                    </div>
+                    {{ pr.report_html|safe }}
+                    {% if not pr.pass %}
+                    <form method="post" action="{% url 'merchant_order_detail' order.id %}" enctype="multipart/form-data" class="mt-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="reupload_file">
+                        <input type="hidden" name="item_id" value="{{ pr.item_id }}">
+                        <div class="input-group input-group-sm">
+                            <input type="file" name="pdf_file" class="form-control" accept=".pdf,.ai" required>
+                            <button type="submit" class="btn btn-outline-primary">重新上传处理后的文件</button>
+                        </div>
+                    </form>
+                    {% endif %}
                 </div>
-                {% empty %}<div class="text-muted small">暂无沟通记录</div>{% endfor %}
-                <form method="post" class="mt-3">
-                    {% csrf_token %}<input type="hidden" name="action" value="communicate">
-                    <div class="input-group"><input type="text" name="content" class="form-control" placeholder="输入沟通内容..."><button type="submit" class="btn btn-primary">发送</button></div>
-                </form>
+                {% endfor %}
             </div>
         </div>
+        {% endif %}
+        <!-- 沟通记录已移除 -->
         <!-- 生产照片 -->
         {% if order.production_photos.all %}
         <div class="card mb-3">
@@ -130,7 +234,13 @@
                         <option value="">选择工厂</option>
                         {% for f in factories %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
                     </select>
-                    <input type="number" name="production_cycle" class="form-control form-control-sm mb-1" placeholder="生产周期(小时)">
+                    <select name="production_cycle" class="form-select form-select-sm mb-1">
+                        <option value="">选择发货时效</option>
+                        <option value="6">6点前寄出</option>
+                        <option value="9">9点前寄出</option>
+                        <option value="24">次日寄出</option>
+                        <option value="18">下班后送货</option>
+                    </select>
                     <button type="submit" class="btn btn-primary w-100 btn-sm">安排生产</button>
                 </form>
                 {% endif %}
@@ -145,7 +255,28 @@
                 </form>
                 <form method="post" class="mb-2">
                     {% csrf_token %}<input type="hidden" name="action" value="ship">
-                    <input type="text" name="tracking_number" class="form-control form-control-sm mb-1" placeholder="物流/快递单号">
+                    <select name="tracking_company" class="form-select form-select-sm mb-1" required>
+                        <option value="">选择快递公司</option>
+                        <option value="shunfeng">顺丰速运</option>
+                        <option value="yuantong">圆通速递</option>
+                        <option value="zhongtong">中通快递</option>
+                        <option value="shentong">申通快递</option>
+                        <option value="yunda">韵达快递</option>
+                        <option value="ems">EMS</option>
+                        <option value="jd">京东物流</option>
+                        <option value="debangkuaidi">德邦快递</option>
+                        <option value="jtexpress">极兔速递</option>
+                        <option value="cainiao">菜鸟/丹鸟</option>
+                        <option value="huitongkuaidi">百世快递</option>
+                        <option value="tiantian">天天快递</option>
+                        <option value="youshuwuliu">优速快递</option>
+                        <option value="zhaijisong">宅急送</option>
+                        <option value="kuayue">跨越速运</option>
+                        <option value="suer">速尔快递</option>
+                        <option value="annengwuliu">安能物流</option>
+                        <option value="other">其他</option>
+                    </select>
+                    <input type="text" name="tracking_number" class="form-control form-control-sm mb-1" placeholder="物流/快递单号" required>
                     <button type="submit" class="btn btn-success w-100">确认发货</button>
                 </form>
                 {% endif %}
@@ -154,6 +285,27 @@
                     {% csrf_token %}<input type="hidden" name="action" value="mark_paid">
                     <button type="submit" class="btn btn-warning w-100">标记线下支付（开始生产）</button>
                 </form>
+                {% endif %}
+                {% if order.status == 'paid' or order.status == 'received' or order.status == 'shipped' or order.status == 'in_production' %}
+                    {% if not order.is_settled %}
+                        {% if order.statement and order.statement.status != 'settled' %}
+                        <div class="alert alert-warning py-2 mb-2 small">
+                            <i class="bi bi-info-circle"></i> 该订单已关联对账单
+                            <a href="{% url 'statement_detail' order.statement.id %}">{{ order.statement.sn }}</a>，请通过对账单结清
+                        </div>
+                        {% else %}
+                        <form method="post" class="mb-2" onsubmit="return confirm('确认已收到客户付款？此操作将释放该订单占用的信用额度。')">
+                            {% csrf_token %}<input type="hidden" name="action" value="confirm_payment">
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="bi bi-cash-stack"></i> 确认收款并释放额度
+                            </button>
+                        </form>
+                        {% endif %}
+                    {% else %}
+                    <div class="alert alert-success py-2 mb-2 small">
+                        <i class="bi bi-check-circle"></i> 该订单已结清，额度已释放
+                    </div>
+                    {% endif %}
                 {% endif %}
                 {% if order.order_type == 'normal' %}
                     {% if order.status == 'shipped' or order.status == 'received' or order.status == 'in_production' %}
@@ -164,6 +316,87 @@
                 {% endif %}
             </div>
         </div>
+        <!-- 拼版信息 -->
+        {% if order.plate_batch_items.all %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-grid-3x3"></i> 拼版信息</span>
+                <span class="badge bg-info">已拼版</span>
+            </div>
+            <div class="card-body small">
+                {% with pb=order.plate_batch_items.first.plate_batch %}
+                <div class="mb-2">
+                    <strong>批次：</strong><a href="{% url 'plate_batch_detail' pb.id %}">{{ pb.id.hex|slice:":8" }}</a>
+                </div>
+                <div class="mb-2">
+                    <strong>板材：</strong>{{ pb.plate_spec_name }} ({{ pb.plate_width }}×{{ pb.plate_height }}mm)
+                </div>
+                <div class="mb-2">
+                    <strong>利用率：</strong><span style="color:var(--green);font-weight:600;">{{ pb.usage_rate|floatformat:1 }}%</span>
+                </div>
+                <div class="mb-2">
+                    <strong>状态：</strong><span class="badge
+                        {% if pb.status == 'auto_generated' %}bg-primary
+                        {% elif pb.status == 'confirmed' %}bg-success
+                        {% elif pb.status == 'in_production' %}bg-warning text-dark
+                        {% elif pb.status == 'rejected' %}bg-danger
+                        {% else %}bg-secondary{% endif %}">{{ pb.get_status_display }}</span>
+                </div>
+                {% if pb.layout_image %}
+                <a href="{% url 'plate_batch_detail' pb.id %}">
+                    <img src="{{ pb.layout_image.url }}" class="img-fluid rounded border" style="max-height:120px;object-fit:cover;width:100%;">
+                </a>
+                {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 对账信息卡片 -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-receipt"></i> 对账信息</div>
+            <div class="card-body small">
+                {% if order.is_settled %}
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-success me-2">已结清</span>
+                        <span class="text-muted">额度已释放</span>
+                    </div>
+                    {% if order.statement %}
+                    <div class="mb-1"><strong>对账单号：</strong><a href="{% url 'statement_detail' order.statement.id %}">{{ order.statement.sn }}</a></div>
+                    <div class="mb-1"><strong>账单金额：</strong>¥{{ order.statement.total_amount }}</div>
+                    <div class="mb-1"><strong>结清时间：</strong>{{ order.statement.settled_at|date:"Y-m-d H:i"|default:"-" }}</div>
+                    {% endif %}
+                {% elif order.statement %}
+                    <div class="d-flex align-items-center mb-2">
+                        {% if order.statement.status == 'pending' %}
+                            <span class="badge bg-warning text-dark me-2">待确认</span>
+                        {% elif order.statement.status == 'confirmed' %}
+                            <span class="badge bg-info me-2">已确认</span>
+                        {% elif order.statement.status == 'paid' %}
+                            <span class="badge bg-primary me-2">已付款</span>
+                        {% endif %}
+                        <span class="text-muted">{{ order.statement.get_status_display }}</span>
+                    </div>
+                    <div class="mb-1"><strong>对账单号：</strong><a href="{% url 'statement_detail' order.statement.id %}">{{ order.statement.sn }}</a></div>
+                    <div class="mb-1"><strong>账单金额：</strong>¥{{ order.statement.total_amount }}</div>
+                    <div class="mb-1"><strong>账单周期：</strong>{{ order.statement.period_start|date:"m.d" }} ~ {{ order.statement.period_end|date:"m.d" }}</div>
+                    <div class="mt-2">
+                        <a href="{% url 'statement_export' order.statement.id %}" class="btn btn-sm btn-outline-primary w-100">
+                            <i class="bi bi-file-earmark-excel"></i> 导出对账单
+                        </a>
+                    </div>
+                {% elif order.status == 'received' %}
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-secondary me-2">未对账</span>
+                        <span class="text-muted">该订单尚未纳入对账单</span>
+                    </div>
+                    <div class="text-muted small mb-2">在订单列表中勾选该订单，可批量生成对账单</div>
+                {% else %}
+                    <div class="text-muted">订单未完成，暂不可对账</div>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">状态流转</div>
             <div class="card-body small">
@@ -174,4 +407,47 @@
         </div>
     </div>
 </div>
+
+<style>
+/* 物流时间线 */
+.tracking-timeline {
+    position: relative;
+    padding-left: 16px;
+    border-left: 2px solid #e0e0e0;
+}
+.tracking-item {
+    position: relative;
+    padding-bottom: 14px;
+    padding-left: 16px;
+}
+.tracking-item::before {
+    content: '';
+    position: absolute;
+    left: -21px;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ccc;
+    border: 2px solid #fff;
+}
+.tracking-item.latest::before {
+    background: var(--primary);
+    box-shadow: 0 0 0 3px rgba(25,118,210,0.2);
+}
+.tracking-item.latest .tracking-context {
+    color: var(--primary);
+    font-weight: 500;
+}
+.tracking-time {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+.tracking-context {
+    font-size: 13px;
+    color: var(--text-main);
+    line-height: 1.4;
+}
+</style>
 {% endblock %}

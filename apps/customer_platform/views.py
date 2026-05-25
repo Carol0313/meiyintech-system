@@ -9,11 +9,14 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
-from django.db import transaction
+from django.db import transaction, models
+from django.db.models import Sum, Count
 from django.conf import settings
 from django.core.files.storage import default_storage
+from django.http import HttpResponse
+from django.utils import timezone
 from apps.accounts.models import User, CustomerProfile, Address
-from apps.orders.models import Order, OrderItem, OrderStatusLog, CommunicationLog
+from apps.orders.models import Order, OrderItem, OrderStatusLog, CommunicationLog, Statement
 from apps.products.models import ProductSpec
 from apps.merchant_platform.models import Factory
 
@@ -21,13 +24,25 @@ from apps.merchant_platform.models import Factory
 def customer_required(view_func):
     """装饰器：仅终端用户可访问"""
     def wrapper(request, *args, **kwargs):
-        if not request.user.is_authenticated or request.user.user_type != 'customer':
+        if not request.user.is_authenticated:
             messages.error(request, '请先以终端用户身份登录')
             return redirect('login')
+        if request.user.user_type != 'customer':
+            return render(request, 'common/account_unauthorized.html', {
+                'message': '请先以终端用户身份登录',
+                'can_logout': True,
+            })
         profile = getattr(request.user, 'customer_profile', None)
         if not profile or profile.registration_status != 'approved':
-            messages.error(request, '您的账号尚未通过商家审核')
-            return redirect('login')
+            msg = '您的账号尚未通过商家审核，请联系商家管理员处理。'
+            if profile and profile.registration_status == 'rejected':
+                msg = '您的账号审核未通过，请联系商家管理员了解原因。'
+            elif profile and profile.registration_status == 'pending':
+                msg = '您的账号正在审核中，请耐心等待商家管理员审核。'
+            return render(request, 'common/account_unauthorized.html', {
+                'message': msg,
+                'can_logout': True,
+            })
         return view_func(request, *args, **kwargs)
     return wrapper
 
@@ -36,12 +51,36 @@ def customer_required(view_func):
 @customer_required
 def customer_dashboard(request):
     """终端用户首页"""
-    profile = request.user.customer_profile
+    profile = request.user.get_effective_customer_profile()
     recent_orders = request.user.orders.filter(is_submitted=True).order_by('-created_at')[:5]
+
+    # 每日一句（印刷制版行业）
+    import datetime
+    quotes = [
+        "品质是印刷的生命，细节决定成败。",
+        "每一张版都是承诺，每一次印刷都是信任。",
+        "好的制版，是成功印刷的第一步。",
+        "精准制版，成就完美印刷。",
+        "用心做版，以质取胜。",
+        "工匠精神，铸就卓越品质。",
+        "印刷有价，信誉无价。",
+        "版材虽轻，责任千斤。",
+        "精益求精，版版出色。",
+        "以质量求生存，以信誉求发展。",
+        "色差一分，客户伤心；精准一毫，客户放心。",
+        "好版出好活，精工出细活。",
+        "客户的要求是标准，自己的要求是品质。",
+        "今天的高品质，是明天的好口碑。",
+        "做版如做人，认真是根本。",
+    ]
+    day_index = datetime.date.today().toordinal() % len(quotes)
+    daily_quote = quotes[day_index]
+
     ctx = {
         'profile': profile,
         'recent_orders': recent_orders,
         'order_count': request.user.orders.filter(is_submitted=True).count(),
+        'daily_quote': daily_quote,
     }
     return render(request, 'customer/dashboard.html', ctx)
 
@@ -52,8 +91,8 @@ def customer_dashboard(request):
 @customer_required
 def place_order(request):
     """单页下单：产品选择 -> 上传文件 -> 自动识别尺寸 -> 确认提交"""
-    profile = request.user.customer_profile
-    from utils.pricing_tiers import get_etching_price, is_etching_product, get_product_category
+    profile = request.user.get_effective_customer_profile()
+    from utils.pricing_tiers import get_customer_price, is_etching_product, get_product_category
     tier = profile.pricing_tier
 
     if request.method == 'POST':
@@ -78,15 +117,18 @@ def place_order(request):
                 'label': s.get_material_display(),
                 'thicknesses': []
             }
-        if is_etching_product(s.product_name):
-            price = str(get_etching_price(tier, s.thickness))
-        else:
-            price = str(s.unit_price)
+        price = str(get_customer_price(profile, s.product_name, s.material, s.thickness))
         spec_data[category]['products'][prod_key]['materials'][mat_key]['thicknesses'].append({
             'value': s.thickness,
             'label': s.get_thickness_display(),
             'price': price,
         })
+
+    # 排序：腐蚀版放第一
+    if '腐蚀版' in spec_data:
+        ordered = {'腐蚀版': spec_data.pop('腐蚀版')}
+        ordered.update(spec_data)
+        spec_data = ordered
 
     addresses = request.user.addresses.all()
     default_address = addresses.filter(is_default=True).first()
@@ -113,12 +155,13 @@ def order_step1(request):
             'width_mm': request.POST.get('width_mm'),
             'quantity': int(request.POST.get('quantity', 1)),
             'unit_price': request.POST.get('unit_price', '0'),
+            'boxes_json': request.POST.get('boxes_json', ''),
         }
         request.session[f"draft_{draft['id']}"] = draft
         return redirect('order_step2', draft_id=draft['id'])
     # 按【产品大类→细分产品→材质→厚度】构建两级规格数据
-    from utils.pricing_tiers import get_etching_price, is_etching_product, get_product_category
-    profile = request.user.customer_profile
+    from utils.pricing_tiers import get_customer_price, is_etching_product, get_product_category
+    profile = request.user.get_effective_customer_profile()
     tier = profile.pricing_tier
     specs = ProductSpec.objects.filter(is_platform_preset=True, is_active=True)
     spec_data = {}
@@ -138,16 +181,17 @@ def order_step1(request):
                 'label': s.get_material_display(),
                 'thicknesses': []
             }
-        # 腐蚀版按档位动态定价，其他固定价
-        if is_etching_product(s.product_name):
-            price = str(get_etching_price(tier, s.thickness))
-        else:
-            price = str(s.unit_price)
+        price = str(get_customer_price(profile, s.product_name, s.material, s.thickness))
         spec_data[category]['products'][prod_key]['materials'][mat_key]['thicknesses'].append({
             'value': s.thickness,
             'label': s.get_thickness_display(),
             'price': price,
         })
+    # 排序：腐蚀版放第一
+    if '腐蚀版' in spec_data:
+        ordered = {'腐蚀版': spec_data.pop('腐蚀版')}
+        ordered.update(spec_data)
+        spec_data = ordered
     import json
     return render(request, 'customer/order_step1.html', {'spec_data_json': json.dumps(spec_data)})
 
@@ -161,8 +205,10 @@ def order_step2(request, draft_id):
         messages.error(request, '订单草稿已过期，请重新下单')
         return redirect('place_order')
     if request.method == 'POST':
-        draft['file_standard_checked'] = request.POST.get('file_standard_checked') == 'on'
-        draft['file_processed'] = request.POST.get('file_processed') == 'on'
+        file_type = request.POST.get('file_type', 'processed')
+        draft['file_standard_checked'] = (file_type == 'standard')
+        draft['file_processed'] = (file_type == 'processed')
+        draft['is_image_file'] = (file_type == 'image')
         if request.FILES.get('pdf_file'):
             file = request.FILES['pdf_file']
             ext = os.path.splitext(file.name)[1].lower()
@@ -171,6 +217,13 @@ def order_step2(request, draft_id):
                 return redirect('order_step2', draft_id=draft_id)
             filename = f"order_files/{request.user.id}/{uuid.uuid4().hex}{ext}"
             path = default_storage.save(filename, file)
+            # PDF转纯黑处理（制版需要）
+            try:
+                from utils.pdf_processor import convert_pdf_to_black
+                full_path = os.path.join(settings.MEDIA_ROOT, path)
+                convert_pdf_to_black(full_path)
+            except Exception:
+                pass
             draft['file_path'] = path
             draft['file_name'] = file.name
         request.session[f"draft_{draft_id}"] = draft
@@ -237,7 +290,7 @@ def order_step4(request, draft_id):
     if not draft or not draft.get('file_path'):
         messages.error(request, '文件信息缺失')
         return redirect('place_order')
-    # 生成PDF第一页预览图
+    # 生成PDF第一页纯黑预览图
     preview_url = None
     file_full_path = os.path.join(settings.MEDIA_ROOT, draft['file_path'])
     if os.path.exists(file_full_path):
@@ -245,14 +298,11 @@ def order_step4(request, draft_id):
         preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
         os.makedirs(os.path.dirname(preview_path), exist_ok=True)
         try:
-            doc = fitz.open(file_full_path)
-            page = doc[0]
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-            pix.save(preview_path)
-            preview_url = settings.MEDIA_URL + preview_filename
+            from utils.pdf_processor import generate_pdf_preview
+            preview_url = generate_pdf_preview(file_full_path, preview_filename, dpi=150, black_only=True)
             draft['preview_url'] = preview_url
             request.session[f"draft_{draft_id}"] = draft
-        except Exception as e:
+        except Exception:
             pass
     return render(request, 'customer/order_step4.html', {'draft': draft, 'preview_url': preview_url})
 
@@ -265,7 +315,7 @@ def order_step5(request, draft_id):
     if not draft:
         messages.error(request, '订单草稿已过期')
         return redirect('place_order')
-    profile = request.user.customer_profile
+    profile = request.user.get_effective_customer_profile()
     preset_options = [
         ('urgent', '加急'),
         ('no_cut', '不需要裁切'),
@@ -358,7 +408,7 @@ def submit_orders(request):
     if not drafts_meta:
         messages.error(request, '没有待提交的订单')
         return redirect('place_order')
-    profile = request.user.customer_profile
+    profile = request.user.get_effective_customer_profile()
     merchant = profile.merchant
     created_orders = []
     total_amount = Decimal('0')
@@ -366,12 +416,9 @@ def submit_orders(request):
         draft = request.session.get(f"draft_{meta['id']}")
         if not draft:
             continue
-        # 获取定价（雕刻版/树脂版/菲林用固定价，腐蚀版按用户档位重新计算）
-        from utils.pricing_tiers import is_etching_product, get_etching_price
-        if is_etching_product(draft.get('product_name')):
-            unit_price = get_etching_price(profile.pricing_tier, draft.get('thickness'))
-        else:
-            unit_price = Decimal(draft.get('unit_price', '0'))
+        # 获取定价（优先使用商户自定义价格，否则按标准规则）
+        from utils.pricing_tiers import get_customer_price
+        unit_price = get_customer_price(profile, draft.get('product_name'), draft.get('material'), draft.get('thickness'))
         # 创建订单
         order = Order.objects.create(
             customer=request.user,
@@ -404,6 +451,8 @@ def submit_orders(request):
             file=draft.get('file_path', ''),
             file_processed=draft.get('file_processed', False),
             file_standard_checked=draft.get('file_standard_checked', False),
+            is_image_file=draft.get('is_image_file', False),
+            red_box_data=draft.get('boxes_json', ''),
         )
         order.update_total()
         total_amount += order.total_amount
@@ -442,17 +491,16 @@ def _draft_summary(draft):
 def _calculate_pdf_area(file_path):
     """
     计算PDF参考面积（cm²）
-    优先使用红框识别的内容区域尺寸，没有红框时回退到PDF页面尺寸
+    优先使用框识别的内容区域尺寸，没有框时回退到PDF页面尺寸
     """
     try:
-        # 先尝试红框识别（更准确的制版内容区域）
-        from utils.pdf_red_box import extract_red_box_area_mm
-        red_box_mm = extract_red_box_area_mm(file_path)
-        if red_box_mm:
-            length_mm, width_mm = red_box_mm
-            return round((length_mm * width_mm) / 100.0, 2)
+        # 先尝试智能框识别（支持任意颜色框）
+        from utils.pdf_red_box import smart_extract_boxes_for_order
+        box_info = smart_extract_boxes_for_order(file_path)
+        if box_info:
+            return box_info['total_area_cm2']
 
-        # 无红框时回退到PDF页面尺寸
+        # 无框时回退到PDF页面尺寸
         doc = fitz.open(file_path)
         page = doc[0]
         rect = page.rect
@@ -486,25 +534,145 @@ def _get_pdf_page_dimensions(file_path):
 @login_required
 @customer_required
 def my_orders(request):
-    """我的订单列表"""
+    """我的订单列表（带统计看板、日期筛选、自动确认收货）"""
+    from django.utils import timezone
+    from datetime import timedelta
+
     status_filter = request.GET.get('status')
-    orders = request.user.orders.filter(is_submitted=True)
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+
+    orders = request.user.orders.filter(is_submitted=True).prefetch_related('items')
     if status_filter:
         orders = orders.filter(status=status_filter)
+    if start_date:
+        orders = orders.filter(created_at__date__gte=start_date)
+    if end_date:
+        orders = orders.filter(created_at__date__lte=end_date)
     orders = orders.order_by('-created_at')
+
+    # 为每个 OrderItem 生成预览缩略图
+    from utils.pdf_processor import generate_pdf_preview
+    for order in orders:
+        for item in order.items.all():
+            item.preview_url = None
+            if item.file:
+                preview_rel = f"customer_previews/{item.id}.png"
+                preview_path = os.path.join(settings.MEDIA_ROOT, preview_rel)
+                if not os.path.exists(preview_path):
+                    generate_pdf_preview(item.file.name, preview_rel, dpi=72)
+                if os.path.exists(preview_path):
+                    item.preview_url = settings.MEDIA_URL + preview_rel
+
+    # ===== 自动确认收货：已发货超过7天未确认的订单 =====
+    seven_days_ago = timezone.now() - timedelta(days=7)
+    auto_confirm_orders = request.user.orders.filter(
+        status='shipped',
+        shipped_at__isnull=False,
+        shipped_at__lte=seven_days_ago
+    )
+    for o in auto_confirm_orders:
+        o.transition_status('received', operator=None, remark='系统自动确认收货（发货后7天）')
+
+    # ===== 统计看板数据（基于全部已提交订单） =====
+    all_orders = request.user.orders.filter(is_submitted=True)
+
+    # 总订单数、总金额
+    total_orders = all_orders.count()
+    total_amount = all_orders.aggregate(s=Sum('total_amount'))['s'] or 0
+
+    # 总版数（所有OrderItem的quantity之和）
+    from apps.orders.models import OrderItem
+    total_plates = OrderItem.objects.filter(
+        order__customer=request.user, order__is_submitted=True
+    ).aggregate(s=Sum('quantity'))['s'] or 0
+
+    # 产品类型分布（按product_name分组）
+    product_stats = OrderItem.objects.filter(
+        order__customer=request.user, order__is_submitted=True
+    ).values('product_name').annotate(
+        order_count=Count('order', distinct=True),
+        total_qty=Sum('quantity')
+    ).order_by('-total_qty')[:5]
+    from apps.products.models import ProductSpec
+    product_name_map = {p[0]: p[1] for p in ProductSpec.PRODUCT_NAME_CHOICES}
+    # 兼容旧数据中的非标准值
+    extra_name_map = {
+        'pingdiao': '雕刻版 - 平雕版',
+    }
+    for s in product_stats:
+        s['label'] = product_name_map.get(s['product_name']) or extra_name_map.get(s['product_name'], s['product_name'])
+
+    # 状态分组统计
+    status_stats = {
+        'pending': all_orders.filter(status__in=['pending_confirm', 'design_confirmed', 'pending_payment']).count(),
+        'producing': all_orders.filter(status__in=['paid', 'in_production']).count(),
+        'shipped': all_orders.filter(status='shipped').count(),
+        'completed': all_orders.filter(status='received').count(),
+    }
+
+    # ===== 当前列表汇总 =====
+    list_count = orders.count()
+    list_amount = orders.aggregate(s=Sum('total_amount'))['s'] or 0
+
+    import json
     return render(request, 'customer/my_orders.html', {
         'orders': orders,
         'status_choices': Order.STATUS_CHOICES,
         'current_status': status_filter,
+        'start_date': start_date,
+        'end_date': end_date,
+        'total_orders': total_orders,
+        'total_amount': total_amount,
+        'total_plates': total_plates,
+        'product_stats': product_stats,
+        'product_stats_json': json.dumps(list(product_stats), ensure_ascii=False),
+        'status_stats': status_stats,
+        'list_count': list_count,
+        'list_amount': list_amount,
     })
 
 
 @login_required
 @customer_required
 def order_detail(request, order_id):
-    """订单详情"""
+    """订单详情（含物流轨迹）"""
     order = get_object_or_404(Order, pk=order_id, customer=request.user, is_submitted=True)
-    return render(request, 'customer/order_detail.html', {'order': order})
+
+    # 为每个 item 检查文件是否存在并生成预览图
+    from utils.pdf_processor import generate_pdf_preview
+    for item in order.items.all():
+        item.file_exists = False
+        item.preview_url = None
+        if item.file:
+            file_path = os.path.join(settings.MEDIA_ROOT, item.file.name)
+            item.file_exists = os.path.exists(file_path)
+            if item.file_exists:
+                preview_rel = f"customer_previews/{item.id}.png"
+                preview_path = os.path.join(settings.MEDIA_ROOT, preview_rel)
+                if not os.path.exists(preview_path):
+                    generate_pdf_preview(item.file.name, preview_rel, dpi=72)
+                if os.path.exists(preview_path):
+                    item.preview_url = settings.MEDIA_URL + preview_rel
+
+    # 查询快递100物流轨迹
+    tracking_data = None
+    if order.tracking_number:
+        from utils.kuaidi100 import query_tracking, format_tracking_data
+        result = query_tracking(order.tracking_number, company_code=order.tracking_company or None)
+        if result['success']:
+            tracking_data = format_tracking_data(result['data'])
+    # 同时检查商户端是否也有查询（兼容商户端已查询的数据）
+    if not tracking_data and order.tracking_number:
+        from utils.kuaidi100 import query_tracking, format_tracking_data
+        result = query_tracking(order.tracking_number, company_code=order.tracking_company or None)
+        if result['success']:
+            tracking_data = format_tracking_data(result['data'])
+
+    return render(request, 'customer/order_detail.html', {
+        'order': order,
+        'tracking_data': tracking_data,
+    })
 
 
 @login_required
@@ -515,15 +683,25 @@ def cancel_order(request, order_id):
     if not order.can_cancel():
         messages.error(request, '该订单当前状态无法取消，请联系商家处理')
         return redirect('order_detail', order_id=order_id)
-    # 退回信用额度
-    if order.status == 'paid':
-        profile = request.user.customer_profile
+    # 退回信用额度（仅未结清的订单）
+    if order.status == 'paid' and not order.is_settled:
+        profile = request.user.get_effective_customer_profile()
         profile.credit_used -= order.total_amount
         if profile.credit_used < 0:
             profile.credit_used = 0
         profile.save(update_fields=['credit_used'])
     order.transition_status('cancelled', operator=request.user, remark='用户主动取消')
     messages.success(request, '订单已取消')
+    return redirect('my_orders')
+
+
+@login_required
+@customer_required
+def confirm_receipt(request, order_id):
+    """用户确认收货"""
+    order = get_object_or_404(Order, pk=order_id, customer=request.user, status='shipped')
+    order.transition_status('received', operator=request.user, remark='用户确认收货')
+    messages.success(request, '已确认收货')
     return redirect('my_orders')
 
 
@@ -553,28 +731,35 @@ def quick_order_upload(request):
         path = default_storage.save(filename, file)
         full_path = os.path.join(settings.MEDIA_ROOT, path)
 
+        # PDF转纯黑处理（制版需要）
+        try:
+            from utils.pdf_processor import convert_pdf_to_black
+            convert_pdf_to_black(full_path)
+        except Exception:
+            pass
+
+        # 智能框识别：获取所有框+数量
+        from utils.pdf_red_box import smart_extract_boxes_for_order
+        box_info = smart_extract_boxes_for_order(full_path)
+
         # 计算面积
         area = _calculate_pdf_area(full_path)
 
         # 获取页面尺寸
         pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(full_path)
 
-        # 生成预览图
+        # 生成纯黑预览图
         preview_url = None
         try:
             preview_filename = f"previews/{uuid.uuid4().hex}.png"
             preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
             os.makedirs(os.path.dirname(preview_path), exist_ok=True)
-            doc = fitz.open(full_path)
-            page = doc[0]
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-            pix.save(preview_path)
-            preview_url = settings.MEDIA_URL + preview_filename
-            doc.close()
+            from utils.pdf_processor import generate_pdf_preview
+            preview_url = generate_pdf_preview(full_path, preview_filename, dpi=150, black_only=True)
         except Exception:
             pass
 
-        return JsonResponse({
+        response_data = {
             'success': True,
             'file_path': path,
             'file_name': file.name,
@@ -582,29 +767,133 @@ def quick_order_upload(request):
             'pdf_width_mm': pdf_w_mm,
             'pdf_height_mm': pdf_h_mm,
             'preview_url': preview_url,
-        })
+        }
+
+        # 如果有识别到框，返回框信息
+        if box_info:
+            response_data['box_count'] = box_info['box_count']
+            response_data['first_length'] = box_info['first_length']
+            response_data['first_width'] = box_info['first_width']
+            response_data['first_quantity'] = box_info['first_quantity']
+            response_data['boxes'] = box_info['boxes']
+
+        return JsonResponse(response_data)
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
 
+@login_required
+@customer_required
+def batch_upload_files(request):
+    """AJAX：批量上传PDF并返回每个文件的识别结果"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': '请使用POST请求'})
+
+    files = request.FILES.getlist('pdf_files')
+    if not files:
+        return JsonResponse({'success': False, 'error': '请上传PDF文件'})
+
+    results = []
+    for file in files:
+        ext = os.path.splitext(file.name)[1].lower()
+        if ext != '.pdf':
+            results.append({'success': False, 'error': '仅支持PDF格式', 'file_name': file.name})
+            continue
+
+        try:
+            filename = f"order_files/{request.user.id}/{uuid.uuid4().hex}{ext}"
+            path = default_storage.save(filename, file)
+            full_path = os.path.join(settings.MEDIA_ROOT, path)
+
+            # PDF转纯黑处理（制版需要）
+            try:
+                from utils.pdf_processor import convert_pdf_to_black
+                convert_pdf_to_black(full_path)
+            except Exception:
+                pass
+
+            # 智能框识别
+            from utils.pdf_red_box import smart_extract_boxes_for_order
+            box_info = smart_extract_boxes_for_order(full_path)
+
+            # 计算面积
+            area = _calculate_pdf_area(full_path)
+
+            # 获取页面尺寸
+            pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(full_path)
+
+            # 生成预览图
+            preview_url = None
+            try:
+                preview_filename = f"previews/{uuid.uuid4().hex}.png"
+                from utils.pdf_processor import generate_pdf_preview
+                preview_url = generate_pdf_preview(full_path, preview_filename, dpi=150, black_only=True)
+            except Exception:
+                pass
+
+            file_result = {
+                'success': True,
+                'file_path': path,
+                'file_name': file.name,
+                'area': area,
+                'pdf_width_mm': pdf_w_mm,
+                'pdf_height_mm': pdf_h_mm,
+                'preview_url': preview_url,
+            }
+            if box_info:
+                file_result.update({
+                    'box_count': box_info['box_count'],
+                    'first_length': box_info['first_length'],
+                    'first_width': box_info['first_width'],
+                    'first_quantity': box_info['first_quantity'],
+                    'boxes': box_info['boxes'],
+                })
+            results.append(file_result)
+        except Exception as e:
+            results.append({'success': False, 'error': str(e), 'file_name': file.name})
+
+    return JsonResponse({'success': True, 'files': results})
+
+
 @transaction.atomic
 def _handle_quick_order_post(request, profile, tier):
-    """处理单页下单的POST请求"""
-    from utils.pricing_tiers import is_etching_product, get_etching_price
+    """处理单页下单的POST请求（支持多文件）"""
+    from utils.pricing_tiers import get_customer_price
+    import json
 
     # 基础字段
     product_name = request.POST.get('product_name')
     material = request.POST.get('material')
     thickness = request.POST.get('thickness')
-    quantity = int(request.POST.get('quantity', 1))
-    length_mm = Decimal(request.POST.get('length_mm', 0) or 0)
-    width_mm = Decimal(request.POST.get('width_mm', 0) or 0)
     unit_price_str = request.POST.get('unit_price', '0')
 
-    # 文件
-    file_path = request.POST.get('file_path', '')
-    file_processed = request.POST.get('file_processed') == 'on'
-    file_standard_checked = request.POST.get('file_standard_checked') == 'on'
+    # 文件数据（JSON数组）
+    files_data_json = request.POST.get('files_data', '[]')
+    try:
+        files_data = json.loads(files_data_json)
+    except json.JSONDecodeError:
+        files_data = []
+
+    # 如果没有files_data，尝试兼容旧版单文件字段
+    if not files_data:
+        file_path = request.POST.get('file_path', '')
+        if file_path:
+            files_data = [{
+                'file_path': file_path,
+                'length_mm': request.POST.get('length_mm', 0) or 0,
+                'width_mm': request.POST.get('width_mm', 0) or 0,
+                'quantity': request.POST.get('quantity', 1),
+            }]
+
+    if not files_data:
+        messages.error(request, '请上传至少一个文件')
+        return redirect('place_order')
+
+    # 文件类型
+    file_type = request.POST.get('file_type', 'processed')
+    file_processed = (file_type == 'processed')
+    file_standard_checked = (file_type == 'standard')
+    is_image_file = (file_type == 'image')
 
     # 其他
     special_requests = request.POST.get('special_requests', '')
@@ -614,10 +903,7 @@ def _handle_quick_order_post(request, profile, tier):
     address_id = request.POST.get('address_id')
 
     # 定价
-    if is_etching_product(product_name):
-        unit_price = get_etching_price(profile.pricing_tier, thickness)
-    else:
-        unit_price = Decimal(unit_price_str or '0')
+    unit_price = get_customer_price(profile, product_name, material, thickness)
 
     # 创建订单
     order = Order.objects.create(
@@ -639,20 +925,27 @@ def _handle_quick_order_post(request, profile, tier):
         except Address.DoesNotExist:
             pass
 
-    # 创建订单明细
-    item = OrderItem.objects.create(
-        order=order,
-        product_name=product_name,
-        material=material,
-        thickness=thickness,
-        length_mm=length_mm,
-        width_mm=width_mm,
-        quantity=quantity,
-        unit_price=unit_price,
-        file=file_path,
-        file_processed=file_processed,
-        file_standard_checked=file_standard_checked,
-    )
+    # 为每个文件创建订单明细
+    for fd in files_data:
+        item_length = Decimal(str(fd.get('length_mm', 0) or 0))
+        item_width = Decimal(str(fd.get('width_mm', 0) or 0))
+        item_qty = int(fd.get('quantity', 1))
+        OrderItem.objects.create(
+            order=order,
+            product_name=product_name,
+            material=material,
+            thickness=thickness,
+            length_mm=item_length,
+            width_mm=item_width,
+            quantity=item_qty,
+            unit_price=unit_price,
+            file=fd.get('file_path', ''),
+            file_processed=file_processed,
+            file_standard_checked=file_standard_checked,
+            is_image_file=is_image_file,
+            red_box_data=json.dumps(fd.get('boxes', [])),
+        )
+
     order.update_total()
 
     # 保存常用备注
@@ -669,10 +962,10 @@ def _handle_quick_order_post(request, profile, tier):
         auto_generate_plate_layout_for_order(order)
         order.plate_status = 'auto_generated'
         order.save(update_fields=['plate_status'])
-        messages.success(request, f'订单 {order.sn} 提交成功，已使用信用额度支付。')
+        messages.success(request, f'订单 {order.sn} 提交成功（含{len(files_data)}个文件），已使用信用额度支付。')
     else:
         order.transition_status('pending_payment', operator=request.user, remark='信用额度不足')
-        messages.warning(request, f'订单 {order.sn} 提交成功，但信用额度不足，订单状态为待支付。')
+        messages.warning(request, f'订单 {order.sn} 提交成功（含{len(files_data)}个文件），但信用额度不足，订单状态为待支付。')
 
     return redirect('my_orders')
 
@@ -684,8 +977,15 @@ def _handle_quick_order_post(request, profile, tier):
 def profile_view(request):
     """个人中心 - 资料修改"""
     from apps.accounts.forms import CustomerProfileForm
-    profile_obj = request.user.customer_profile
+    profile_obj = request.user.get_effective_customer_profile()
+    my_profile = request.user.customer_profile
     if request.method == 'POST':
+        # 子账号只能修改自己的真实姓名
+        if not my_profile.is_main_account:
+            my_profile.real_name = request.POST.get('real_name', my_profile.real_name)
+            my_profile.save(update_fields=['real_name'])
+            messages.success(request, '个人信息已更新')
+            return redirect('profile')
         form = CustomerProfileForm(request.POST, instance=profile_obj)
         if form.is_valid():
             form.save()
@@ -693,4 +993,189 @@ def profile_view(request):
             return redirect('profile')
     else:
         form = CustomerProfileForm(instance=profile_obj)
-    return render(request, 'customer/profile.html', {'form': form, 'profile': profile_obj})
+    return render(request, 'customer/profile.html', {'form': form, 'profile': profile_obj, 'my_profile': my_profile})
+
+
+
+# ==================== 客户子账号管理 ====================
+
+def customer_main_required(view_func):
+    """装饰器：仅客户主账号可操作"""
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated or request.user.user_type != 'customer':
+            messages.error(request, '请先以终端用户身份登录')
+            return redirect('login')
+        profile = getattr(request.user, 'customer_profile', None)
+        if not profile or not profile.is_main_account:
+            messages.error(request, '仅主账号可操作')
+            return redirect('customer_dashboard')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+@login_required
+@customer_required
+@customer_main_required
+def subaccount_list(request):
+    """客户子账号列表"""
+    profile = request.user.customer_profile
+    subaccounts = profile.sub_accounts.select_related('user').all()
+    return render(request, 'customer/subaccount_list.html', {
+        'subaccounts': subaccounts,
+        'max_count': profile.max_sub_accounts,
+        'current_count': subaccounts.count(),
+    })
+
+
+@login_required
+@customer_required
+@customer_main_required
+def subaccount_add(request):
+    """主账号添加子账号"""
+    profile = request.user.customer_profile
+    if profile.sub_accounts.count() >= profile.max_sub_accounts:
+        messages.error(request, f'子账号数量已达上限 ({profile.max_sub_accounts})')
+        return redirect('customer_subaccount_list')
+
+    if request.method == 'POST':
+        phone = request.POST.get('phone')
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        real_name = request.POST.get('real_name', '')
+
+        if User.objects.filter(phone=phone).exists():
+            messages.error(request, '该手机号已被注册')
+        else:
+            user = User.objects.create_user(
+                username=username, phone=phone, password=password,
+                user_type='customer', is_approved=True
+            )
+            CustomerProfile.objects.create(
+                user=user,
+                merchant=profile.merchant,
+                company_name=profile.company_name,
+                province=profile.province,
+                city=profile.city,
+                real_name=real_name,
+                invite_code=profile.invite_code,
+                registration_status='approved',
+                pricing_tier=profile.pricing_tier,
+                custom_prices=profile.custom_prices,
+                is_main_account=False,
+                parent=profile,
+            )
+            messages.success(request, '子账号创建成功')
+            return redirect('customer_subaccount_list')
+
+    return render(request, 'customer/subaccount_form.html', {
+        'title': '新增子账号',
+        'max_count': profile.max_sub_accounts,
+        'current_count': profile.sub_accounts.count(),
+    })
+
+
+@login_required
+@customer_required
+@customer_main_required
+def subaccount_edit(request, user_id):
+    """主账号编辑子账号"""
+    profile = request.user.customer_profile
+    sub_profile = get_object_or_404(
+        CustomerProfile, user_id=user_id, parent=profile
+    )
+    if request.method == 'POST':
+        sub_profile.user.is_active = request.POST.get('is_active') == 'on'
+        sub_profile.user.save(update_fields=['is_active'])
+        sub_profile.real_name = request.POST.get('real_name', sub_profile.real_name)
+        sub_profile.save(update_fields=['real_name'])
+        messages.success(request, '子账号已更新')
+        return redirect('customer_subaccount_list')
+    return render(request, 'customer/subaccount_form.html', {
+        'sub_profile': sub_profile,
+        'title': '编辑子账号',
+    })
+
+
+# ==================== 对账单管理 ====================
+
+@login_required
+@customer_required
+def customer_statements(request):
+    """客户：我的对账单列表"""
+    profile = request.user.get_effective_customer_profile()
+    status_filter = request.GET.get('status')
+    statements = Statement.objects.filter(customer=request.user, merchant=profile.merchant)
+    if status_filter:
+        statements = statements.filter(status=status_filter)
+    statements = statements.order_by('-created_at')
+    return render(request, 'customer/statement_list.html', {
+        'statements': statements,
+        'status_choices': Statement.STATUS_CHOICES,
+        'status_filter': status_filter,
+    })
+
+
+@login_required
+@customer_required
+def customer_statement_detail(request, statement_id):
+    """客户：对账单详情"""
+    profile = request.user.get_effective_customer_profile()
+    statement = get_object_or_404(Statement, pk=statement_id, customer=request.user, merchant=profile.merchant)
+    return render(request, 'customer/statement_detail.html', {
+        'statement': statement,
+        'orders': statement.orders.all().order_by('created_at'),
+    })
+
+
+@login_required
+@customer_required
+def customer_statement_confirm(request, statement_id):
+    """客户：确认对账单"""
+    profile = request.user.get_effective_customer_profile()
+    statement = get_object_or_404(Statement, pk=statement_id, customer=request.user, merchant=profile.merchant)
+    if statement.status != 'pending':
+        messages.error(request, '该对账单当前状态不支持确认操作')
+        return redirect('customer_statement_detail', statement_id=statement.id)
+    if request.method == 'POST':
+        statement.status = 'confirmed'
+        statement.confirmed_at = timezone.now()
+        statement.save()
+        messages.success(request, f'对账单 {statement.sn} 已确认，请按账单金额安排付款')
+    return redirect('customer_statement_detail', statement_id=statement.id)
+
+
+@login_required
+@customer_required
+def customer_statement_mark_paid(request, statement_id):
+    """客户：标记已付款（线下转账后通知商户）"""
+    profile = request.user.get_effective_customer_profile()
+    statement = get_object_or_404(Statement, pk=statement_id, customer=request.user, merchant=profile.merchant)
+    if statement.status not in ('pending', 'confirmed'):
+        messages.error(request, '该对账单当前状态不支持标记付款')
+        return redirect('customer_statement_detail', statement_id=statement.id)
+    if request.method == 'POST':
+        statement.status = 'paid'
+        statement.paid_at = timezone.now()
+        statement.remark = request.POST.get('remark', statement.remark)
+        statement.save()
+        messages.success(request, f'已通知商户对账单 {statement.sn} 已付款，请等待商户确认')
+    return redirect('customer_statement_detail', statement_id=statement.id)
+
+
+@login_required
+@customer_required
+def customer_statement_export(request, statement_id):
+    """客户：导出对账单Excel"""
+    profile = request.user.get_effective_customer_profile()
+    statement = get_object_or_404(Statement, pk=statement_id, customer=request.user, merchant=profile.merchant)
+    # 复用商户端的Excel生成函数
+    from apps.merchant_platform.views import _build_statement_excel
+    output = _build_statement_excel(statement)
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    filename = f"对账单_{statement.sn}_{statement.customer.phone}.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+

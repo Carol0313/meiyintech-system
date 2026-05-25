@@ -22,4 +22,6 @@ def global_context(request):
             profile = getattr(request.user, 'customer_profile', None)
             if profile:
                 ctx['user_merchant'] = profile.merchant
+                ctx['effective_customer_profile'] = request.user.get_effective_customer_profile()
+                ctx['is_customer_main'] = profile.is_main_account
     return ctx

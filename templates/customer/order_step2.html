@@ -13,19 +13,19 @@
                         <input type="file" name="pdf_file" class="form-control" accept=".pdf">
                         <div class="form-text">支持PDF格式，建议文件大小不超过50MB</div>
                     </div>
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" name="file_standard_checked" class="form-check-input" id="standardCheck">
-                        <label class="form-check-label" for="standardCheck">我的文件是否符合标准（转曲/矢量）</label>
-                    </div>
                     <div class="mb-3">
-                        <label class="form-label d-block">文件处理选项</label>
+                        <label class="form-label d-block">文件类型 <span class="text-danger">*</span></label>
                         <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="file_processed" id="noProcess" value="" checked>
-                            <label class="form-check-label" for="noProcess">不处理，直接下一步</label>
+                            <input class="form-check-input" type="radio" name="file_type" id="fileStandard" value="standard">
+                            <label class="form-check-label" for="fileStandard">文件已转曲/矢量化</label>
                         </div>
                         <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="file_processed" id="doProcess" value="on">
-                            <label class="form-check-label" for="doProcess">处理（进入面积计算与预览）</label>
+                            <input class="form-check-input" type="radio" name="file_type" id="fileProcessed" value="processed" checked>
+                            <label class="form-check-label" for="fileProcessed">需要处理文件</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="file_type" id="fileImage" value="image">
+                            <label class="form-check-label" for="fileImage">文件是图片文件</label>
                         </div>
                     </div>
                     <div class="mt-4 d-grid">

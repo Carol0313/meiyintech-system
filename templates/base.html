@@ -81,7 +81,6 @@
             width: 32px; height: 32px;
             object-fit: contain;
             border-radius: var(--radius-sm);
-            filter: brightness(0) invert(1);
         }
 
         .sidebar-brand-text {
@@ -528,6 +527,34 @@
             .main-content { margin-left: 0; }
             .content-body { padding: 16px; }
         }
+        /* 联系客服浮动按钮 */
+        .customer-service-float {
+            position: fixed;
+            right: 20px;
+            bottom: 80px;
+            z-index: 999;
+            background: var(--primary);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(25,118,210,0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            user-select: none;
+            text-decoration: none;
+        }
+        .customer-service-float:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(25,118,210,0.4);
+        }
+        .customer-service-float i {
+            font-size: 18px;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -546,11 +573,21 @@
         <div class="sidebar-footer">
             {% if user.is_authenticated %}
                 <div class="user-pill">
-                    <div class="user-avatar">{{ user.username|first|upper }}</div>
-                    <div class="flex-grow-1" style="min-width:0;">
-                        <div class="small fw-medium text-truncate" style="color:#fff;font-size:13px;">{{ user.username|default:user.phone }}</div>
-                        <div class="small" style="color:rgba(255,255,255,0.6);font-size:12px;">{{ user_type_display }}</div>
-                    </div>
+                    {% with profile=user.customer_profile %}
+                    {% if profile and profile.real_name %}
+                        <div class="user-avatar">{{ profile.real_name|first|upper }}</div>
+                        <div class="flex-grow-1" style="min-width:0;">
+                            <div class="small fw-medium text-truncate" style="color:#fff;font-size:13px;">{{ profile.real_name }}</div>
+                            <div class="small" style="color:rgba(255,255,255,0.6);font-size:12px;">{{ user_type_display }}</div>
+                        </div>
+                    {% else %}
+                        <div class="user-avatar">{{ user.username|first|upper }}</div>
+                        <div class="flex-grow-1" style="min-width:0;">
+                            <div class="small fw-medium text-truncate" style="color:#fff;font-size:13px;">{{ user.username|default:user.phone }}</div>
+                            <div class="small" style="color:rgba(255,255,255,0.6);font-size:12px;">{{ user_type_display }}</div>
+                        </div>
+                    {% endif %}
+                    {% endwith %}
                     <a href="{% url 'logout' %}" style="color:rgba(255,255,255,0.7);font-size:16px;"><i class="bi bi-box-arrow-right"></i></a>
                 </div>
             {% endif %}
@@ -580,6 +617,12 @@
             {% block content %}{% endblock %}
         </div>
     </div>
+
+    <!-- 联系客服浮动按钮 -->
+    <a class="customer-service-float" href="https://ada.baidu.com/site/wjzy5dvhc/agent?imid=996e3cb7902ffe7322fa3582fb182d99" target="_blank" rel="noopener noreferrer">
+        <i class="bi bi-headset"></i>
+        <span>联系客服</span>
+    </a>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>

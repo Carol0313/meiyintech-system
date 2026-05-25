@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block title %}对账单详情{% endblock %}
+{% block page_title %}对账单详情{% endblock %}
+{% block page_subtitle %}{{ statement.sn }}{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="stat-label">账单总金额</div>
+            <div class="stat-value" style="color:var(--primary);">¥{{ statement.total_amount }}</div>
+            <div class="stat-icon primary"><i class="bi bi-currency-yen"></i></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="stat-label">订单数量</div>
+            <div class="stat-value">{{ orders|length }}</div>
+            <div class="stat-icon info"><i class="bi bi-box-seam"></i></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="stat-label">当前状态</div>
+            <div class="stat-value" style="font-size:20px;">
+                {% if statement.status == 'pending' %}<span class="badge badge-status status-pending_payment">待对账</span>
+                {% elif statement.status == 'confirmed' %}<span class="badge badge-status status-design_confirmed">已确认</span>
+                {% elif statement.status == 'paid' %}<span class="badge badge-status status-paid">已付款</span>
+                {% elif statement.status == 'settled' %}<span class="badge badge-status status-received">已结清</span>
+                {% endif %}
+            </div>
+            <div class="stat-icon success"><i class="bi bi-check-circle"></i></div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>账单信息</span>
+        <div>
+            <a href="{% url 'customer_statement_export' statement.id %}" class="btn btn-outline-primary"><i class="bi bi-file-earmark-excel"></i> 导出对账单</a>
+            {% if statement.status == 'pending' %}
+            <form method="post" action="{% url 'customer_statement_confirm' statement.id %}" class="d-inline ms-2" onsubmit="return confirm('确认该对账单无误？确认后请尽快安排付款。')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> 确认对账单</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3"><label class="form-label small text-muted">对账单号</label><div class="fw-medium">{{ statement.sn }}</div></div>
+            <div class="col-md-3"><label class="form-label small text-muted">账单周期</label><div class="fw-medium">{{ statement.period_start|date:"Y-m-d" }} ~ {{ statement.period_end|date:"Y-m-d" }}</div></div>
+            <div class="col-md-3"><label class="form-label small text-muted">创建时间</label><div class="fw-medium">{{ statement.created_at|date:"Y-m-d H:i" }}</div></div>
+            <div class="col-md-3"><label class="form-label small text-muted">商户</label><div class="fw-medium">{{ statement.merchant.name }}</div></div>
+        </div>
+        {% if statement.confirmed_at %}
+        <div class="row mt-3">
+            <div class="col-md-3"><label class="form-label small text-muted">确认时间</label><div>{{ statement.confirmed_at|date:"Y-m-d H:i" }}</div></div>
+        </div>
+        {% endif %}
+        {% if statement.paid_at %}
+        <div class="row mt-3">
+            <div class="col-md-3"><label class="form-label small text-muted">付款通知时间</label><div>{{ statement.paid_at|date:"Y-m-d H:i" }}</div></div>
+        </div>
+        {% endif %}
+        {% if statement.settled_at %}
+        <div class="row mt-3">
+            <div class="col-md-3"><label class="form-label small text-muted">结清时间</label><div>{{ statement.settled_at|date:"Y-m-d H:i" }}</div></div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">订单明细</div>
+    <div class="table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th class="ps-4">订单号</th><th>产品</th><th>金额</th><th>创建时间</th><th>状态</th></tr></thead>
+            <tbody>
+                {% for o in orders %}
+                <tr>
+                    <td class="ps-4"><a href="{% url 'order_detail' o.id %}" class="fw-semibold" style="color:var(--primary);">{{ o.sn }}</a></td>
+                    <td style="color:var(--text-muted);">
+                        {% for item in o.items.all %}
+                        {{ item.get_product_name_display }} {{ item.get_material_display }} {{ item.thickness }}mm × {{ item.quantity }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </td>
+                    <td class="fw-semibold">¥{{ o.total_amount }}</td>
+                    <td style="color:var(--text-muted);">{{ o.created_at|date:"Y-m-d H:i" }}</td>
+                    <td><span class="badge badge-status status-{{ o.status }}">{{ o.get_status_display }}</span></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center text-muted py-4">暂无订单明细</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -15,9 +15,14 @@ from apps.products.models import CustomSpecRequest
 def platform_admin_required(view_func):
     """总平台管理员装饰器"""
     def wrapper(request, *args, **kwargs):
-        if not request.user.is_authenticated or request.user.user_type != 'platform_admin':
+        if not request.user.is_authenticated:
             messages.error(request, '仅总平台管理员可访问')
             return redirect('login')
+        if request.user.user_type != 'platform_admin':
+            return render(request, 'common/account_unauthorized.html', {
+                'message': '仅总平台管理员可访问',
+                'can_logout': True,
+            })
         return view_func(request, *args, **kwargs)
     return wrapper
 

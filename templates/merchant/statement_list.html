@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}对账单管理{% endblock %}
+{% block page_title %}对账单管理{% endblock %}
+{% block page_subtitle %}生成对账单、确认收款与额度释放{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small text-muted">状态</label>
+                <select name="status" class="form-select" onchange="location.href='?status='+this.value">
+                    <option value="">全部</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">客户</label>
+                <input type="text" name="customer" class="form-control" placeholder="手机/公司名" value="{{ request.GET.customer }}" onkeydown="if(event.key==='Enter'){location.href='?customer='+this.value}">
+            </div>
+            <div class="col-md-7 text-end">
+                <a href="{% url 'statement_generate' %}" class="btn btn-primary"><i class="bi bi-plus-circle"></i> 生成对账单</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th class="ps-4">对账单号</th><th>客户</th><th>周期</th><th>金额</th><th>状态</th><th>创建时间</th><th class="pe-4">操作</th></tr></thead>
+            <tbody>
+                {% for s in statements %}
+                <tr>
+                    <td class="ps-4">
+                        <a href="{% url 'statement_detail' s.id %}" class="fw-semibold" style="color:var(--primary);">{{ s.sn }}</a>
+                    </td>
+                    <td style="color:var(--text-muted);">
+                        {{ s.customer.customer_profile.company_name|default:s.customer.phone }}<br>
+                        <small>{{ s.customer.phone }}</small>
+                    </td>
+                    <td style="color:var(--text-muted);">{{ s.period_start|date:"Y-m-d" }} ~ {{ s.period_end|date:"Y-m-d" }}</td>
+                    <td class="fw-semibold">¥{{ s.total_amount }}</td>
+                    <td>
+                        {% if s.status == 'pending' %}<span class="badge badge-status status-pending_payment">待对账</span>
+                        {% elif s.status == 'confirmed' %}<span class="badge badge-status status-design_confirmed">已确认</span>
+                        {% elif s.status == 'paid' %}<span class="badge badge-status status-paid">已付款</span>
+                        {% elif s.status == 'settled' %}<span class="badge badge-status status-received">已结清</span>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--text-muted);">{{ s.created_at|date:"m-d H:i" }}</td>
+                    <td class="pe-4">
+                        <a href="{% url 'statement_detail' s.id %}" class="btn btn-sm btn-outline-primary">详情</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center text-muted py-5">
+                    <i class="bi bi-inbox fs-1 d-block mb-2" style="color:var(--border-light);"></i>
+                    暂无对账单
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -27,3 +27,45 @@ class Factory(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.merchant.name})"
+
+
+class FactoryEquipmentStatus(models.Model):
+    """工厂设备运行状态"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    factory = models.OneToOneField(
+        Factory, on_delete=models.CASCADE, related_name='equipment_status',
+        verbose_name='所属工厂'
+    )
+    status_text = models.CharField('设备状态', max_length=200, default='一切正常')
+    notes = models.TextField('备注', blank=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '工厂设备状态'
+        verbose_name_plural = '工厂设备状态'
+
+    def __str__(self):
+        return f"{self.factory.name} - {self.status_text}"
+
+
+class FactoryInventory(models.Model):
+    """工厂库存/物料"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    factory = models.ForeignKey(
+        Factory, on_delete=models.CASCADE, related_name='inventories',
+        verbose_name='所属工厂'
+    )
+    name = models.CharField('名称', max_length=100)
+    category = models.CharField('分类', max_length=50, blank=True)
+    quantity = models.CharField('数量', max_length=50, blank=True)
+    unit = models.CharField('单位', max_length=20, blank=True)
+    notes = models.TextField('备注', blank=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '工厂库存'
+        verbose_name_plural = '工厂库存'
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"{self.factory.name} - {self.name}"

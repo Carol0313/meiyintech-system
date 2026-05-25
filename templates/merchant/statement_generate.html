@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}生成对账单{% endblock %}
+{% block page_title %}生成对账单{% endblock %}
+{% block page_subtitle %}选择客户和周期，汇总未结清的已收货订单{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <form method="post" class="row g-3">
+            {% csrf_token %}
+            <div class="col-md-6">
+                <label class="form-label">选择客户 <span class="text-danger">*</span></label>
+                <select name="customer_id" class="form-select" required>
+                    <option value="">请选择客户</option>
+                    {% for m in members %}
+                    <option value="{{ m.user.id }}">{{ m.company_name|default:m.user.phone }} ({{ m.user.phone }}) — 已用额度: ¥{{ m.credit_used }} / ¥{{ m.credit_limit }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">周期开始 <span class="text-danger">*</span></label>
+                <input type="date" name="period_start" class="form-control" value="{{ default_start }}" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">周期结束 <span class="text-danger">*</span></label>
+                <input type="date" name="period_end" class="form-control" value="{{ default_end }}" required>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-plus-circle"></i> 生成对账单</button>
+                <a href="{% url 'statement_list' %}" class="btn btn-outline-secondary ms-2">返回列表</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">说明</div>
+    <div class="card-body">
+        <ul class="mb-0" style="color:var(--text-muted);">
+            <li>对账单将汇总该客户在指定周期内<strong>已收货</strong>且<strong>未结清</strong>、<strong>未关联其他账单</strong>的订单。</li>
+            <li>生成对账单后，客户可在"我的对账单"中查看并确认。</li>
+            <li>客户确认并付款后，您可在此确认收款，系统将自动释放该账单占用的信用额度。</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

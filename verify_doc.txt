@@ -1,0 +1,40 @@
+Sheet: 系统概述
+  ('闪电制版下单系统 — 功能说明文档', None, None, None, None)
+  ('本文档详细记录系统所有功能模块、技术架构、数据库模型及部署运维指南。', None, None, None, None)
+  (None, None, None, None, None)
+
+Sheet: 技术栈与架构
+  ('一、后端技术栈', None, None, None)
+  ('层级/组件', '技术选型', '版本', '用途说明')
+  ('Web框架', 'Django', '4.2.30', 'MTV架构：URL路由、视图、模板渲染、ORM、Admin后台')
+
+Sheet: 部署与运维
+  ('一、安装部署步骤', None, None, None)
+  ('步骤', '命令/操作', '说明', None)
+  ('1. 安装Python', 'Python 3.8+', '推荐使用Python 3.10，Windows/macOS/Linux均可', None)
+
+Sheet: 前端页面与交互
+  ('一、模板继承结构', None, None, None)
+  ('模板文件', '继承关系', '用途', None)
+  ('templates/base.html', '全局母版（根）', '全站布局、CSS/JS引入、消息提示、导航栏', None)
+
+Sheet: 数据库模型
+  ('一、用户与账户模型（apps/accounts）', None, None, None, None, None)
+  ('模型', '字段', '类型', '说明', '关系', None)
+  ('User', 'phone', 'CharField(unique)', '手机号，作为登录账号', '—', None)
+
+Sheet: 功能模块详情
+  ('一、客户平台功能', None, None, None)
+  ('功能模块', '详细说明', None, None)
+  ('注册登录', '手机号注册、等待商家审核、审核通过后登录', None, None)
+
+Sheet: URL路由清单
+  ('一、认证与账户（apps/accounts）', None, None)
+  ('URL路径', '功能说明', '方法')
+  ('login/', '用户登录（统一入口，按角色跳转）', 'POST')
+
+Sheet: 核心算法与工具
+  ('一、拼版算法', None, None, None)
+  ('算法名称', '说明', '特点', None)
+  ('Shelf算法（自定义）', '原生实现，按面积从大到小排序，Shelf水平打包，支持间距自动计算', '简单快速', None)
+

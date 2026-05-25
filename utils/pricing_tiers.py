@@ -179,3 +179,19 @@ def get_product_category(product_name):
     if product_name.startswith('film'):
         return '菲林'
     return '其他'
+
+
+def get_customer_price(profile, product_name, material, thickness):
+    """获取客户实际单价：优先使用商户自定义价格，否则使用标准价格"""
+    import json
+    try:
+        custom_prices = json.loads(profile.custom_prices or '{}')
+    except Exception:
+        custom_prices = {}
+    key = f"{product_name}_{material}_{thickness}"
+    custom = custom_prices.get(key)
+    if custom is not None:
+        return Decimal(str(custom))
+    if is_etching_product(product_name):
+        return get_etching_price(profile.pricing_tier, thickness)
+    return get_carving_price(product_name, material, thickness)

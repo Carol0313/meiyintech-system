@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}登录 - 闪电制版{% endblock %}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
@@ -14,16 +15,31 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--bg-main);
+        background: var(--bg-main) url('{% static 'images/login-bg.jpg' %}') no-repeat center center;
+        background-size: cover;
         padding: 40px 20px;
+        position: relative;
+    }
+
+    .login-page::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.35);
+        z-index: 0;
     }
 
     .login-card {
         width: 100%;
         max-width: 420px;
-        background: #ffffff;
-        border: 1px solid var(--border-color);
+        background: rgba(255,255,255,0.92);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,0.3);
         border-radius: var(--radius-md);
+        position: relative;
+        z-index: 1;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.15);
     }
 
     .login-card-header {
@@ -175,7 +191,7 @@
                     <i class="bi bi-lightning-charge-fill"></i>
                 </div>
                 <div class="login-brand-title">闪电制版</div>
-                <div class="login-brand-subtitle">登录您的账户，开始高效下单</div>
+                <div class="login-brand-subtitle">千厂资源一键触达，制版从未如此简单</div>
             </div>
 
             <form method="post" novalidate class="login-form">
@@ -197,7 +213,7 @@
 
             <div class="login-divider">还没有账号</div>
             <div class="login-register">
-                <a href="{% url 'customer_register' %}">终端用户注册</a>
+                <a href="{% url 'customer_register' %}">免费注册下单</a>
                 <span style="color:var(--border-color);">|</span>
                 <a href="{% url 'merchant_register' %}">商家入驻</a>
             </div>

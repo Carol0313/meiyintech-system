@@ -124,13 +124,59 @@
     .preset-option input {
         display: none;
     }
+    /* 规格勾选式选择 */
+    .spec-group {
+        margin-bottom: 18px;
+    }
+    .spec-group:last-child {
+        margin-bottom: 0;
+    }
+    .spec-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .spec-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        border: 1.5px solid #dee2e6;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        background: #fff;
+        transition: all 0.15s;
+        user-select: none;
+    }
+    .spec-option:hover {
+        border-color: var(--primary);
+        background: #f8fbff;
+    }
+    .spec-option.active {
+        border-color: var(--primary);
+        background: var(--primary-light);
+        color: var(--primary);
+        font-weight: 500;
+    }
+    .spec-option .check-icon {
+        display: none;
+        font-size: 14px;
+    }
+    .spec-option.active .check-icon {
+        display: inline;
+    }
+    .spec-placeholder {
+        color: var(--text-muted);
+        font-size: 13px;
+        padding: 8px 0;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <form method="post" id="quickOrderForm" enctype="multipart/form-data">
     {% csrf_token %}
-    <input type="hidden" name="file_path" id="filePathInput" value="">
     <input type="hidden" name="unit_price" id="unitPriceInput" value="0">
 
     <div class="row g-3">
@@ -140,33 +186,43 @@
             <div class="card mb-3">
                 <div class="card-body">
                     <div class="section-title"><i class="bi bi-box-seam"></i> 产品规格</div>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">产品大类 <span class="text-danger">*</span></label>
-                            <select name="product_category" id="productCategory" class="form-select" required>
-                                <option value="">-- 请选择大类 --</option>
-                            </select>
+                    
+                    <!-- 隐藏的表单字段 -->
+                    <input type="hidden" name="product_category" id="productCategory" value="">
+                    <input type="hidden" name="product_name" id="productName" value="">
+                    <input type="hidden" name="material" id="material" value="">
+                    <input type="hidden" name="thickness" id="thickness" value="">
+                    
+                    <!-- 产品大类 -->
+                    <div class="spec-group">
+                        <label class="form-label">产品大类 <span class="text-danger">*</span></label>
+                        <div class="spec-grid" id="categoryGrid"></div>
+                    </div>
+                    
+                    <!-- 细分产品 -->
+                    <div class="spec-group">
+                        <label class="form-label">细分产品 <span class="text-danger">*</span></label>
+                        <div class="spec-grid" id="productGrid">
+                            <div class="spec-placeholder">请先选择产品大类</div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">细分产品 <span class="text-danger">*</span></label>
-                            <select name="product_name" id="productName" class="form-select" required disabled>
-                                <option value="">-- 请先选择大类 --</option>
-                            </select>
+                    </div>
+                    
+                    <!-- 材质 -->
+                    <div class="spec-group">
+                        <label class="form-label">材质 <span class="text-danger">*</span></label>
+                        <div class="spec-grid" id="materialGrid">
+                            <div class="spec-placeholder">请先选择细分产品</div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">材质 <span class="text-danger">*</span></label>
-                            <select name="material" id="material" class="form-select" required disabled>
-                                <option value="">-- 请先选择产品 --</option>
-                            </select>
+                    </div>
+                    
+                    <!-- 厚度 -->
+                    <div class="spec-group">
+                        <label class="form-label">厚度 <span class="text-danger">*</span></label>
+                        <div class="spec-grid" id="thicknessGrid">
+                            <div class="spec-placeholder">请先选择材质</div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">厚度 <span class="text-danger">*</span></label>
-                            <select name="thickness" id="thickness" class="form-select" required disabled>
-                                <option value="">-- 请先选择材质 --</option>
-                            </select>
-                            <div class="mt-1" id="priceDisplay" style="display:none;">
-                                <span class="badge bg-primary">单价：¥<span id="priceValue">0.00</span> / cm²</span>
-                            </div>
+                        <div class="mt-2" id="priceDisplay" style="display:none;">
+                            <span class="badge bg-primary">单价：¥<span id="priceValue">0.00</span> / cm²</span>
                         </div>
                     </div>
                 </div>
@@ -180,55 +236,37 @@
                         <div class="upload-zone" id="uploadZone">
                             <i class="bi bi-cloud-arrow-up"></i>
                             <p class="fw-medium text-dark">点击或拖拽上传 PDF 文件</p>
-                            <p>系统将自动识别文件中的制版尺寸</p>
-                            <input type="file" id="pdfInput" accept=".pdf" style="display:none;">
+                            <p>支持一次选择多个文件，选择完成后点击"开始识别"</p>
+                            <input type="file" id="pdfInput" accept=".pdf" multiple style="display:none;">
                         </div>
                     </div>
-                    <div id="previewArea" style="display:none;">
+
+                    <!-- 待识别文件列表 -->
+                    <div id="pendingFilesArea" style="display:none;" class="mt-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="small text-muted" id="fileNameDisplay"></span>
-                            <button type="button" class="btn btn-sm btn-outline-danger" id="removeFileBtn">
-                                <i class="bi bi-trash"></i> 移除
+                            <span class="fw-medium">待识别文件 (<span id="pendingCount">0</span>)</span>
+                            <button type="button" class="btn btn-sm btn-primary" id="startRecognizeBtn">
+                                <i class="bi bi-magic"></i> 开始识别
                             </button>
                         </div>
-                        <div class="preview-box mb-3">
-                            <img id="previewImg" src="" alt="PDF预览">
-                        </div>
-                        <div class="row g-2">
-                            <div class="col-sm-6">
-                                <label class="form-label d-flex justify-content-between">
-                                    <span>识别长度 (mm)</span>
-                                    <span class="detected-badge" id="lengthDetectedBadge" style="display:none;">
-                                        <i class="bi bi-check-circle-fill"></i> 自动识别
-                                    </span>
-                                </label>
-                                <input type="number" step="0.01" name="length_mm" id="lengthMm" class="form-control" required>
-                                <div class="warning-text" id="lengthWarning"></div>
-                            </div>
-                            <div class="col-sm-6">
-                                <label class="form-label d-flex justify-content-between">
-                                    <span>识别宽度 (mm)</span>
-                                    <span class="detected-badge" id="widthDetectedBadge" style="display:none;">
-                                        <i class="bi bi-check-circle-fill"></i> 自动识别
-                                    </span>
-                                </label>
-                                <input type="number" step="0.01" name="width_mm" id="widthMm" class="form-control" required>
-                                <div class="warning-text" id="widthWarning"></div>
-                            </div>
-                        </div>
-                        <div class="mt-2 small text-muted">
-                            <i class="bi bi-info-circle"></i> 
-                            若识别尺寸与实际不符，请直接修改上方数值。
-                        </div>
+                        <div id="pendingFilesList" class="list-group list-group-flush border rounded"></div>
                     </div>
+
+                    <!-- 识别结果区域 -->
+                    <div id="filesResultArea" style="display:none;" class="mt-3"></div>
+
                     <div class="mt-3 d-flex gap-3">
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="file_standard_checked" id="fileStandard">
+                            <input class="form-check-input" type="radio" name="file_type" id="fileStandard" value="standard" required>
                             <label class="form-check-label" for="fileStandard">文件已转曲/矢量化</label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="file_processed" id="fileProcessed" checked>
+                            <input class="form-check-input" type="radio" name="file_type" id="fileProcessed" value="processed" checked required>
                             <label class="form-check-label" for="fileProcessed">需要处理文件</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="file_type" id="fileImage" value="image" required>
+                            <label class="form-check-label" for="fileImage">文件是图片文件</label>
                         </div>
                     </div>
                 </div>
@@ -270,11 +308,6 @@
                     <div class="section-title"><i class="bi bi-cart-check"></i> 订单确认</div>
 
                     <div class="form-section">
-                        <label class="form-label">数量</label>
-                        <input type="number" name="quantity" id="quantity" class="form-control" value="1" min="1" required>
-                    </div>
-
-                    <div class="form-section">
                         <label class="form-label">配送方式 <span class="text-danger">*</span></label>
                         <select name="delivery_type" class="form-select" required>
                             <option value="express" selected>快递</option>
@@ -302,7 +335,7 @@
                     <div class="form-section">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" name="urgent" id="urgentCheck">
-                            <label class="form-check-label" for="urgentCheck">加急（总价 +10%）</label>
+                            <label class="form-check-label" for="urgentCheck">加急（总价 +10%，3小时出货）</label>
                         </div>
                     </div>
 
@@ -342,113 +375,148 @@
 <script>
 const SPEC_DATA = {{ spec_data_json|safe }};
 
-// ===== 规格联动 =====
-const categorySelect = document.getElementById('productCategory');
-const productSelect = document.getElementById('productName');
-const materialSelect = document.getElementById('material');
-const thicknessSelect = document.getElementById('thickness');
+// ===== 规格联动（勾选式）=====
+const categoryInput = document.getElementById('productCategory');
+const productInput = document.getElementById('productName');
+const materialInput = document.getElementById('material');
+const thicknessInput = document.getElementById('thickness');
+const categoryGrid = document.getElementById('categoryGrid');
+const productGrid = document.getElementById('productGrid');
+const materialGrid = document.getElementById('materialGrid');
+const thicknessGrid = document.getElementById('thicknessGrid');
 const unitPriceInput = document.getElementById('unitPriceInput');
 const priceDisplay = document.getElementById('priceDisplay');
 const priceValue = document.getElementById('priceValue');
 
-Object.keys(SPEC_DATA).forEach(key => {
-    const opt = document.createElement('option');
-    opt.value = key;
-    opt.textContent = SPEC_DATA[key].label;
-    categorySelect.appendChild(opt);
-});
-
-categorySelect.addEventListener('change', function() {
-    productSelect.innerHTML = '<option value="">-- 请选择细分产品 --</option>';
-    materialSelect.innerHTML = '<option value="">-- 请先选择产品 --</option>';
-    thicknessSelect.innerHTML = '<option value="">-- 请先选择材质 --</option>';
-    productSelect.disabled = true;
-    materialSelect.disabled = true;
-    thicknessSelect.disabled = true;
-    priceDisplay.style.display = 'none';
-    unitPriceInput.value = '0';
-    calcPrice();
-
-    const data = SPEC_DATA[this.value];
-    if (!data) return;
-    productSelect.disabled = false;
-    Object.keys(data.products).forEach(prodKey => {
-        const opt = document.createElement('option');
-        opt.value = prodKey;
-        opt.textContent = data.products[prodKey].label;
-        productSelect.appendChild(opt);
+function renderCategories() {
+    categoryGrid.innerHTML = '';
+    Object.keys(SPEC_DATA).forEach(key => {
+        const item = document.createElement('div');
+        item.className = 'spec-option';
+        item.dataset.value = key;
+        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].label;
+        item.addEventListener('click', () => selectCategory(key));
+        categoryGrid.appendChild(item);
     });
-});
+}
 
-productSelect.addEventListener('change', function() {
-    materialSelect.innerHTML = '<option value="">-- 请选择材质 --</option>';
-    thicknessSelect.innerHTML = '<option value="">-- 请先选择材质 --</option>';
-    materialSelect.disabled = true;
-    thicknessSelect.disabled = true;
-    priceDisplay.style.display = 'none';
+function selectCategory(key) {
+    categoryInput.value = key;
+    categoryGrid.querySelectorAll('.spec-option').forEach(el => {
+        el.classList.toggle('active', el.dataset.value === key);
+    });
+    // 重置下级
+    productInput.value = '';
+    materialInput.value = '';
+    thicknessInput.value = '';
     unitPriceInput.value = '0';
+    priceDisplay.style.display = 'none';
     calcPrice();
 
-    const catData = SPEC_DATA[categorySelect.value];
+    if (!key || !SPEC_DATA[key]) {
+        productGrid.innerHTML = '<div class="spec-placeholder">请先选择产品大类</div>';
+        materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
+        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+        return;
+    }
+    productGrid.innerHTML = '';
+    Object.keys(SPEC_DATA[key].products).forEach(prodKey => {
+        const item = document.createElement('div');
+        item.className = 'spec-option';
+        item.dataset.value = prodKey;
+        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].products[prodKey].label;
+        item.addEventListener('click', () => selectProduct(prodKey));
+        productGrid.appendChild(item);
+    });
+    materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
+    thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+}
+
+function selectProduct(prodKey) {
+    productInput.value = prodKey;
+    productGrid.querySelectorAll('.spec-option').forEach(el => {
+        el.classList.toggle('active', el.dataset.value === prodKey);
+    });
+    materialInput.value = '';
+    thicknessInput.value = '';
+    unitPriceInput.value = '0';
+    priceDisplay.style.display = 'none';
+    calcPrice();
+
+    const catData = SPEC_DATA[categoryInput.value];
+    if (!catData || !catData.products[prodKey]) {
+        materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
+        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+        return;
+    }
+    materialGrid.innerHTML = '';
+    Object.keys(catData.products[prodKey].materials).forEach(matKey => {
+        const item = document.createElement('div');
+        item.className = 'spec-option';
+        item.dataset.value = matKey;
+        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + catData.products[prodKey].materials[matKey].label;
+        item.addEventListener('click', () => selectMaterial(matKey));
+        materialGrid.appendChild(item);
+    });
+    thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+}
+
+function selectMaterial(matKey) {
+    materialInput.value = matKey;
+    materialGrid.querySelectorAll('.spec-option').forEach(el => {
+        el.classList.toggle('active', el.dataset.value === matKey);
+    });
+    thicknessInput.value = '';
+    unitPriceInput.value = '0';
+    priceDisplay.style.display = 'none';
+    calcPrice();
+
+    const catData = SPEC_DATA[categoryInput.value];
     if (!catData) return;
-    const prodData = catData.products[this.value];
-    if (!prodData) return;
-    materialSelect.disabled = false;
-    Object.keys(prodData.materials).forEach(matKey => {
-        const opt = document.createElement('option');
-        opt.value = matKey;
-        opt.textContent = prodData.materials[matKey].label;
-        materialSelect.appendChild(opt);
+    const prodData = catData.products[productInput.value];
+    if (!prodData || !prodData.materials[matKey]) {
+        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+        return;
+    }
+    thicknessGrid.innerHTML = '';
+    prodData.materials[matKey].thicknesses.forEach(t => {
+        const item = document.createElement('div');
+        item.className = 'spec-option';
+        item.dataset.value = t.value;
+        item.dataset.price = t.price;
+        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + t.label + ' <span class="text-muted small">(¥' + t.price + '/cm²)</span>';
+        item.addEventListener('click', () => selectThickness(t.value, t.price));
+        thicknessGrid.appendChild(item);
     });
-});
+}
 
-materialSelect.addEventListener('change', function() {
-    thicknessSelect.innerHTML = '<option value="">-- 请选择厚度 --</option>';
-    priceDisplay.style.display = 'none';
-    unitPriceInput.value = '0';
-    calcPrice();
-
-    const catData = SPEC_DATA[categorySelect.value];
-    if (!catData) return;
-    const prodData = catData.products[productSelect.value];
-    if (!prodData) return;
-    const matData = prodData.materials[this.value];
-    if (!matData) return;
-    thicknessSelect.disabled = false;
-    matData.thicknesses.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.value;
-        opt.textContent = t.label + ' （¥' + t.price + '/cm²）';
-        opt.dataset.price = t.price;
-        thicknessSelect.appendChild(opt);
+function selectThickness(value, price) {
+    thicknessInput.value = value;
+    thicknessGrid.querySelectorAll('.spec-option').forEach(el => {
+        el.classList.toggle('active', el.dataset.value === value);
     });
-});
-
-thicknessSelect.addEventListener('change', function() {
-    const selected = this.options[this.selectedIndex];
-    const price = selected.dataset.price || '0';
     unitPriceInput.value = price;
     priceValue.textContent = parseFloat(price).toFixed(2);
     priceDisplay.style.display = 'inline-block';
     calcPrice();
-});
+}
 
-// ===== 文件上传 =====
+// 初始化渲染
+renderCategories();
+
+// ===== 多文件上传 =====
 const uploadZone = document.getElementById('uploadZone');
 const pdfInput = document.getElementById('pdfInput');
 const uploadArea = document.getElementById('uploadArea');
-const previewArea = document.getElementById('previewArea');
-const filePathInput = document.getElementById('filePathInput');
-const previewImg = document.getElementById('previewImg');
-const fileNameDisplay = document.getElementById('fileNameDisplay');
-const removeFileBtn = document.getElementById('removeFileBtn');
-const lengthMm = document.getElementById('lengthMm');
-const widthMm = document.getElementById('widthMm');
-const lengthDetectedBadge = document.getElementById('lengthDetectedBadge');
-const widthDetectedBadge = document.getElementById('widthDetectedBadge');
-const lengthWarning = document.getElementById('lengthWarning');
-const widthWarning = document.getElementById('widthWarning');
+const pendingFilesArea = document.getElementById('pendingFilesArea');
+const pendingFilesList = document.getElementById('pendingFilesList');
+const pendingCount = document.getElementById('pendingCount');
+const startRecognizeBtn = document.getElementById('startRecognizeBtn');
+const filesResultArea = document.getElementById('filesResultArea');
 const uploadOverlay = document.getElementById('uploadOverlay');
+
+let pendingFiles = [];      // 待识别的 File 对象数组
+let recognizedFiles = [];   // 已识别的文件信息数组
 
 uploadZone.addEventListener('click', () => pdfInput.click());
 
@@ -460,85 +528,187 @@ uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag
 uploadZone.addEventListener('drop', (e) => {
     e.preventDefault();
     uploadZone.classList.remove('dragover');
-    const files = e.dataTransfer.files;
-    if (files.length) handleFile(files[0]);
+    handleFiles(Array.from(e.dataTransfer.files));
 });
 
 pdfInput.addEventListener('change', () => {
-    if (pdfInput.files.length) handleFile(pdfInput.files[0]);
-});
-
-removeFileBtn.addEventListener('click', () => {
-    filePathInput.value = '';
+    handleFiles(Array.from(pdfInput.files));
     pdfInput.value = '';
-    uploadArea.style.display = 'block';
-    previewArea.style.display = 'none';
-    lengthMm.value = '';
-    widthMm.value = '';
-    lengthDetectedBadge.style.display = 'none';
-    widthDetectedBadge.style.display = 'none';
-    lengthWarning.textContent = '';
-    widthWarning.textContent = '';
-    calcPrice();
 });
 
-function handleFile(file) {
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-        alert('仅支持PDF格式文件');
+function handleFiles(files) {
+    const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    const invalid = files.length - validFiles.length;
+    if (invalid > 0) {
+        alert(`已过滤 ${invalid} 个非PDF文件，仅支持PDF格式`);
+    }
+    if (validFiles.length === 0) return;
+    pendingFiles.push(...validFiles);
+    renderPendingFiles();
+}
+
+function renderPendingFiles() {
+    if (pendingFiles.length === 0) {
+        pendingFilesArea.style.display = 'none';
         return;
     }
+    pendingFilesArea.style.display = 'block';
+    pendingCount.textContent = pendingFiles.length;
+    pendingFilesList.innerHTML = pendingFiles.map((file, idx) => `
+        <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+            <span class="small"><i class="bi bi-file-earmark-pdf text-danger"></i> ${file.name}</span>
+            <button type="button" class="btn btn-sm btn-link text-danger" onclick="removePendingFile(${idx})">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function removePendingFile(idx) {
+    pendingFiles.splice(idx, 1);
+    renderPendingFiles();
+}
+
+startRecognizeBtn.addEventListener('click', () => {
+    if (pendingFiles.length === 0) return;
     uploadOverlay.style.display = 'flex';
 
     const formData = new FormData();
-    formData.append('pdf_file', file);
+    pendingFiles.forEach(file => formData.append('pdf_files', file));
     formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 
-    fetch('{% url "quick_order_upload" %}', {
+    fetch('{% url "batch_upload_files" %}', {
         method: 'POST',
         body: formData,
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })
-    .then(r => r.json())
+    .then(r => {
+        if (!r.ok) {
+            return r.text().then(text => {
+                throw new Error('服务器错误 [' + r.status + ']：' + text.substring(0, 200));
+            });
+        }
+        const ct = r.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+            return r.text().then(text => {
+                throw new Error('返回格式错误：' + text.substring(0, 200));
+            });
+        }
+        return r.json();
+    })
     .then(data => {
         uploadOverlay.style.display = 'none';
         if (!data.success) {
-            alert(data.error || '上传失败');
+            alert(data.error || '识别失败');
             return;
         }
-        // 填充文件信息
-        filePathInput.value = data.file_path;
-        fileNameDisplay.textContent = data.file_name;
-        if (data.preview_url) {
-            previewImg.src = data.preview_url;
-        } else {
-            previewImg.style.display = 'none';
-            previewImg.parentElement.innerHTML = '<div class="py-4 text-muted"><i class="bi bi-file-earmark-pdf" style="font-size:48px;"></i><br>PDF 文件（无预览）</div>';
-        }
-        uploadArea.style.display = 'none';
-        previewArea.style.display = 'block';
+        // 清空待识别
+        pendingFiles = [];
+        pendingFilesArea.style.display = 'none';
 
-        // 填充尺寸
-        if (data.pdf_width_mm && data.pdf_height_mm) {
-            const long = Math.max(data.pdf_width_mm, data.pdf_height_mm);
-            const short = Math.min(data.pdf_width_mm, data.pdf_height_mm);
-            lengthMm.value = long.toFixed(1);
-            widthMm.value = short.toFixed(1);
-            lengthDetectedBadge.style.display = 'inline-flex';
-            widthDetectedBadge.style.display = 'inline-flex';
-        } else {
-            lengthDetectedBadge.style.display = 'none';
-            widthDetectedBadge.style.display = 'none';
-        }
+        // 合并到已识别列表
+        data.files.forEach(f => {
+            if (f.success) {
+                const long = f.first_length && f.first_width
+                    ? Math.max(f.first_length, f.first_width)
+                    : (f.pdf_width_mm && f.pdf_height_mm ? Math.max(f.pdf_width_mm, f.pdf_height_mm) : 0);
+                const short = f.first_length && f.first_width
+                    ? Math.min(f.first_length, f.first_width)
+                    : (f.pdf_width_mm && f.pdf_height_mm ? Math.min(f.pdf_width_mm, f.pdf_height_mm) : 0);
+                recognizedFiles.push({
+                    file_path: f.file_path,
+                    file_name: f.file_name,
+                    preview_url: f.preview_url,
+                    length_mm: long,
+                    width_mm: short,
+                    quantity: f.first_quantity || 1,
+                    area: f.area || 0,
+                    boxes: f.boxes || null,
+                    box_count: f.box_count || 0,
+                });
+            }
+        });
+        renderRecognizedFiles();
         calcPrice();
     })
     .catch(err => {
         uploadOverlay.style.display = 'none';
         alert('上传出错：' + err);
     });
+});
+
+function renderRecognizedFiles() {
+    if (recognizedFiles.length === 0) {
+        filesResultArea.style.display = 'none';
+        uploadArea.style.display = 'block';
+        return;
+    }
+    uploadArea.style.display = 'none';
+    filesResultArea.style.display = 'block';
+
+    filesResultArea.innerHTML = recognizedFiles.map((f, idx) => {
+        const previewHtml = f.preview_url
+            ? `<img src="${f.preview_url}" class="img-fluid rounded" style="max-height:120px;" alt="预览">`
+            : `<div class="text-muted py-3"><i class="bi bi-file-earmark-pdf" style="font-size:36px;"></i><br>PDF</div>`;
+        const boxInfo = f.box_count > 0
+            ? `<div class="small text-info mt-1"><i class="bi bi-bounding-box"></i> 检测到 ${f.box_count} 个内容框</div>`
+            : '';
+        return `
+        <div class="card mb-2 file-result-card" data-index="${idx}">
+            <div class="card-body py-2 px-3">
+                <div class="d-flex gap-3">
+                    <div class="flex-shrink-0 text-center" style="width:100px;">${previewHtml}</div>
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <span class="small fw-medium text-truncate" style="max-width:200px;" title="${f.file_name}">${f.file_name}</span>
+                            <button type="button" class="btn btn-sm btn-link text-danger py-0" onclick="removeRecognizedFile(${idx})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-4">
+                                <label class="form-label small mb-0">长(mm)</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm file-length" data-index="${idx}" value="${f.length_mm ? f.length_mm.toFixed(1) : ''}">
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small mb-0">宽(mm)</label>
+                                <input type="number" step="0.01" class="form-control form-control-sm file-width" data-index="${idx}" value="${f.width_mm ? f.width_mm.toFixed(1) : ''}">
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small mb-0">数量</label>
+                                <input type="number" min="1" class="form-control form-control-sm file-qty" data-index="${idx}" value="${f.quantity}">
+                            </div>
+                        </div>
+                        ${boxInfo}
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+
+    // 绑定输入事件
+    filesResultArea.querySelectorAll('.file-length, .file-width, .file-qty').forEach(input => {
+        input.addEventListener('input', () => {
+            const idx = parseInt(input.dataset.index);
+            const card = filesResultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
+            recognizedFiles[idx].length_mm = parseFloat(card.querySelector('.file-length').value) || 0;
+            recognizedFiles[idx].width_mm = parseFloat(card.querySelector('.file-width').value) || 0;
+            recognizedFiles[idx].quantity = parseInt(card.querySelector('.file-qty').value) || 1;
+            calcPrice();
+        });
+    });
 }
 
-// ===== 价格计算 =====
-const quantityInput = document.getElementById('quantity');
+function removeRecognizedFile(idx) {
+    recognizedFiles.splice(idx, 1);
+    renderRecognizedFiles();
+    calcPrice();
+    if (recognizedFiles.length === 0) {
+        uploadArea.style.display = 'block';
+    }
+}
+
+// ===== 价格计算（多文件累加） =====
 const totalPriceEl = document.getElementById('totalPrice');
 const areaDisplay = document.getElementById('areaDisplay');
 const unitPriceDisplay = document.getElementById('unitPriceDisplay');
@@ -546,39 +716,50 @@ const urgentCheck = document.getElementById('urgentCheck');
 const urgentDisplay = document.getElementById('urgentDisplay');
 
 function calcPrice() {
-    const l = parseFloat(lengthMm.value) || 0;
-    const w = parseFloat(widthMm.value) || 0;
-    const q = parseInt(quantityInput.value) || 1;
     const up = parseFloat(unitPriceInput.value) || 0;
     const isUrgent = urgentCheck.checked;
+    const productName = productInput.value;
+    const isEtching = productName && (productName.startsWith('etching_'));
 
-    if (l > 0 && w > 0 && up > 0) {
-        // 与后端保持一致的计价逻辑
-        const productName = productSelect.value;
-        const isEtching = productName && (productName.startsWith('etching_'));
-        let area;
-        if (isEtching) {
-            area = ((l + 10) * (w + 10)) / 100.0;
-        } else {
-            area = ((l + 20) * (w + 20)) / 100.0 * q;
+    let totalArea = 0;
+    let total = 0;
+
+    if (up > 0) {
+        recognizedFiles.forEach(f => {
+            const l = parseFloat(f.length_mm) || 0;
+            const w = parseFloat(f.width_mm) || 0;
+            const q = parseInt(f.quantity) || 1;
+            let fileArea = 0;
+            if (f.boxes && f.boxes.length > 0 && isEtching) {
+                fileArea = f.boxes.reduce((sum, box) => {
+                    const bl = parseFloat(box.length_mm) || 0;
+                    const bw = parseFloat(box.width_mm) || 0;
+                    const bq = parseInt(box.quantity) || 1;
+                    if (bl > 0 && bw > 0) return sum + ((bl + 5) * (bw + 5) / 100.0 * bq);
+                    return sum;
+                }, 0);
+            } else if (l > 0 && w > 0) {
+                if (isEtching) {
+                    fileArea = ((l + 5) * (w + 5)) / 100.0 * q;
+                } else {
+                    fileArea = ((l + 20) * (w + 20)) / 100.0 * q;
+                }
+            }
+            totalArea += fileArea;
+        });
+
+        if (totalArea > 0) {
+            total = totalArea * up;
+            if (isUrgent) total *= 1.10;
         }
-        let total = area * up;
-        if (isUrgent) total *= 1.10;
-        areaDisplay.textContent = area.toFixed(2);
-        unitPriceDisplay.textContent = up.toFixed(2);
-        totalPriceEl.textContent = total.toFixed(2);
-    } else {
-        areaDisplay.textContent = '0';
-        unitPriceDisplay.textContent = up.toFixed(2);
-        totalPriceEl.textContent = '0.00';
     }
 
+    areaDisplay.textContent = totalArea.toFixed(2);
+    unitPriceDisplay.textContent = up.toFixed(2);
+    totalPriceEl.textContent = total.toFixed(2);
     urgentDisplay.style.display = isUrgent ? 'inline' : 'none';
 }
 
-[lengthMm, widthMm, quantityInput].forEach(el => {
-    el.addEventListener('input', calcPrice);
-});
 urgentCheck.addEventListener('change', calcPrice);
 
 // ===== 快捷选项切换 =====
@@ -592,34 +773,49 @@ document.querySelectorAll('.preset-option').forEach(label => {
 
 // ===== 表单验证 =====
 document.getElementById('quickOrderForm').addEventListener('submit', function(e) {
-    if (!productSelect.value) {
+    if (!productInput.value) {
         alert('请选择细分产品');
-        productSelect.focus();
         e.preventDefault();
         return;
     }
-    if (!materialSelect.value) {
+    if (!materialInput.value) {
         alert('请选择材质');
-        materialSelect.focus();
         e.preventDefault();
         return;
     }
-    if (!thicknessSelect.value) {
+    if (!thicknessInput.value) {
         alert('请选择厚度');
-        thicknessSelect.focus();
         e.preventDefault();
         return;
     }
-    if (!filePathInput.value) {
-        alert('请上传PDF文件');
+    if (recognizedFiles.length === 0) {
+        alert('请上传至少一个PDF文件');
         e.preventDefault();
         return;
     }
-    if (!lengthMm.value || !widthMm.value) {
-        alert('请填写尺寸');
-        e.preventDefault();
-        return;
+    // 检查每个文件是否填写了尺寸
+    for (let i = 0; i < recognizedFiles.length; i++) {
+        const f = recognizedFiles[i];
+        if (!f.length_mm || !f.width_mm) {
+            alert(`第 ${i+1} 个文件（${f.file_name}）未填写尺寸`);
+            e.preventDefault();
+            return;
+        }
     }
+    // 将文件数据写入隐藏字段（先移除旧的）
+    const oldInput = this.querySelector('input[name="files_data"]');
+    if (oldInput) oldInput.remove();
+    const filesDataInput = document.createElement('input');
+    filesDataInput.type = 'hidden';
+    filesDataInput.name = 'files_data';
+    filesDataInput.value = JSON.stringify(recognizedFiles.map(f => ({
+        file_path: f.file_path,
+        length_mm: f.length_mm,
+        width_mm: f.width_mm,
+        quantity: f.quantity,
+        boxes: f.boxes,
+    })));
+    this.appendChild(filesDataInput);
 });
 </script>
 {% endblock %}

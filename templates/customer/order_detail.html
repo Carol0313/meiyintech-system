@@ -31,10 +31,75 @@
             </div>
         </div>
 
+        <!-- 物流轨迹 -->
+        {% if tracking_data %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-truck"></i> 物流信息</span>
+                <span class="badge {% if tracking_data.is_signed %}bg-success{% else %}bg-primary{% endif %}">
+                    {{ tracking_data.state_label }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="small text-muted mb-2">
+                    {{ tracking_data.company }} | 单号：{{ tracking_data.tracking_number }}
+                </div>
+                <div class="tracking-timeline">
+                    {% for t in tracking_data.tracks %}
+                    <div class="tracking-item {% if forloop.first %}latest{% endif %}">
+                        <div class="tracking-time">{{ t.time }}</div>
+                        <div class="tracking-context">{{ t.context }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% elif order.tracking_number %}
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-truck"></i> 物流信息</div>
+            <div class="card-body text-muted small">
+                物流单号：{{ order.tracking_number }}（正在查询中，请稍后再试）
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 文件预览 -->
+        {% with item=order.items.first %}
+        {% if item and item.file %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-file-earmark"></i> 文件预览</span>
+                {% if item.file_exists %}
+                <a href="{{ item.file.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-download"></i> 下载源文件
+                </a>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if not item.file_exists %}
+                <div class="alert alert-warning mb-0">
+                    <i class="bi bi-exclamation-triangle"></i> 源文件已缺失，请联系商家处理
+                </div>
+                {% elif item.preview_url %}
+                <div class="text-center">
+                    <img src="{{ item.preview_url }}" alt="文件预览" class="img-fluid rounded border" style="max-height:400px;">
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-file-earmark-image" style="font-size:48px; color:var(--primary);"></i>
+                    <div class="mt-2 text-muted small">{{ item.file.name|cut:"order_files/" }}</div>
+                    <div class="mt-1 text-muted small">AI文件请在设计软件中打开预览</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+
         <!-- 订单信息 -->
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between">
-                <span>订单 {{ order.sn }}</span>
+                <span>订单号：{{ order.sn }}</span>
                 <span class="badge badge-status status-{{ order.status }}">{{ order.get_status_display }}</span>
             </div>
             <div class="card-body">
@@ -52,10 +117,17 @@
                 </div>
                 <h6 class="fw-medium">产品明细</h6>
                 <table class="table table-sm table-bordered">
-                    <thead class="table-light"><tr><th>产品</th><th>材料</th><th>厚度</th><th>尺寸</th><th>数量</th><th>面积</th><th>小计</th></tr></thead>
+                    <thead class="table-light"><tr><th style="width:60px;">预览</th><th>产品</th><th>材料</th><th>厚度</th><th>尺寸</th><th>数量</th><th>面积</th><th>小计</th></tr></thead>
                     <tbody>
                         {% for item in order.items.all %}
                         <tr>
+                            <td class="text-center p-1">
+                                {% if item.preview_url %}
+                                <img src="{{ item.preview_url }}" style="width:48px;height:48px;object-fit:cover;border-radius:4px;">
+                                {% else %}
+                                <div style="width:48px;height:48px;background:#f0f0f0;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#bbb;"><i class="bi bi-file-earmark"></i></div>
+                                {% endif %}
+                            </td>
                             <td>{{ item.get_product_name_display }}</td>
                             <td>{{ item.get_material_display }}</td>
                             <td>{{ item.thickness }}mm</td>
@@ -111,6 +183,59 @@
         {% endif %}
     </div>
     <div class="col-md-4">
+        <!-- 对账信息 -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-receipt"></i> 对账信息</div>
+            <div class="card-body small">
+                {% if order.is_settled %}
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-success me-2">已结清</span>
+                    </div>
+                    {% if order.statement %}
+                    <div class="mb-1"><strong>对账单号：</strong>{{ order.statement.sn }}</div>
+                    <div class="mb-1"><strong>账单金额：</strong>¥{{ order.statement.total_amount }}</div>
+                    {% endif %}
+                {% elif order.statement %}
+                    <div class="d-flex align-items-center mb-2">
+                        {% if order.statement.status == 'pending' %}
+                            <span class="badge bg-warning text-dark me-2">待确认</span>
+                        {% elif order.statement.status == 'confirmed' %}
+                            <span class="badge bg-info me-2">已确认</span>
+                        {% elif order.statement.status == 'paid' %}
+                            <span class="badge bg-primary me-2">已付款</span>
+                        {% endif %}
+                    </div>
+                    <div class="mb-1"><strong>对账单号：</strong>{{ order.statement.sn }}</div>
+                    <div class="mb-1"><strong>账单金额：</strong>¥{{ order.statement.total_amount }}</div>
+                    <div class="mb-1"><strong>账单周期：</strong>{{ order.statement.period_start|date:"m.d" }} ~ {{ order.statement.period_end|date:"m.d" }}</div>
+                    {% if order.statement.status == 'pending' %}
+                    <div class="mt-2">
+                        <a href="{% url 'customer_statement_detail' order.statement.id %}" class="btn btn-sm btn-primary w-100">去确认对账单</a>
+                    </div>
+                    {% elif order.statement.status == 'confirmed' %}
+                    <div class="mt-2">
+                        <form method="post" action="{% url 'customer_statement_confirm' order.statement.id %}" onsubmit="return confirm('确认已付款？')">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-success w-100">标记已付款</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                    <div class="mt-2">
+                        <a href="{% url 'customer_statement_export' order.statement.id %}" class="btn btn-sm btn-outline-primary w-100">
+                            <i class="bi bi-file-earmark-excel"></i> 导出对账单
+                        </a>
+                    </div>
+                {% elif order.status == 'received' %}
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-secondary me-2">未对账</span>
+                        <span class="text-muted">该订单尚未纳入对账单</span>
+                    </div>
+                {% else %}
+                    <div class="text-muted">订单未完成，暂不可对账</div>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- 状态流转 -->
         <div class="card mb-3">
             <div class="card-header">状态流转记录</div>
@@ -127,6 +252,9 @@
         </div>
         {% if order.can_cancel %}
         <a href="{% url 'cancel_order' order.id %}" class="btn btn-outline-danger w-100" onclick="return confirm('确定取消该订单吗？')">取消订单</a>
+        {% else %}
+        <button class="btn btn-outline-secondary w-100" disabled>取消订单</button>
+        <div class="cancel-hint">订单已进入生产，无法取消</div>
         {% endif %}
     </div>
 </div>
@@ -193,6 +321,53 @@
 }
 .progress-line.done {
     background: var(--green);
+}
+/* 物流时间线 */
+.tracking-timeline {
+    position: relative;
+    padding-left: 16px;
+    border-left: 2px solid #e0e0e0;
+}
+.tracking-item {
+    position: relative;
+    padding-bottom: 14px;
+    padding-left: 16px;
+}
+.tracking-item::before {
+    content: '';
+    position: absolute;
+    left: -21px;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ccc;
+    border: 2px solid #fff;
+}
+.tracking-item.latest::before {
+    background: var(--primary);
+    box-shadow: 0 0 0 3px rgba(25,118,210,0.2);
+}
+.tracking-item.latest .tracking-context {
+    color: var(--primary);
+    font-weight: 500;
+}
+.tracking-time {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+.tracking-context {
+    font-size: 13px;
+    color: var(--text-main);
+    line-height: 1.4;
+}
+/* 取消提示 */
+.cancel-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    text-align: center;
 }
 </style>
 {% endblock %}

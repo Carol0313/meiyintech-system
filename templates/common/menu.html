@@ -5,15 +5,18 @@
     <a class="nav-link {% if request.resolver_match.url_name == 'my_orders' %}active{% endif %}" href="{% url 'my_orders' %}"><i class="bi bi-journal-text"></i> 我的订单</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'my_addresses' %}active{% endif %}" href="{% url 'my_addresses' %}"><i class="bi bi-geo-alt"></i> 地址管理</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'profile' %}active{% endif %}" href="{% url 'profile' %}"><i class="bi bi-person"></i> 个人中心</a>
+    {% if user.customer_profile.is_main_account %}
+    <a class="nav-link {% if request.resolver_match.url_name == 'customer_subaccount_list' %}active{% endif %}" href="{% url 'customer_subaccount_list' %}"><i class="bi bi-person-badge"></i> 子账号管理</a>
+    {% endif %}
 
 {% elif user.user_type == 'merchant_admin' %}
-    <div class="nav-section">商户管理</div>
-    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_dashboard' %}active{% endif %}" href="{% url 'merchant_dashboard' %}"><i class="bi bi-speedometer2"></i> 工作台</a>
+    <div class="nav-section">管理中心</div>
+    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_dashboard' %}active{% endif %}" href="{% url 'merchant_dashboard' %}"><i class="bi bi-speedometer2"></i> 管理中心</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'member_list' %}active{% endif %}" href="{% url 'member_list' %}"><i class="bi bi-people"></i> 会员管理</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'factory_list' %}active{% endif %}" href="{% url 'factory_list' %}"><i class="bi bi-building"></i> 工厂管理</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'spec_list' %}active{% endif %}" href="{% url 'spec_list' %}"><i class="bi bi-box-seam"></i> 商品规格</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'merchant_orders' %}active{% endif %}" href="{% url 'merchant_orders' %}"><i class="bi bi-journal-text"></i> 订单管理</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'plate_layout_orders' %}active{% endif %}" href="{% url 'plate_layout_orders' %}"><i class="bi bi-grid-3x3"></i> 拼版工具</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'plate_batch_list' %}active{% endif %}" href="{% url 'plate_batch_list' %}"><i class="bi bi-grid-3x3"></i> 拼版工具</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'factory_production_board' %}active{% endif %}" href="{% url 'factory_production_board' %}"><i class="bi bi-gear-wide-connected"></i> 生产看板</a>
     <div class="nav-section">系统设置</div>
     <a class="nav-link {% if request.resolver_match.url_name == 'role_list' %}active{% endif %}" href="{% url 'role_list' %}"><i class="bi bi-shield-lock"></i> 岗位权限</a>
@@ -25,7 +28,7 @@
     <a class="nav-link {% if request.resolver_match.url_name == 'merchant_dashboard' %}active{% endif %}" href="{% url 'merchant_dashboard' %}"><i class="bi bi-speedometer2"></i> 首页</a>
     {% with role_name=user.staff_profile.role.name %}
         {% if role_name == 'designer' or role_name == 'admin' %}
-            <a class="nav-link {% if request.resolver_match.url_name == 'plate_layout_orders' %}active{% endif %}" href="{% url 'plate_layout_orders' %}"><i class="bi bi-grid-3x3"></i> 拼版工具</a>
+            <a class="nav-link {% if request.resolver_match.url_name == 'plate_batch_list' %}active{% endif %}" href="{% url 'plate_batch_list' %}"><i class="bi bi-grid-3x3"></i> 拼版工具</a>
         {% endif %}
         {% if role_name == 'customer_service' or role_name == 'admin' %}
             <a class="nav-link {% if request.resolver_match.url_name == 'merchant_orders' %}active{% endif %}" href="{% url 'merchant_orders' %}"><i class="bi bi-journal-text"></i> 订单管理</a>

@@ -4,37 +4,50 @@
 """
 
 import json
+import os
 from decimal import Decimal
+from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
-from django.db import transaction
+from django.db import transaction, models
 from django.utils import timezone
+from django.http import HttpResponse
+from django.core.files.storage import default_storage
 from apps.accounts.models import User, CustomerProfile, Merchant, StaffProfile, Role
-from apps.orders.models import Order, OrderItem, CommunicationLog, OrderStatusLog, PlateLayout, ProductionPhoto
+from apps.orders.models import Order, OrderItem, CommunicationLog, OrderStatusLog, PlateLayout, PlateBatch, PlateBatchItem, ProductionPhoto, Statement, DeliveryExtension
 from apps.products.models import ProductSpec, CustomSpecRequest
-from .models import Factory
-from utils.plate_layout import calculate_plate_layout, auto_generate_plate_layout_for_order
+from .models import Factory, FactoryEquipmentStatus, FactoryInventory
+from utils.plate_layout import calculate_plate_layout, calculate_plate_layout_rectpack, auto_generate_plate_layout_for_order
 
 
 def merchant_required(view_func):
     """商家管理员权限装饰器"""
     def wrapper(request, *args, **kwargs):
-        if not request.user.is_authenticated or request.user.user_type not in ('merchant_admin', 'merchant_staff'):
+        if not request.user.is_authenticated:
             messages.error(request, '请先登录商家账号')
             return redirect('login')
+        if request.user.user_type not in ('merchant_admin', 'merchant_staff'):
+            return render(request, 'common/account_unauthorized.html', {
+                'message': '请先登录商家账号',
+                'can_logout': True,
+            })
         # 商家管理员检查 managed_merchant
         if request.user.user_type == 'merchant_admin':
             if not getattr(request.user, 'managed_merchant', None):
-                messages.error(request, '您没有关联的商家')
-                return redirect('login')
+                return render(request, 'common/account_unauthorized.html', {
+                    'message': '您没有关联的商家，请联系平台管理员处理。',
+                    'can_logout': True,
+                })
         else:
             # 商家员工检查 staff_profile
             profile = getattr(request.user, 'staff_profile', None)
             if not profile or not profile.is_active:
-                messages.error(request, '您的员工账号未启用')
-                return redirect('login')
+                return render(request, 'common/account_unauthorized.html', {
+                    'message': '您的员工账号未启用，请联系商家管理员处理。',
+                    'can_logout': True,
+                })
         return view_func(request, *args, **kwargs)
     return wrapper
 
@@ -60,6 +73,43 @@ def get_merchant(request):
 
 # ==================== 商家首页 ====================
 
+# 制版行业每日一句小知识
+DAILY_TIPS = [
+    "腐蚀版的最细线条建议不小于0.12mm，否则晒版时容易断线。",
+    "烫金版使用阴片，压纹版使用阳片，下单时务必确认清楚。",
+    "镁版密度仅为1.74g/cm³，比铜版轻70%，适合大面积烫金。",
+    "雕刻版的拼版间距通常比腐蚀版大5mm，以确保CNC雕刻时不会互相干扰。",
+    "树脂版水洗工艺比倒模工艺更环保，但耐印率略低约15%。",
+    "菲林输出前必须确认文件已转曲，否则字体替换会导致跑位。",
+    "浮雕版（多层次）的最小间隙建议不小于0.10mm，避免雕刻时崩边。",
+    "加急订单建议提前与工厂确认排期，避免与其他订单冲突导致延误。",
+    "制版文件推荐使用AI 3.0格式保存，兼容性最佳且不易丢数据。",
+    "红框尺寸识别可以帮助设计师更准确地计算实际制版面积，减少误差。",
+    "不同厚度的版材拼版时，间距应增加至20mm以上，防止压印时互相影响。",
+    "平雕版与浮雕版的价格差异主要取决于雕刻深度、层次数量和材质。",
+    "铜版导热性优于镁版，适合高速烫金机长时间连续作业。",
+    "订单文件上传前建议先进行PDF预检，确保单色K100%，避免四色黑。",
+    "信用额度支付可以帮助大客户简化流程，月底统一对账更方便。",
+    "6.35mm厚度的镁版常用于深压纹，压印深度可达2-3mm。",
+    "菲林对位时需要保留角线，裁切后角线宽度不应小于0.5mm。",
+    "腐蚀版在显影后要仔细检查是否有砂眼，可用红墨水补涂修复。",
+    "雕刻版的刀具直径最小可达0.1mm，但过细容易崩刀，建议0.2mm以上。",
+    "版材存放应避免潮湿环境，镁版在湿度>70%时容易氧化发黑。",
+    "补版单无需重新支付，系统会自动关联原订单的拼版数据。",
+    "烫金温度建议控制在140-180℃之间，过高会导致烫金纸粘版。",
+    "UV菲林与普通对位菲林的区别在于UV菲林需要更高的线条对比度。",
+    "激凸版的内角线距离图案不足10mm时，建议保留5mm安全间距。",
+    "不锈钢版耐腐蚀性最佳，适合化妆品、食品等高标准包装烫金。",
+]
+
+
+def get_daily_tip():
+    """根据日期获取每日一句（每天固定一句，全年循环）"""
+    from datetime import date
+    day_index = date.today().toordinal()
+    return DAILY_TIPS[day_index % len(DAILY_TIPS)]
+
+
 @login_required
 @merchant_required
 def merchant_dashboard(request):
@@ -76,6 +126,7 @@ def merchant_dashboard(request):
         'in_production': in_production,
         'customer_count': customer_count,
         'recent_orders': recent_orders,
+        'daily_tip': get_daily_tip(),
     }
     return render(request, 'merchant/dashboard.html', ctx)
 
@@ -122,6 +173,20 @@ def member_list(request):
     if status_filter:
         members = members.filter(registration_status=status_filter)
     members = members.order_by('-created_at')
+    
+    # 为每个客户预计算未对账金额和订单数
+    from django.db.models import Sum, Count, Q
+    for m in members:
+        unsettled_stats = Order.objects.filter(
+            customer=m.user,
+            merchant=merchant,
+            status='received',
+            is_settled=False,
+            statement__isnull=True,
+        ).aggregate(total=Sum('total_amount'), count=Count('id'))
+        m.unsettled_amount = unsettled_stats['total'] or 0
+        m.unsettled_count = unsettled_stats['count'] or 0
+    
     return render(request, 'merchant/member_list.html', {
         'members': members,
         'status_filter': status_filter,
@@ -130,8 +195,78 @@ def member_list(request):
 
 @login_required
 @merchant_required
+def member_pricing(request, profile_id):
+    """客户报价单：商户为待审核客户填写各规格单价，系统根据城市档位核对差异"""
+    merchant = get_merchant(request)
+    profile = get_object_or_404(CustomerProfile, pk=profile_id, merchant=merchant)
+
+    from utils.pricing_tiers import (
+        get_product_category, is_etching_product,
+        get_etching_price, get_carving_price, TIER_PRICES
+    )
+
+    if request.method == 'POST':
+        import json
+        custom_prices = {}
+        for key, value in request.POST.items():
+            if key.startswith('price_'):
+                spec_key = key[6:]  # 去掉 "price_" 前缀
+                try:
+                    val = Decimal(value)
+                    if val >= 0:
+                        custom_prices[spec_key] = str(val.quantize(Decimal('0.01')))
+                except:
+                    pass
+        profile.custom_prices = json.dumps(custom_prices, ensure_ascii=False)
+        profile.credit_limit = Decimal(request.POST.get('credit_limit', '10000'))
+        profile.registration_status = 'approved'
+        profile.save()
+        profile.user.is_approved = True
+        profile.user.save(update_fields=['is_approved'])
+        messages.success(request, f'已保存报价并审核通过 {profile.real_name or profile.user.phone}')
+        return redirect('member_list')
+
+    # GET: 构建报价单数据
+    specs = ProductSpec.objects.filter(is_platform_preset=True).order_by('product_name', 'material', 'thickness')
+    groups = {}
+    for s in specs:
+        category = get_product_category(s.product_name)
+        if category not in groups:
+            groups[category] = []
+        key = f"{s.product_name}_{s.material}_{s.thickness}"
+        if is_etching_product(s.product_name):
+            ref_price = get_etching_price(profile.pricing_tier, s.thickness)
+        else:
+            ref_price = get_carving_price(s.product_name, s.material, s.thickness)
+        import json
+        try:
+            stored_prices = json.loads(profile.custom_prices or '{}')
+        except Exception:
+            stored_prices = {}
+        current_price = stored_prices.get(key, str(ref_price))
+        groups[category].append({
+            'spec': s,
+            'key': key,
+            'ref_price': ref_price,
+            'current_price': current_price,
+        })
+
+    # 参考档位腐蚀价汇总（用于页面顶部提示）
+    tier = profile.pricing_tier
+    tier_ref = TIER_PRICES.get(tier, TIER_PRICES[3])
+
+    return render(request, 'merchant/member_pricing.html', {
+        'profile': profile,
+        'groups': groups,
+        'tier': tier,
+        'tier_ref': tier_ref,
+    })
+
+
+@login_required
+@merchant_required
 def member_approve(request, profile_id):
-    """审核通过会员"""
+    """审核通过会员（保留入口，供直接调用）"""
     merchant = get_merchant(request)
     profile = get_object_or_404(CustomerProfile, pk=profile_id, merchant=merchant)
     if request.method == 'POST':
@@ -222,6 +357,211 @@ def factory_edit(request, pk):
     return render(request, 'merchant/factory_form.html', {'factory': factory, 'title': '编辑工厂'})
 
 
+@login_required
+@merchant_required
+def factory_detail(request, pk):
+    """工厂详情页：设备状态 + 库存管理"""
+    merchant = get_merchant(request)
+    factory = get_object_or_404(Factory, pk=pk, merchant=merchant)
+
+    # 确保设备状态记录存在
+    equipment_status, _ = FactoryEquipmentStatus.objects.get_or_create(
+        factory=factory,
+        defaults={'status_text': '一切正常'}
+    )
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'update_equipment':
+            equipment_status.status_text = request.POST.get('status_text', '一切正常')
+            equipment_status.notes = request.POST.get('notes', '')
+            equipment_status.save()
+            messages.success(request, '设备状态已更新')
+
+        elif action == 'add_inventory':
+            FactoryInventory.objects.create(
+                factory=factory,
+                name=request.POST.get('name', ''),
+                category=request.POST.get('category', ''),
+                quantity=request.POST.get('quantity', ''),
+                unit=request.POST.get('unit', ''),
+                notes=request.POST.get('notes', '')
+            )
+            messages.success(request, '库存项已添加')
+
+        elif action == 'update_inventory':
+            inv_id = request.POST.get('inventory_id')
+            inv = get_object_or_404(FactoryInventory, pk=inv_id, factory=factory)
+            inv.name = request.POST.get('name', inv.name)
+            inv.category = request.POST.get('category', inv.category)
+            inv.quantity = request.POST.get('quantity', inv.quantity)
+            inv.unit = request.POST.get('unit', inv.unit)
+            inv.notes = request.POST.get('notes', inv.notes)
+            inv.save()
+            messages.success(request, '库存项已更新')
+
+        elif action == 'delete_inventory':
+            inv_id = request.POST.get('inventory_id')
+            inv = get_object_or_404(FactoryInventory, pk=inv_id, factory=factory)
+            inv.delete()
+            messages.success(request, '库存项已删除')
+
+        return redirect('factory_detail', pk=pk)
+
+    inventories = factory.inventories.all()
+    return render(request, 'merchant/factory_detail.html', {
+        'factory': factory,
+        'equipment_status': equipment_status,
+        'inventories': inventories,
+    })
+
+
+@login_required
+@merchant_required
+def export_inventory(request, pk):
+    """导出工厂库存盘点表Excel"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    from io import BytesIO
+
+    merchant = get_merchant(request)
+    factory = get_object_or_404(Factory, pk=pk, merchant=merchant)
+    inventories = factory.inventories.all().order_by('category', 'name')
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = '库存盘点表'
+
+    # ===== 样式定义 =====
+    title_font = Font(name='微软雅黑', size=16, bold=True)
+    subtitle_font = Font(name='微软雅黑', size=10, color='666666')
+    header_font = Font(name='微软雅黑', size=11, bold=True, color='FFFFFF')
+    normal_font = Font(name='微软雅黑', size=10)
+    category_font = Font(name='微软雅黑', size=11, bold=True, color='1a56db')
+    thin_border = Border(
+        left=Side(style='thin', color='000000'),
+        right=Side(style='thin', color='000000'),
+        top=Side(style='thin', color='000000'),
+        bottom=Side(style='thin', color='000000')
+    )
+    center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    left_align = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    header_fill = PatternFill(start_color='2563eb', end_color='2563eb', fill_type='solid')
+    category_fill = PatternFill(start_color='dbeafe', end_color='dbeafe', fill_type='solid')
+
+    # ===== 第1行：标题 =====
+    ws.merge_cells('A1:H1')
+    ws['A1'] = f'{factory.name} — 库存盘点表'
+    ws['A1'].font = title_font
+    ws['A1'].alignment = center_align
+    ws.row_dimensions[1].height = 32
+
+    # ===== 第2行：信息 =====
+    ws.merge_cells('A2:H2')
+    ws['A2'] = f'导出时间：{timezone.now().strftime("%Y年%m月%d日 %H:%M")}    共 {inventories.count()} 项'
+    ws['A2'].font = subtitle_font
+    ws['A2'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[2].height = 22
+
+    # 空行
+    ws.row_dimensions[3].height = 8
+
+    # ===== 第4行：表头 =====
+    headers = ['序号', '名称', '分类', '系统数量', '单位', '盘点数量', '差异', '备注']
+    col_widths = [6, 38, 14, 14, 8, 14, 14, 30]
+    for idx, (header, width) in enumerate(zip(headers, col_widths), 1):
+        cell = ws.cell(row=4, column=idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center_align
+        cell.border = thin_border
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    ws.row_dimensions[4].height = 26
+
+    # ===== 数据行 =====
+    current_row = 5
+    current_category = None
+    seq = 0
+
+    for inv in inventories:
+        # 分类分隔行（新分类时插入）
+        if inv.category != current_category:
+            if current_category is not None:
+                current_row += 1  # 空一行
+            ws.merge_cells(f'A{current_row}:H{current_row}')
+            cell = ws.cell(row=current_row, column=1, value=f'▸ {inv.category or "未分类"}')
+            cell.font = category_font
+            cell.fill = category_fill
+            cell.alignment = left_align
+            cell.border = thin_border
+            for c in range(2, 9):
+                ws.cell(row=current_row, column=c).border = thin_border
+            ws.row_dimensions[current_row].height = 24
+            current_row += 1
+            current_category = inv.category
+
+        seq += 1
+        row_data = [
+            seq,
+            inv.name,
+            inv.category or '',
+            inv.quantity or '',
+            inv.unit or '',
+            '',  # 盘点数量（空白供手写）
+            '',  # 差异（空白）
+            inv.notes or '',
+        ]
+
+        for idx, val in enumerate(row_data, 1):
+            cell = ws.cell(row=current_row, column=idx, value=val)
+            cell.font = normal_font
+            cell.border = thin_border
+            if idx == 1:
+                cell.alignment = center_align
+            elif idx in (6, 7):
+                cell.fill = PatternFill(start_color='fffbeb', end_color='fffbeb', fill_type='solid')
+                cell.alignment = center_align
+            else:
+                cell.alignment = left_align
+
+        ws.row_dimensions[current_row].height = 22
+        current_row += 1
+
+    # ===== 底部签名区 =====
+    current_row += 1
+    ws.merge_cells(f'A{current_row}:D{current_row}')
+    ws.cell(row=current_row, column=1, value='盘点人签字：__________________')
+    ws.cell(row=current_row, column=1).font = normal_font
+    ws.cell(row=current_row, column=1).alignment = left_align
+
+    ws.merge_cells(f'E{current_row}:H{current_row}')
+    ws.cell(row=current_row, column=5, value='审核人签字：__________________')
+    ws.cell(row=current_row, column=5).font = normal_font
+    ws.cell(row=current_row, column=5).alignment = left_align
+
+    # ===== 冻结窗格 & 打印设置 =====
+    ws.freeze_panes = 'A5'
+    ws.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetupProperties(fitToPage=True)
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.fitToWidth = 1
+    ws.print_options.gridLines = False
+
+    # ===== 输出 =====
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"库存盘点表_{factory.name}_{timezone.now().strftime('%Y%m%d')}.xlsx"
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
 # ==================== 商品规格管理 ====================
 
 @login_required
@@ -308,7 +648,8 @@ def merchant_orders(request):
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     customer_query = request.GET.get('customer')
-    orders = merchant.orders.filter(is_submitted=True)
+    statement_status = request.GET.get('statement_status', '')
+    orders = merchant.orders.filter(is_submitted=True).select_related('customer__customer_profile').prefetch_related('items', 'plate_layout', 'statement')
     if status_filter:
         orders = orders.filter(status=status_filter)
     if date_from:
@@ -317,11 +658,19 @@ def merchant_orders(request):
         orders = orders.filter(created_at__date__lte=date_to)
     if customer_query:
         orders = orders.filter(customer__phone__icontains=customer_query)
+    # 对账状态筛选
+    if statement_status == 'unsettled':
+        orders = orders.filter(status='received', is_settled=False, statement__isnull=True)
+    elif statement_status == 'statemented':
+        orders = orders.filter(statement__isnull=False, is_settled=False)
+    elif statement_status == 'settled':
+        orders = orders.filter(is_settled=True)
     orders = orders.order_by('-created_at')
     return render(request, 'merchant/orders.html', {
         'orders': orders,
         'status_choices': Order.STATUS_CHOICES,
         'status_filter': status_filter,
+        'statement_status': statement_status,
     })
 
 
@@ -359,15 +708,27 @@ def merchant_order_detail(request, order_id):
             factory_id = request.POST.get('factory_id')
             cycle = request.POST.get('production_cycle')
             if factory_id and cycle:
-                # 检查是否已完成拼版
+                # 检查是否已完成拼版（兼容旧版 PlateLayout 和 新版 PlateBatch）
+                has_layout = False
                 plate_layout = getattr(order, 'plate_layout', None)
-                if not plate_layout or not plate_layout.layout_data:
+                if plate_layout and plate_layout.layout_data:
+                    has_layout = True
+                if order.plate_batch_items.exists():
+                    has_layout = True
+                if not has_layout:
                     messages.error(request, '该订单尚未完成拼版，请先安排设计师拼版')
                     return redirect('merchant_order_detail', order_id=order_id)
                 order.factory_id = factory_id
                 order.production_cycle = int(cycle)
                 order.save(update_fields=['factory', 'production_cycle'])
                 order.transition_status('in_production', operator=request.user, remark='已安排生产')
+                # 同步更新 PlateBatch
+                for pbi in order.plate_batch_items.all():
+                    pb = pbi.plate_batch
+                    if pb.status in ('auto_generated', 'confirmed'):
+                        pb.status = 'in_production'
+                        pb.factory_id = factory_id
+                        pb.save(update_fields=['status', 'factory'])
                 messages.success(request, '生产已安排，工厂将在下个整点收到订单')
         elif action == 'reject':
             reason = request.POST.get('rejection_reason', '')
@@ -376,23 +737,116 @@ def merchant_order_detail(request, order_id):
             order.transition_status('info_error', operator=request.user, remark=f'无法生产: {reason}')
             messages.info(request, '订单已驳回')
         elif action == 'ship':
+            from django.utils import timezone
             order.tracking_number = request.POST.get('tracking_number', '')
-            order.save(update_fields=['tracking_number'])
-            order.transition_status('shipped', operator=request.user, remark='已发货')
+            order.tracking_company = request.POST.get('tracking_company', '')
+            order.shipped_at = timezone.now()
+            order.save(update_fields=['tracking_number', 'tracking_company', 'shipped_at'])
+            order.transition_status('received', operator=request.user, remark='已发货')
             messages.success(request, '订单已发货')
         elif action == 'mark_paid':
+            old_status = order.status
             order.transition_status('paid', operator=request.user, remark='线下支付已确认')
-            # 扣除信用额度或记录
-            profile = order.customer.customer_profile
-            if profile.credit_remaining >= order.total_amount:
-                profile.credit_used += order.total_amount
-                profile.save(update_fields=['credit_used'])
+            # 只有从"待支付"转为"已支付"时才扣除额度，避免重复扣
+            if old_status == 'pending_payment':
+                profile = order.customer.customer_profile
+                if profile.credit_remaining >= order.total_amount:
+                    profile.credit_used += order.total_amount
+                    profile.save(update_fields=['credit_used'])
+                else:
+                    messages.warning(request, '客户信用额度不足，订单已标记为已支付但额度未扣减')
             messages.success(request, '已标记为已支付')
+        elif action == 'confirm_payment':
+            # 确认收款并释放额度（订单层面直接处理）
+            if order.status not in ('paid', 'received', 'shipped', 'in_production'):
+                messages.error(request, '该订单当前状态不支持确认收款')
+            elif order.is_settled:
+                messages.info(request, '该订单已结清，无需重复操作')
+            elif order.statement and order.statement.status != 'settled':
+                messages.warning(
+                    request,
+                    f'该订单已关联对账单 {order.statement.sn}，请通过对账单页面进行结清操作'
+                )
+            else:
+                with transaction.atomic():
+                    order.is_settled = True
+                    order.save(update_fields=['is_settled'])
+                    profile = order.customer.customer_profile
+                    profile.credit_used -= order.total_amount
+                    if profile.credit_used < 0:
+                        profile.credit_used = 0
+                    profile.save(update_fields=['credit_used'])
+                messages.success(
+                    request,
+                    f'已确认收款并释放额度 ¥{order.total_amount}，'
+                    f'客户 {order.customer.phone} 当前已用额度 ¥{profile.credit_used} / ¥{profile.credit_limit}'
+                )
+        elif action == 'reupload_file':
+            # 设计师重新上传处理后的文件
+            item_id = request.POST.get('item_id')
+            item = get_object_or_404(OrderItem, pk=item_id, order=order)
+            if request.FILES.get('pdf_file'):
+                file = request.FILES['pdf_file']
+                ext = os.path.splitext(file.name)[1].lower()
+                if ext not in ('.pdf', '.ai'):
+                    messages.error(request, '仅支持PDF或AI格式文件')
+                    return redirect('merchant_order_detail', order_id=order_id)
+                # 保存新文件
+                import uuid
+                filename = f"order_files/{order.customer.id}/{uuid.uuid4().hex}{ext}"
+                path = default_storage.save(filename, file)
+                item.file = path
+                item.save(update_fields=['file'])
+                # 自动重新拼版
+                try:
+                    auto_generate_plate_layout_for_order(order)
+                    order.plate_status = 'auto_generated'
+                    order.save(update_fields=['plate_status'])
+                    messages.success(request, f'文件已重新上传，系统已自动重新拼版，请设计师确认')
+                except Exception as e:
+                    messages.success(request, f'文件已重新上传，但自动拼版失败，请手动处理')
+            else:
+                messages.error(request, '请选择PDF文件')
         return redirect('merchant_order_detail', order_id=order_id)
+
+    # GET: 生成预检报告供商户/设计师参考
+    import os
+    from django.conf import settings
+    from utils.pdf_preflight import preflight_pdf, generate_preflight_report_html
+    preflight_reports = []
+    has_file_issues = False
+    for item in order.items.all():
+        if item.file:
+            try:
+                file_path = os.path.join(settings.MEDIA_ROOT, item.file.name)
+                if os.path.exists(file_path):
+                    report = preflight_pdf(file_path, min_line_width_mm=0.12)
+                    preflight_reports.append({
+                        'item_id': str(item.id),
+                        'item_label': f"{item.get_product_name_display()} #{str(item.id)[:8]}",
+                        'report_html': generate_preflight_report_html(report),
+                        'pass': report['pass'],
+                    })
+                    if not report['pass']:
+                        has_file_issues = True
+            except Exception:
+                pass
+
+    # 查询快递100物流轨迹
+    tracking_data = None
+    if order.tracking_number:
+        from utils.kuaidi100 import query_tracking, format_tracking_data
+        result = query_tracking(order.tracking_number)
+        if result['success']:
+            tracking_data = format_tracking_data(result['data'])
+
     return render(request, 'merchant/order_detail.html', {
         'order': order,
         'factories': factories,
         'designers': designers,
+        'preflight_reports': preflight_reports,
+        'has_file_issues': has_file_issues,
+        'tracking_data': tracking_data,
     })
 
 
@@ -411,6 +865,187 @@ def upload_production_photo(request, order_id):
         )
         messages.success(request, '照片已上传')
     return redirect('merchant_order_detail', order_id=order_id)
+
+
+@login_required
+@merchant_required
+def batch_process_orders(request):
+    """批量处理订单（二级页面）：支持审核、拼版确认、安排生产、上传文件"""
+    merchant = get_merchant(request)
+    factories = merchant.factories.filter(is_active=True)
+
+    if request.method == 'POST':
+        order_ids_str = request.POST.get('order_ids', '')
+        order_ids = [oid.strip() for oid in order_ids_str.split(',') if oid.strip()]
+        if not order_ids:
+            messages.warning(request, '未选择任何订单')
+            return redirect('merchant_orders')
+
+        success_count = 0
+        error_msgs = []
+
+        for oid in order_ids:
+            try:
+                order = Order.objects.get(pk=oid, merchant=merchant, is_submitted=True)
+            except Order.DoesNotExist:
+                continue
+
+            action = None
+            if request.POST.get(f'do_audit_{oid}'):
+                action = 'audit'
+            elif request.POST.get(f'do_confirm_{oid}'):
+                action = 'confirm_plate'
+            elif request.POST.get(f'do_arrange_{oid}'):
+                action = 'arrange_production'
+            elif request.POST.get(f'do_ship_{oid}'):
+                action = 'ship'
+
+            # 文件上传单独检测（不需要 checkbox）
+            file_uploaded = False
+            for item in order.items.all():
+                file_key = f'file_{oid}_{item.id}'
+                if file_key in request.FILES:
+                    uploaded = request.FILES[file_key]
+                    ext = os.path.splitext(uploaded.name)[1].lower()
+                    if ext not in ('.pdf', '.ai'):
+                        error_msgs.append(f'{order.sn}: 仅支持PDF或AI格式')
+                        continue
+                    import uuid
+                    filename = f"order_files/{order.customer.id}/{uuid.uuid4().hex}{ext}"
+                    path = default_storage.save(filename, uploaded)
+                    item.file = path
+                    item.save(update_fields=['file'])
+                    file_uploaded = True
+            if file_uploaded:
+                try:
+                    auto_generate_plate_layout_for_order(order)
+                    order.plate_status = 'auto_generated'
+                    order.save(update_fields=['plate_status'])
+                except Exception:
+                    pass
+                success_count += 1
+                # 如果同时有其他 action，也继续执行
+
+            if not action:
+                continue
+
+            try:
+                if action == 'audit':
+                    if order.status == 'pending_confirm':
+                        order.transition_status('design_confirmed', operator=request.user, remark='批量审核通过')
+                        auto_generate_plate_layout_for_order(order)
+                        order.plate_status = 'auto_generated'
+                        order.save(update_fields=['plate_status'])
+                        success_count += 1
+                    else:
+                        error_msgs.append(f'{order.sn}: 当前状态不支持审核通过')
+
+                elif action == 'confirm_plate':
+                    if order.plate_status == 'auto_generated':
+                        has_layout = False
+                        layout = getattr(order, 'plate_layout', None)
+                        if layout and layout.layout_data:
+                            has_layout = True
+                        if order.plate_batch_items.exists():
+                            has_layout = True
+                        if has_layout:
+                            order.plate_status = 'confirmed'
+                            default_factory = factories.first()
+                            if default_factory:
+                                order.factory = default_factory
+                            order.save(update_fields=['plate_status', 'factory'])
+                            order.transition_status('in_production', operator=request.user, remark='批量确认拼版，自动下发工厂生产')
+                            # 同步更新关联的 PlateBatch
+                            for pbi in order.plate_batch_items.all():
+                                pb = pbi.plate_batch
+                                if pb.status == 'auto_generated':
+                                    pb.status = 'confirmed'
+                                    pb.factory = default_factory
+                                    pb.save(update_fields=['status', 'factory'])
+                            success_count += 1
+                        else:
+                            error_msgs.append(f'{order.sn}: 尚未生成拼版数据')
+                    else:
+                        error_msgs.append(f'{order.sn}: 拼版状态不支持确认')
+
+                elif action == 'arrange_production':
+                    if order.status in ('paid', 'design_confirmed'):
+                        factory_id = request.POST.get(f'factory_{oid}')
+                        cycle = request.POST.get(f'cycle_{oid}')
+                        if factory_id and cycle:
+                            has_layout = False
+                            plate_layout = getattr(order, 'plate_layout', None)
+                            if plate_layout and plate_layout.layout_data:
+                                has_layout = True
+                            if order.plate_batch_items.exists():
+                                has_layout = True
+                            if not has_layout:
+                                error_msgs.append(f'{order.sn}: 该订单尚未完成拼版')
+                                continue
+                            order.factory_id = factory_id
+                            order.production_cycle = int(cycle)
+                            order.save(update_fields=['factory', 'production_cycle'])
+                            order.transition_status('in_production', operator=request.user, remark='批量安排生产')
+                            # 同步更新 PlateBatch
+                            for pbi in order.plate_batch_items.all():
+                                pb = pbi.plate_batch
+                                if pb.status in ('auto_generated', 'confirmed'):
+                                    pb.status = 'in_production'
+                                    pb.factory_id = factory_id
+                                    pb.save(update_fields=['status', 'factory'])
+                            success_count += 1
+                        else:
+                            error_msgs.append(f'{order.sn}: 请选择工厂和发货时效')
+                    else:
+                        error_msgs.append(f'{order.sn}: 当前状态不支持安排生产')
+
+                elif action == 'ship':
+                    if order.status == 'in_production':
+                        tracking = request.POST.get(f'tracking_{oid}', '')
+                        company = request.POST.get(f'company_{oid}', '')
+                        order.tracking_number = tracking
+                        order.tracking_company = company
+                        order.shipped_at = timezone.now()
+                        order.save(update_fields=['tracking_number', 'tracking_company', 'shipped_at'])
+                        order.transition_status('received', operator=request.user, remark='批量发货')
+                        success_count += 1
+                    else:
+                        error_msgs.append(f'{order.sn}: 当前状态不支持发货')
+
+            except Exception as e:
+                error_msgs.append(f'{order.sn}: 处理失败 ({str(e)})')
+
+        if success_count > 0:
+            messages.success(request, f'成功处理 {success_count} 个订单')
+        if error_msgs:
+            for msg in error_msgs[:5]:
+                messages.warning(request, msg)
+            if len(error_msgs) > 5:
+                messages.warning(request, f'还有 {len(error_msgs) - 5} 个订单处理失败')
+        return redirect('merchant_orders')
+
+    # GET
+    order_ids_str = request.GET.get('order_ids', '')
+    order_ids = [oid.strip() for oid in order_ids_str.split(',') if oid.strip()]
+    if not order_ids:
+        messages.warning(request, '未选择任何订单')
+        return redirect('merchant_orders')
+
+    orders = Order.objects.filter(
+        pk__in=order_ids, merchant=merchant, is_submitted=True
+    ).prefetch_related('items', 'plate_layout')
+
+    # 按状态分组统计
+    status_counts = {}
+    for o in orders:
+        status_counts[o.status] = status_counts.get(o.status, 0) + 1
+
+    return render(request, 'merchant/batch_process_orders.html', {
+        'orders': orders,
+        'factories': factories,
+        'status_counts': status_counts,
+        'order_ids_str': order_ids_str,
+    })
 
 
 # ==================== 拼版工具 ====================
@@ -440,10 +1075,22 @@ def plate_layout_orders(request):
 @login_required
 @merchant_required
 def plate_layout_work(request, order_id):
-    """拼版工作台"""
+    """拼版工作台（支持多种拼版算法切换）"""
     merchant = get_merchant(request)
     order = get_object_or_404(Order, pk=order_id, merchant=merchant)
     items = order.items.all()
+    
+    # 算法选择
+    ALGORITHMS = [
+        ('shelf', '原生日志算法 (Shelf)'),
+        ('maxrects', 'MaxRects（推荐·利用率最高）'),
+        ('guillotine', 'Guillotine（平衡型）'),
+        ('skyline', 'Skyline（快速型）'),
+    ]
+    algorithm = request.GET.get('algorithm', 'maxrects')
+    if algorithm not in [a[0] for a in ALGORITHMS]:
+        algorithm = 'maxrects'
+    
     # 获取尺寸信息用于拼版算法
     rects = []
     for item in items:
@@ -457,7 +1104,7 @@ def plate_layout_work(request, order_id):
     # 拼版建议
     suggestion = None
     if rects:
-        suggestion = calculate_plate_layout(rects, plate_width=600, plate_height=1000)
+        suggestion = calculate_plate_layout_rectpack(rects, plate_width=600, plate_height=1000, algorithm=algorithm)
     layout = getattr(order, 'plate_layout', None)
 
     # 解析已保存的拼版数据（JSON字符串 -> dict）用于模板展示
@@ -470,6 +1117,54 @@ def plate_layout_work(request, order_id):
     # 如果已有保存的拼版数据，优先用它作为画布展示
     if layout_data_parsed:
         suggestion = layout_data_parsed
+
+    # 计算画布缩放比例（画布固定高度500px，宽度按col-md-8约750px估算）
+    CANVAS_WIDTH = 750
+    CANVAS_HEIGHT = 500
+    scaled_rectangles = []
+    scaled_plate_width = 0
+    scaled_plate_height = 0
+    scale = 1.0
+    
+    # 预生成每个订单项的PDF预览图（用于拼版画布显示实际内容，带版类视觉效果）
+    item_previews = {}
+    for item in items:
+        if item.file:
+            try:
+                file_path = os.path.join(settings.MEDIA_ROOT, item.file.name)
+                if os.path.exists(file_path):
+                    preview_filename = f"previews/plate_{order.id}_{item.id}.png"
+                    from utils.plate_preview_effects import generate_effect_preview
+                    preview_path = generate_effect_preview(
+                        file_path, preview_filename,
+                        product_name=item.product_name,
+                        plate_type_key=getattr(item, 'plate_type', None),
+                        dpi=150
+                    )
+                    if preview_path:
+                        item_previews[str(item.id)] = settings.MEDIA_URL + preview_filename
+            except Exception:
+                pass
+    
+    if suggestion and suggestion.get('plate_width') and suggestion.get('plate_height'):
+        pw = float(suggestion['plate_width'])
+        ph = float(suggestion['plate_height'])
+        scale_w = CANVAS_WIDTH / pw
+        scale_h = CANVAS_HEIGHT / ph
+        scale = min(scale_w, scale_h)
+        scaled_plate_width = round(pw * scale, 1)
+        scaled_plate_height = round(ph * scale, 1)
+        for rect in suggestion.get('rectangles', []):
+            rect_id = rect.get('id', '')
+            scaled_rectangles.append({
+                'id': rect_id,
+                'x': round(float(rect.get('x', 0)) * scale, 1),
+                'y': round(float(rect.get('y', 0)) * scale, 1),
+                'width': round(float(rect.get('width', 0)) * scale, 1),
+                'height': round(float(rect.get('height', 0)) * scale, 1),
+                'label': rect.get('label', ''),
+                'preview_url': item_previews.get(rect_id, ''),
+            })
 
     if request.method == 'POST':
         action = request.POST.get('action', 'save')
@@ -551,6 +1246,11 @@ def plate_layout_work(request, order_id):
         'layout': layout,
         'layout_data_parsed': layout_data_parsed,
         'preflight_reports': preflight_reports,
+        'scaled_rectangles': scaled_rectangles,
+        'scaled_plate_width': scaled_plate_width,
+        'scaled_plate_height': scaled_plate_height,
+        'algorithm': algorithm,
+        'algorithms': ALGORITHMS,
     })
 
 
@@ -682,10 +1382,10 @@ def factory_production_board(request):
     # 处理POST操作
     if request.method == 'POST':
         action = request.POST.get('action')
-        order_id = request.POST.get('order_id')
-        order = get_object_or_404(Order, pk=order_id, merchant=merchant)
 
         if action == 'start':
+            order_id = request.POST.get('order_id')
+            order = get_object_or_404(Order, pk=order_id, merchant=merchant)
             order.production_started_at = timezone.now()
             order.save(update_fields=['production_started_at'])
             OrderStatusLog.objects.create(
@@ -694,6 +1394,8 @@ def factory_production_board(request):
             )
             messages.success(request, f'订单 {order.sn} 已开始生产')
         elif action == 'complete':
+            order_id = request.POST.get('order_id')
+            order = get_object_or_404(Order, pk=order_id, merchant=merchant)
             order.production_completed_at = timezone.now()
             order.save(update_fields=['production_completed_at'])
             # 上传生产照片
@@ -709,6 +1411,101 @@ def factory_production_board(request):
                 operator=request.user, remark='工厂生产完成'
             )
             messages.success(request, f'订单 {order.sn} 已标记生产完成')
+        elif action == 'ship':
+            order_id = request.POST.get('order_id')
+            order = get_object_or_404(Order, pk=order_id, merchant=merchant)
+            ship_method = request.POST.get('ship_method', 'express')
+            if request.FILES.get('photo'):
+                photo_type = 'express_receipt' if ship_method == 'express' else 'delivery_photo'
+                ProductionPhoto.objects.create(
+                    order=order,
+                    photo_type=photo_type,
+                    image=request.FILES['photo'],
+                    uploaded_by=request.user
+                )
+            order.delivery_type = 'express' if ship_method == 'express' else 'flash'
+            order.tracking_company = request.POST.get('tracking_company', '')
+            order.save(update_fields=['delivery_type', 'tracking_company'])
+            remark = '快递发货' if ship_method == 'express' else '自行派送'
+            order.shipped_at = timezone.now()
+            order.save(update_fields=['shipped_at'])
+            order.transition_status('received', operator=request.user, remark=remark)
+            messages.success(request, f'订单 {order.sn} 已发货（{remark}）')
+        elif action == 'extend_delivery':
+            order_id = request.POST.get('order_id')
+            order = get_object_or_404(Order, pk=order_id, merchant=merchant)
+            new_date_str = request.POST.get('new_date')
+            reason = request.POST.get('reason', '')
+            if not new_date_str:
+                messages.error(request, '请选择新的交货时间')
+                return redirect('factory_production_board')
+            from datetime import datetime
+            try:
+                new_date = datetime.strptime(new_date_str, '%Y-%m-%dT%H:%M')
+            except ValueError:
+                messages.error(request, '交货时间格式不正确')
+                return redirect('factory_production_board')
+            original_date = order.delivery_date
+            DeliveryExtension.objects.create(
+                order=order,
+                original_date=original_date,
+                new_date=new_date,
+                reason=reason,
+                created_by=request.user
+            )
+            order.delivery_date = new_date
+            order.save(update_fields=['delivery_date'])
+            OrderStatusLog.objects.create(
+                order=order, from_status='in_production', to_status='in_production',
+                operator=request.user, remark=f'申请延长交货时间: {original_date} -> {new_date}，原因: {reason}'
+            )
+            messages.success(request, f'订单 {order.sn} 交货时间已延长至 {new_date.strftime("%m-%d %H:%M")}')
+            return redirect('factory_production_board')
+        elif action == 'upload_production_photo':
+            order_id = request.POST.get('order_id')
+            order = get_object_or_404(Order, pk=order_id, merchant=merchant)
+            photo = request.FILES.get('photo')
+            if photo:
+                ProductionPhoto.objects.create(
+                    order=order,
+                    photo_type='production',
+                    image=photo,
+                    uploaded_by=request.user
+                )
+                messages.success(request, f'订单 {order.sn} 生产照片已上传')
+            else:
+                messages.warning(request, '未选择照片')
+            return redirect('factory_production_board')
+        elif action == 'batch_ship':
+            shipped_count = 0
+            for key, value in request.POST.items():
+                if key.startswith('ship_order_'):
+                    order_id = key[11:]
+                    try:
+                        order = Order.objects.get(pk=order_id, merchant=merchant, status='in_production', production_completed_at__isnull=False)
+                    except Order.DoesNotExist:
+                        continue
+                    ship_method = request.POST.get(f'ship_method_{order_id}', 'express')
+                    photo = request.FILES.get(f'photo_{order_id}')
+                    if photo:
+                        photo_type = 'express_receipt' if ship_method == 'express' else 'delivery_photo'
+                        ProductionPhoto.objects.create(
+                            order=order,
+                            photo_type=photo_type,
+                            image=photo,
+                            uploaded_by=request.user
+                        )
+                    order.delivery_type = 'express' if ship_method == 'express' else 'flash'
+                    order.tracking_company = request.POST.get(f'tracking_company_{order_id}', '')
+                    order.shipped_at = timezone.now()
+                    order.save(update_fields=['delivery_type', 'tracking_company', 'shipped_at'])
+                    remark = '快递发货' if ship_method == 'express' else '自行派送'
+                    order.transition_status('received', operator=request.user, remark=remark)
+                    shipped_count += 1
+            if shipped_count > 0:
+                messages.success(request, f'已成功批量发货 {shipped_count} 个订单')
+            else:
+                messages.warning(request, '未选中任何订单，请勾选需要发货的订单')
         return redirect('factory_production_board')
 
     # 计算下次刷新时间（整点刷新，下午1点开始工作）
@@ -718,6 +1515,92 @@ def factory_production_board(request):
         next_refresh = next_refresh.replace(hour=(next_refresh.hour + 1) % 24)
     seconds_until_refresh = int((next_refresh - now).total_seconds())
 
+    # 即将逾期：距离交货时间不到24小时且尚未完成的订单
+    from datetime import timedelta
+    overdue_threshold = now + timedelta(hours=24)
+    overdue_orders = base_qs.filter(
+        delivery_date__isnull=False,
+        delivery_date__lte=overdue_threshold,
+        production_completed_at__isnull=True
+    )
+
+    # ========== 今日生产概览统计 ==========
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+
+    # 今日已完成（今天生产完成的）
+    today_completed = base_qs.filter(
+        production_completed_at__gte=today_start,
+        production_completed_at__lt=today_end
+    )
+    # 今日开始生产
+    today_started = base_qs.filter(
+        production_started_at__gte=today_start,
+        production_started_at__lt=today_end
+    )
+    # 今日发货的
+    today_shipped = merchant.orders.filter(
+        status='received',
+        shipped_at__gte=today_start,
+        shipped_at__lt=today_end
+    )
+
+    # 计算各状态的面积（从OrderItem.area汇总）
+    def calc_area(order_qs):
+        from django.db.models import Sum
+        total = OrderItem.objects.filter(order__in=order_qs).aggregate(s=Sum('area'))['s'] or 0
+        return total
+
+    today_stats = {
+        'completed_count': today_completed.count(),
+        'completed_area': calc_area(today_completed),
+        'started_count': today_started.count(),
+        'started_area': calc_area(today_started),
+        'shipped_count': today_shipped.count(),
+        'shipped_area': calc_area(today_shipped),
+    }
+
+    # ========== 工厂产能排行（按做版面积，按材料分类） ==========
+    # 统计今日各工厂的做版面积（按材料分类）
+    from django.db.models import Sum, Count
+    factory_capacity = []
+    for factory in factories:
+        # 该工厂今日已完成生产的订单
+        factory_orders = base_qs.filter(
+            factory=factory,
+            production_completed_at__gte=today_start,
+            production_completed_at__lt=today_end
+        )
+        # 按材料分组统计面积
+        material_stats = OrderItem.objects.filter(
+            order__in=factory_orders
+        ).values('material').annotate(
+            total_area=Sum('area'),
+            order_count=Count('order', distinct=True)
+        ).order_by('-total_area')
+
+        # 材料名称映射
+        material_name_map = dict(OrderItem._meta.get_field('material').choices)
+
+        factory_data = {
+            'factory': factory,
+            'total_orders': factory_orders.count(),
+            'total_area': calc_area(factory_orders),
+            'materials': [
+                {
+                    'name': material_name_map.get(m['material'], m['material']),
+                    'area': m['total_area'] or 0,
+                    'orders': m['order_count']
+                }
+                for m in material_stats
+            ]
+        }
+        if factory_data['total_area'] > 0 or factory_data['total_orders'] > 0:
+            factory_capacity.append(factory_data)
+
+    # 按总面积排序
+    factory_capacity.sort(key=lambda x: x['total_area'], reverse=True)
+
     ctx = {
         'pending_orders': pending_orders,
         'active_orders': active_orders,
@@ -726,11 +1609,15 @@ def factory_production_board(request):
         'now': now,
         'next_refresh': next_refresh,
         'seconds_until_refresh': seconds_until_refresh,
+        'overdue_orders': overdue_orders,
         'stats': {
             'pending': pending_orders.count(),
             'active': active_orders.count(),
             'completed': completed_orders.count(),
-        }
+            'overdue': overdue_orders.count(),
+        },
+        'today_stats': today_stats,
+        'factory_capacity': factory_capacity,
     }
     return render(request, 'merchant/factory_production_board.html', ctx)
 
@@ -806,6 +1693,7 @@ def remake_order_create(request, order_id):
                     file=item.file,
                     file_processed=item.file_processed,
                     file_standard_checked=item.file_standard_checked,
+                    is_image_file=item.is_image_file,
                     plate_type=item.plate_type,
                 )
             # 记录日志
@@ -831,3 +1719,838 @@ def remake_order_create(request, order_id):
         'original_order': original_order,
         'items': original_order.items.all(),
     })
+
+
+# ==================== 对账单管理 ====================
+
+@login_required
+@merchant_required
+def statement_list(request):
+    """商户：对账单列表"""
+    merchant = get_merchant(request)
+    status_filter = request.GET.get('status')
+    customer_query = request.GET.get('customer')
+    statements = merchant.statements.all()
+    if status_filter:
+        statements = statements.filter(status=status_filter)
+    if customer_query:
+        statements = statements.filter(
+            models.Q(customer__phone__icontains=customer_query) |
+            models.Q(customer__customer_profile__company_name__icontains=customer_query)
+        )
+    statements = statements.order_by('-created_at')
+    return render(request, 'merchant/statement_list.html', {
+        'statements': statements,
+        'status_choices': Statement.STATUS_CHOICES,
+        'status_filter': status_filter,
+    })
+
+
+@login_required
+@merchant_required
+def statement_detail(request, statement_id):
+    """商户：对账单详情"""
+    merchant = get_merchant(request)
+    statement = get_object_or_404(Statement, pk=statement_id, merchant=merchant)
+    return render(request, 'merchant/statement_detail.html', {
+        'statement': statement,
+        'orders': statement.orders.all().order_by('created_at'),
+    })
+
+
+@login_required
+@merchant_required
+@transaction.atomic
+def statement_generate(request):
+    """商户：手动生成对账单（汇总客户未结清的已收货订单）"""
+    merchant = get_merchant(request)
+    if request.method == 'POST':
+        order_ids_str = request.POST.get('order_ids', '')
+        # 方式1：通过勾选订单批量生成
+        if order_ids_str:
+            order_ids = [oid.strip() for oid in order_ids_str.split(',') if oid.strip()]
+            if not order_ids:
+                messages.error(request, '请选择需要对账的订单')
+                return redirect('merchant_orders')
+            orders = Order.objects.filter(
+                id__in=order_ids,
+                merchant=merchant,
+                status='received',
+                is_settled=False,
+                statement__isnull=True,
+            )
+            if not orders.exists():
+                messages.warning(request, '选中的订单中没有可对账的订单')
+                return redirect('merchant_orders')
+            # 检查是否同一客户
+            customers = orders.values_list('customer', flat=True).distinct()
+            if len(customers) > 1:
+                messages.error(request, '请选择同一客户的订单生成对账单')
+                return redirect('merchant_orders')
+            customer = orders.first().customer
+            period_start_dt = orders.aggregate(min_date=models.Min('created_at__date'))['min_date']
+            period_end_dt = orders.aggregate(max_date=models.Max('created_at__date'))['max_date']
+            statement = Statement.objects.create(
+                customer=customer,
+                merchant=merchant,
+                period_start=period_start_dt,
+                period_end=period_end_dt,
+            )
+            for order in orders:
+                order.statement = statement
+                order.save(update_fields=['statement'])
+            statement.update_total()
+            messages.success(request, f'对账单 {statement.sn} 已生成，包含 {orders.count()} 个订单，金额 ¥{statement.total_amount}')
+            return redirect('statement_detail', statement_id=statement.id)
+        
+        # 方式2：通过客户+周期生成
+        customer_id = request.POST.get('customer_id')
+        period_start = request.POST.get('period_start')
+        period_end = request.POST.get('period_end')
+        if not all([customer_id, period_start, period_end]):
+            messages.error(request, '请填写完整的对账单信息')
+            return redirect('statement_list')
+        customer = get_object_or_404(User, pk=customer_id)
+        from datetime import datetime
+        period_start_dt = datetime.strptime(period_start, '%Y-%m-%d').date()
+        period_end_dt = datetime.strptime(period_end, '%Y-%m-%d').date()
+        # 查找该客户在该周期内已收货且未结清、未关联其他账单的订单
+        orders = Order.objects.filter(
+            customer=customer,
+            merchant=merchant,
+            status='received',
+            is_settled=False,
+            statement__isnull=True,
+            created_at__date__gte=period_start_dt,
+            created_at__date__lte=period_end_dt,
+        )
+        if not orders.exists():
+            messages.warning(request, '该客户在指定周期内没有可对账的订单')
+            return redirect('statement_list')
+        statement = Statement.objects.create(
+            customer=customer,
+            merchant=merchant,
+            period_start=period_start_dt,
+            period_end=period_end_dt,
+        )
+        for order in orders:
+            order.statement = statement
+            order.save(update_fields=['statement'])
+        statement.update_total()
+        messages.success(request, f'对账单 {statement.sn} 已生成，包含 {orders.count()} 个订单，金额 ¥{statement.total_amount}')
+        return redirect('statement_detail', statement_id=statement.id)
+    # GET: 显示生成页面
+    members = merchant.customers.filter(registration_status='approved')
+    from datetime import date, timedelta
+    today = date.today()
+    # 默认上月周期
+    if today.day >= 15:
+        default_start = today.replace(day=1).strftime('%Y-%m-%d')
+        default_end = today.strftime('%Y-%m-%d')
+    else:
+        last_month = today.replace(day=1) - timedelta(days=1)
+        default_start = last_month.replace(day=1).strftime('%Y-%m-%d')
+        default_end = last_month.strftime('%Y-%m-%d')
+    return render(request, 'merchant/statement_generate.html', {
+        'members': members,
+        'default_start': default_start,
+        'default_end': default_end,
+    })
+
+
+@login_required
+@merchant_required
+def statement_mark_paid(request, statement_id):
+    """商户：标记对账单为已付款（客户确认后，商户核实到账标记）"""
+    merchant = get_merchant(request)
+    statement = get_object_or_404(Statement, pk=statement_id, merchant=merchant)
+    if statement.status != 'confirmed':
+        messages.error(request, '该对账单当前状态不支持标记付款')
+        return redirect('statement_detail', statement_id=statement.id)
+    if request.method == 'POST':
+        statement.status = 'paid'
+        statement.paid_at = timezone.now()
+        statement.remark = request.POST.get('remark', statement.remark)
+        statement.save()
+        messages.success(request, f'对账单 {statement.sn} 已标记为已付款，可进行结清操作')
+    return redirect('statement_detail', statement_id=statement.id)
+
+
+@login_required
+@merchant_required
+@transaction.atomic
+def statement_settle(request, statement_id):
+    """商户：确认收款并结清对账单，释放客户额度"""
+    merchant = get_merchant(request)
+    statement = get_object_or_404(Statement, pk=statement_id, merchant=merchant)
+    if statement.status not in ('pending', 'confirmed', 'paid'):
+        messages.error(request, '该对账单当前状态不支持结清操作')
+        return redirect('statement_detail', statement_id=statement.id)
+    if request.method == 'POST':
+        statement.status = 'settled'
+        statement.settled_at = timezone.now()
+        statement.settled_by = request.user
+        statement.remark = request.POST.get('remark', statement.remark)
+        statement.save()
+        # 标记账单下所有订单为已结清
+        total_released = Decimal('0')
+        for order in statement.orders.all():
+            if not order.is_settled:
+                order.is_settled = True
+                order.save(update_fields=['is_settled'])
+                total_released += order.total_amount
+        # 释放客户额度
+        profile = statement.customer.customer_profile
+        profile.credit_used -= total_released
+        if profile.credit_used < 0:
+            profile.credit_used = 0
+        profile.save(update_fields=['credit_used'])
+        messages.success(
+            request,
+            f'对账单 {statement.sn} 已结清，释放客户额度 ¥{total_released}，'
+            f'客户当前已用额度 ¥{profile.credit_used} / ¥{profile.credit_limit}'
+        )
+    return redirect('statement_detail', statement_id=statement.id)
+
+
+# ==================== 对账单导出Excel ====================
+
+def _build_statement_excel(statement):
+    """生成对账单Excel工作簿，返回HttpResponse"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    from decimal import Decimal
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = '对账单'
+
+    # 样式
+    title_font = Font(name='微软雅黑', size=16, bold=True)
+    header_font = Font(name='微软雅黑', size=11, bold=True)
+    normal_font = Font(name='微软雅黑', size=10)
+    small_font = Font(name='微软雅黑', size=9, color='666666')
+    border = Border(
+        left=Side(style='thin', color='000000'),
+        right=Side(style='thin', color='000000'),
+        top=Side(style='thin', color='000000'),
+        bottom=Side(style='thin', color='000000')
+    )
+    center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    left_align = Alignment(horizontal='left', vertical='center', wrap_text=True)
+
+    # 第1行：商户标题
+    ws.merge_cells('A1:L1')
+    ws['A1'] = f'{statement.merchant.name} — 对账单'
+    ws['A1'].font = title_font
+    ws['A1'].alignment = center_align
+    ws.row_dimensions[1].height = 30
+
+    # 第2行：空行
+    ws.row_dimensions[2].height = 8
+
+    # 第3行：单号
+    ws.merge_cells('A3:F3')
+    ws['A3'] = f'对账单号：{statement.sn}'
+    ws['A3'].font = normal_font
+    ws['A3'].alignment = left_align
+
+    ws.merge_cells('G3:L3')
+    ws['G3'] = f'账单周期：{statement.period_start.strftime("%Y年%m月%d日")} 至 {statement.period_end.strftime("%Y年%m月%d日")}'
+    ws['G3'].font = normal_font
+    ws['G3'].alignment = Alignment(horizontal='right', vertical='center')
+
+    # 第4行：客户信息
+    ws.merge_cells('A4:F4')
+    profile = statement.customer.customer_profile
+    ws['A4'] = f'客户名称：{profile.company_name or profile.real_name or statement.customer.phone}'
+    ws['A4'].font = normal_font
+    ws['A4'].alignment = left_align
+
+    ws.merge_cells('G4:L4')
+    ws['G4'] = f'联系方式：{statement.customer.phone}'
+    ws['G4'].font = normal_font
+    ws['G4'].alignment = Alignment(horizontal='right', vertical='center')
+
+    # 第5行：空行
+    ws.row_dimensions[5].height = 8
+
+    # 第6行：表头
+    headers = ['序号', '订单号', '产品名称', '材质', '厚度', '长度(mm)', '宽度(mm)', '数量', '单价(元/cm²)', '金额(元)', '文件名称']
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=6, column=col, value=h)
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = border
+        cell.fill = PatternFill(start_color='E3F2FD', end_color='E3F2FD', fill_type='solid')
+    ws.row_dimensions[6].height = 25
+
+    # 数据行：按订单项展开
+    row_idx = 7
+    seq = 1
+    total_amount = Decimal('0')
+
+    for order in statement.orders.all().order_by('created_at'):
+        items = order.items.all()
+        if not items:
+            continue
+        for item in items:
+            data = [
+                seq,
+                order.sn,
+                item.get_product_name_display(),
+                item.get_material_display(),
+                item.thickness,
+                float(item.length_mm),
+                float(item.width_mm),
+                item.quantity,
+                float(item.unit_price),
+                float(item.subtotal),
+                item.file.name.split('/')[-1] if item.file else ''
+            ]
+            for col, val in enumerate(data, 1):
+                cell = ws.cell(row=row_idx, column=col, value=val)
+                cell.font = normal_font
+                cell.border = border
+                if col in (1, 2, 4, 5, 8):
+                    cell.alignment = center_align
+                elif col in (6, 7, 9, 10):
+                    cell.alignment = Alignment(horizontal='right', vertical='center')
+                else:
+                    cell.alignment = left_align
+            row_idx += 1
+            seq += 1
+            total_amount += item.subtotal
+
+    # 如果订单有紧急费，单独列一行
+    for order in statement.orders.all().order_by('created_at'):
+        if order.urgent:
+            urgent_fee = (order.total_amount - sum(i.subtotal for i in order.items.all())).quantize(Decimal('0.01'))
+            if urgent_fee > 0:
+                data = [
+                    seq,
+                    order.sn,
+                    '加急费',
+                    '-',
+                    '-',
+                    '-',
+                    '-',
+                    '-',
+                    '-',
+                    float(urgent_fee),
+                    ''
+                ]
+                for col, val in enumerate(data, 1):
+                    cell = ws.cell(row=row_idx, column=col, value=val)
+                    cell.font = normal_font
+                    cell.border = border
+                    if col in (1, 2, 4, 5, 8):
+                        cell.alignment = center_align
+                    elif col in (6, 7, 9, 10):
+                        cell.alignment = Alignment(horizontal='right', vertical='center')
+                    else:
+                        cell.alignment = left_align
+                row_idx += 1
+                seq += 1
+                total_amount += urgent_fee
+
+    # 合计行
+    ws.merge_cells(f'A{row_idx}:I{row_idx}')
+    ws.cell(row=row_idx, column=1, value=f'合计金额（大写）：{_num_to_chinese(total_amount)}')
+    ws.cell(row=row_idx, column=1).font = Font(name='微软雅黑', size=11, bold=True)
+    ws.cell(row=row_idx, column=1).alignment = left_align
+    ws.cell(row=row_idx, column=1).border = border
+    for c in range(2, 10):
+        ws.cell(row=row_idx, column=c).border = border
+
+    ws.cell(row=row_idx, column=10, value=f'¥{total_amount}')
+    ws.cell(row=row_idx, column=10).font = Font(name='微软雅黑', size=11, bold=True, color='C00000')
+    ws.cell(row=row_idx, column=10).alignment = Alignment(horizontal='right', vertical='center')
+    ws.cell(row=row_idx, column=10).border = border
+    ws.cell(row=row_idx, column=11).border = border
+    ws.row_dimensions[row_idx].height = 28
+    row_idx += 1
+
+    # 底部备注
+    ws.merge_cells(f'A{row_idx}:L{row_idx}')
+    ws.cell(row=row_idx, column=1, value='注：请收货后及时核对产品，若有不符，请于3天内与本公司联系。')
+    ws.cell(row=row_idx, column=1).font = small_font
+    ws.cell(row=row_idx, column=1).alignment = left_align
+    row_idx += 1
+
+    ws.merge_cells(f'A{row_idx}:F{row_idx}')
+    ws.cell(row=row_idx, column=1, value='')
+    ws.cell(row=row_idx, column=1).font = normal_font
+    ws.cell(row=row_idx, column=1).alignment = left_align
+
+    ws.merge_cells(f'G{row_idx}:L{row_idx}')
+    ws.cell(row=row_idx, column=7, value='签收人：________________')
+    ws.cell(row=row_idx, column=7).font = normal_font
+    ws.cell(row=row_idx, column=7).alignment = Alignment(horizontal='right', vertical='center')
+
+    # 列宽
+    col_widths = [6, 18, 22, 10, 8, 12, 12, 8, 14, 12, 28]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # 保存到内存
+    from io import BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
+def _num_to_chinese(num):
+    """数字金额转中文大写（简化版）"""
+    from decimal import Decimal
+    num = Decimal(str(num))
+    integer_part = int(num)
+    decimal_part = (num - integer_part) * 100
+    jiao = int(decimal_part // 10)
+    fen = int(decimal_part % 10)
+
+    digit_map = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖']
+    unit_map = ['', '拾', '佰', '仟']
+    big_unit = ['', '万', '亿']
+
+    def int_to_chinese(n):
+        if n == 0:
+            return '零'
+        s = str(n)
+        res = ''
+        zero_flag = False
+        for i, ch in enumerate(s):
+            d = int(ch)
+            pos = len(s) - i - 1
+            if d == 0:
+                if not zero_flag and pos % 4 == 0 and res:
+                    pass
+                elif not zero_flag:
+                    zero_flag = True
+            else:
+                if zero_flag:
+                    res += '零'
+                    zero_flag = False
+                res += digit_map[d] + unit_map[pos % 4]
+            if pos % 4 == 0 and pos > 0 and any(int(c) for c in s[max(0, i-3):i+1]):
+                res += big_unit[pos // 4]
+        return res
+
+    result = int_to_chinese(integer_part) + '元'
+    if jiao == 0 and fen == 0:
+        result += '整'
+    else:
+        if jiao > 0:
+            result += digit_map[jiao] + '角'
+        if fen > 0:
+            result += digit_map[fen] + '分'
+    return result
+
+
+@login_required
+@merchant_required
+def statement_export(request, statement_id):
+    """商户：导出对账单Excel"""
+    merchant = get_merchant(request)
+    statement = get_object_or_404(Statement, pk=statement_id, merchant=merchant)
+    output = _build_statement_excel(statement)
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    filename = f"对账单_{statement.sn}_{statement.customer.phone}.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+
+# ==================== 拼版批次管理（跨订单拼版）====================
+
+@login_required
+@merchant_required
+def plate_batch_list(request):
+    """拼版批次列表页"""
+    merchant = get_merchant(request)
+    batches = PlateBatch.objects.filter(merchant=merchant).prefetch_related('items', 'items__order', 'items__order_item')
+
+    status_filter = request.GET.get('status', '')
+    if status_filter:
+        batches = batches.filter(status=status_filter)
+
+    batches = batches.order_by('-created_at')
+
+    # 统计
+    stats = {
+        'total': batches.count(),
+        'auto_generated': batches.filter(status='auto_generated').count(),
+        'confirmed': batches.filter(status='confirmed').count(),
+        'in_production': batches.filter(status='in_production').count(),
+    }
+
+    # 为每个批次预计算客户数（避免模板中执行复杂查询）
+    batch_list = []
+    for batch in batches:
+        customer_ids = set()
+        for bi in batch.items.all():
+            if bi.order and bi.order.customer_id:
+                customer_ids.add(bi.order.customer_id)
+        batch.customer_count = len(customer_ids)
+        batch_list.append(batch)
+
+    return render(request, 'merchant/plate_batch_list.html', {
+        'batches': batch_list,
+        'stats': stats,
+        'status_filter': status_filter,
+    })
+
+
+@login_required
+@merchant_required
+def plate_batch_generate(request):
+    """触发自动跨订单拼版"""
+    if request.method != 'POST':
+        return redirect('plate_batch_list')
+
+    merchant = get_merchant(request)
+    from utils.plate_batch import auto_generate_plate_batches
+
+    try:
+        results = auto_generate_plate_batches(merchant, algorithm='maxrects')
+        if results:
+            messages.success(request, f'成功生成 {len(results)} 个拼版批次')
+        else:
+            messages.info(request, '当前没有待拼版的订单')
+    except Exception as e:
+        messages.error(request, f'拼版生成失败: {str(e)}')
+
+    return redirect('plate_batch_list')
+
+
+@login_required
+@merchant_required
+def plate_batch_detail(request, batch_id):
+    """拼版批次详情/工作台（支持拖拽微调）"""
+    merchant = get_merchant(request)
+    batch = get_object_or_404(PlateBatch, pk=batch_id, merchant=merchant)
+
+    # 算法选择
+    ALGORITHMS = [
+        ('maxrects', 'MaxRects（推荐·利用率最高）'),
+        ('guillotine', 'Guillotine（平衡型）'),
+        ('skyline', 'Skyline（快速型）'),
+    ]
+    algorithm = request.GET.get('algorithm', 'maxrects')
+    if algorithm not in [a[0] for a in ALGORITHMS]:
+        algorithm = 'maxrects'
+
+    # 重新生成建议（如果点击了重新计算）
+    suggestion = None
+    if request.GET.get('recalculate') == '1' and batch.status == 'auto_generated':
+        from utils.plate_batch import build_rects_from_items, pack_rects_into_plates, get_spacing_mm
+        batch_items = [bi.order_item for bi in batch.items.all()]
+        if batch_items:
+            spacing = get_spacing_mm(batch.thickness, batch.thickness, batch.material, batch.material)
+            rects = build_rects_from_items(batch_items, spacing_mm=spacing)
+            plates = pack_rects_into_plates(rects, algorithm=algorithm)
+            if plates:
+                suggestion = plates[0]
+
+    # 解析已保存的布局数据
+    layout_data_parsed = {}
+    if batch.layout_data:
+        try:
+            layout_data_parsed = json.loads(batch.layout_data)
+        except Exception:
+            pass
+
+    # 画布缩放（增大画布让预览图更清晰）
+    CANVAS_WIDTH = 1400
+    CANVAS_HEIGHT = 1200
+    scaled_rectangles = []
+    scaled_plate_width = 0
+    scaled_plate_height = 0
+    scale = 1.0
+
+    # 预加载文件信息用于生成预览图
+    batch_items_qs = batch.items.select_related('order_item').all()
+    item_file_map = {}
+    for bi in batch_items_qs:
+        if bi.order_item_id and bi.order_item.file:
+            item_file_map[str(bi.order_item_id)] = bi.order_item.file.name
+
+    display_data = layout_data_parsed or suggestion
+    if display_data:
+        pw = float(display_data.get('plate_width', batch.plate_width))
+        ph = float(display_data.get('plate_height', batch.plate_height))
+        scale_w = CANVAS_WIDTH / pw
+        scale_h = CANVAS_HEIGHT / ph
+        scale = min(scale_w, scale_h)
+        scaled_plate_width = round(pw * scale, 1)
+        scaled_plate_height = round(ph * scale, 1)
+
+        order_hues = {}
+        hue_idx = 0
+        for rect in display_data.get('rectangles', []):
+            order_sn = rect.get('order_sn', '')
+            if order_sn not in order_hues:
+                order_hues[order_sn] = (hue_idx * 47) % 360
+                hue_idx += 1
+            rotation = int(rect.get('rotation', 0)) % 360
+            rw = round(float(rect.get('width', 0)) * scale, 1)
+            rh = round(float(rect.get('height', 0)) * scale, 1)
+            # 若旋转90/270度，画布上交换宽高显示
+            if rotation in (90, 270):
+                rw, rh = rh, rw
+
+            # 生成带版类视觉效果的预览图
+            preview_url = None
+            rid = rect.get('id', '')
+            order_item_id = rid.split('_')[0] if '_' in rid else rid
+            file_name = item_file_map.get(order_item_id)
+            if file_name:
+                preview_rel = f"plate_previews/{batch.id.hex}/{order_item_id}.png"
+                preview_path = os.path.join(settings.MEDIA_ROOT, preview_rel)
+                if not os.path.exists(preview_path):
+                    # 获取对应 OrderItem 的产品名称以确定版类效果
+                    order_item = None
+                    for bi in batch_items_qs:
+                        if str(bi.order_item_id) == order_item_id:
+                            order_item = bi.order_item
+                            break
+                    if order_item:
+                        from utils.plate_preview_effects import generate_effect_preview
+                        generate_effect_preview(
+                            file_name, preview_rel,
+                            product_name=order_item.product_name,
+                            plate_type_key=getattr(order_item, 'plate_type', None),
+                            dpi=150
+                        )
+                    else:
+                        from utils.pdf_processor import generate_pdf_preview
+                        generate_pdf_preview(file_name, preview_rel, dpi=72)
+                if os.path.exists(preview_path):
+                    preview_url = settings.MEDIA_URL + preview_rel
+
+            scaled_rectangles.append({
+                'id': rid,
+                'x': round(float(rect.get('x', 0)) * scale, 1),
+                'y': round(float(rect.get('y', 0)) * scale, 1),
+                'width': rw,
+                'height': rh,
+                'mm_width': float(rect.get('width', 0)),
+                'mm_height': float(rect.get('height', 0)),
+                'label': rect.get('label', ''),
+                'order_sn': order_sn,
+                'customer_phone': rect.get('customer_phone', ''),
+                'color_hue': order_hues[order_sn],
+                'rotation': rotation,
+                'preview_url': preview_url,
+            })
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'save')
+
+        if action == 'save':
+            data = json.loads(request.POST.get('layout_data', '{}'))
+            note = request.POST.get('designer_note', '')
+            batch.layout_data = json.dumps(data, ensure_ascii=False)
+            batch.designer_note = note
+            batch.designer = request.user
+            batch.save()
+            messages.success(request, '拼版布局已保存')
+            return redirect('plate_batch_detail', batch_id=batch.id)
+
+        elif action == 'confirm':
+            data = json.loads(request.POST.get('layout_data', '{}'))
+            note = request.POST.get('designer_note', '')
+            batch.layout_data = json.dumps(data, ensure_ascii=False)
+            batch.designer_note = note
+            batch.designer = request.user
+            batch.status = 'confirmed'
+            default_factory = merchant.factories.filter(is_active=True).first()
+            if default_factory:
+                batch.factory = default_factory
+            batch.save()
+
+            # 更新关联订单状态为 confirmed 并下发工厂
+            affected_orders = set()
+            for bi in batch.items.all():
+                bi.order_item.order.plate_status = 'confirmed'
+                bi.order_item.order.factory = default_factory
+                bi.order_item.order.save(update_fields=['plate_status', 'factory'])
+                affected_orders.add(bi.order_item.order)
+
+            for order in affected_orders:
+                order.transition_status('in_production', operator=request.user,
+                                        remark=f'拼版批次 {batch.id.hex[:8]} 已确认，自动下发工厂生产')
+
+            messages.success(request, f'拼版批次已确认，共影响 {len(affected_orders)} 个订单，已自动下发工厂')
+            return redirect('plate_batch_list')
+
+        elif action == 'reject':
+            reason = request.POST.get('reject_reason', '')
+            batch.status = 'rejected'
+            batch.save(update_fields=['status'])
+
+            affected_orders = set()
+            for bi in batch.items.all():
+                bi.order_item.order.plate_status = 'rejected'
+                bi.order_item.order.save(update_fields=['plate_status'])
+                affected_orders.add(bi.order_item.order)
+
+            for order in affected_orders:
+                OrderStatusLog.objects.create(
+                    order=order, from_status=order.status, to_status=order.status,
+                    operator=request.user, remark=f'拼版批次被驳回: {reason}'
+                )
+
+            messages.warning(request, f'拼版批次已驳回，原因：{reason}')
+            return redirect('plate_batch_list')
+
+    # 为侧边栏订单列表生成颜色 + 计算客户数
+    sidebar_items = []
+    sidebar_hue_idx = 0
+    seen_orders = set()
+    customer_ids = set()
+    for bi in batch.items.select_related('order', 'order_item').all():
+        if bi.order_id not in seen_orders:
+            seen_orders.add(bi.order_id)
+            sidebar_items.append({
+                'order_sn': bi.order.sn,
+                'length_mm': bi.order_item.length_mm,
+                'width_mm': bi.order_item.width_mm,
+                'color_hue': (sidebar_hue_idx * 47) % 360,
+            })
+            sidebar_hue_idx += 1
+        if bi.order and bi.order.customer_id:
+            customer_ids.add(bi.order.customer_id)
+    batch.customer_count = len(customer_ids)
+
+    return render(request, 'merchant/plate_batch_detail.html', {
+        'batch': batch,
+        'suggestion': suggestion,
+        'layout_data_parsed': layout_data_parsed,
+        'scaled_rectangles': scaled_rectangles,
+        'scaled_plate_width': scaled_plate_width,
+        'scaled_plate_height': scaled_plate_height,
+        'algorithm': algorithm,
+        'algorithms': ALGORITHMS,
+        'scale': scale,
+        'sidebar_items': sidebar_items,
+    })
+
+
+@login_required
+@merchant_required
+def plate_batch_confirm(request, batch_id):
+    """确认拼版批次（快捷操作）"""
+    if request.method != 'POST':
+        return redirect('plate_batch_detail', batch_id=batch_id)
+
+    merchant = get_merchant(request)
+    batch = get_object_or_404(PlateBatch, pk=batch_id, merchant=merchant)
+
+    if batch.status != 'auto_generated':
+        messages.warning(request, '该拼版批次状态不允许确认')
+        return redirect('plate_batch_list')
+
+    default_factory = merchant.factories.filter(is_active=True).first()
+    batch.status = 'confirmed'
+    batch.designer = request.user
+    if default_factory:
+        batch.factory = default_factory
+    batch.save()
+
+    affected_orders = set()
+    for bi in batch.items.all():
+        order = bi.order_item.order
+        order.plate_status = 'confirmed'
+        if default_factory:
+            order.factory = default_factory
+        order.save(update_fields=['plate_status', 'factory'])
+        affected_orders.add(order)
+
+    for order in affected_orders:
+        order.transition_status('in_production', operator=request.user,
+                                remark=f'拼版批次 {batch.id.hex[:8]} 已确认，自动下发工厂生产')
+
+    messages.success(request, f'拼版批次已确认，共影响 {len(affected_orders)} 个订单')
+    return redirect('plate_batch_list')
+
+
+@login_required
+@merchant_required
+def plate_batch_reject(request, batch_id):
+    """驳回拼版批次"""
+    if request.method != 'POST':
+        return redirect('plate_batch_detail', batch_id=batch_id)
+
+    merchant = get_merchant(request)
+    batch = get_object_or_404(PlateBatch, pk=batch_id, merchant=merchant)
+    reason = request.POST.get('reject_reason', '')
+
+    batch.status = 'rejected'
+    batch.save(update_fields=['status'])
+
+    affected_orders = set()
+    for bi in batch.items.all():
+        order = bi.order_item.order
+        order.plate_status = 'rejected'
+        order.save(update_fields=['plate_status'])
+        affected_orders.add(order)
+
+    for order in affected_orders:
+        OrderStatusLog.objects.create(
+            order=order, from_status=order.status, to_status=order.status,
+            operator=request.user, remark=f'拼版批次被驳回: {reason}'
+        )
+
+    messages.warning(request, f'拼版批次已驳回')
+    return redirect('plate_batch_list')
+
+
+@login_required
+@merchant_required
+def plate_batch_update_layout(request, batch_id):
+    """AJAX：更新拼版布局坐标（拖拽微调后保存）"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': '仅支持POST'})
+
+    merchant = get_merchant(request)
+    batch = get_object_or_404(PlateBatch, pk=batch_id, merchant=merchant)
+
+    try:
+        data = json.loads(request.body)
+        rectangles = data.get('rectangles', [])
+
+        # 更新 layout_data 中的坐标
+        layout_data = {}
+        if batch.layout_data:
+            try:
+                layout_data = json.loads(batch.layout_data)
+            except Exception:
+                pass
+
+        existing_rects = {r['id']: r for r in layout_data.get('rectangles', [])}
+        for rect in rectangles:
+            rid = rect.get('id')
+            if rid in existing_rects:
+                existing_rects[rid]['x'] = rect.get('x', existing_rects[rid]['x'])
+                existing_rects[rid]['y'] = rect.get('y', existing_rects[rid]['y'])
+                if 'width' in rect:
+                    existing_rects[rid]['width'] = rect['width']
+                if 'height' in rect:
+                    existing_rects[rid]['height'] = rect['height']
+                if 'rotation' in rect:
+                    existing_rects[rid]['rotation'] = rect['rotation']
+
+        layout_data['rectangles'] = list(existing_rects.values())
+        batch.layout_data = json.dumps(layout_data, ensure_ascii=False)
+        batch.designer = request.user
+        batch.save()
+
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})

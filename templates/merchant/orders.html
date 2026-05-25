@@ -4,16 +4,115 @@
 {% block page_subtitle %}审核、安排生产与发货{% endblock %}
 
 {% block content %}
-<div class="card mb-4">
+<style>
+    .status-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .status-tab {
+        padding: 6px 16px;
+        border-radius: 100px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: #64748b;
+        background: #f1f5f9;
+        border: 1px solid transparent;
+        text-decoration: none;
+        transition: all 0.15s;
+    }
+    .status-tab:hover { background: #e2e8f0; color: #334155; }
+    .status-tab.active { background: var(--primary); color: #fff; }
+
+    .statement-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .statement-tab {
+        padding: 6px 16px;
+        border-radius: 100px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: #64748b;
+        background: #f1f5f9;
+        border: 1px solid transparent;
+        text-decoration: none;
+        transition: all 0.15s;
+    }
+    .statement-tab:hover { background: #e2e8f0; color: #334155; }
+    .statement-tab.active { background: #059669; color: #fff; }
+
+    .batch-bar {
+        display: none;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 10px;
+        margin-bottom: 16px;
+    }
+    .batch-bar.show { display: flex; }
+    .batch-bar .batch-count { font-weight: 700; color: #1e40af; }
+
+    .product-info-cell {
+        font-size: 0.75rem;
+        color: #475569;
+        line-height: 1.6;
+    }
+    .product-info-cell .pi-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .product-info-cell .pi-badge {
+        background: #f1f5f9;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
+    .table th { white-space: nowrap; background: #f8fafc; }
+    .table td { vertical-align: middle; }
+
+    @media (max-width: 991px) {
+        .product-info-cell .pi-row { flex-direction: column; gap: 4px; }
+    }
+</style>
+
+<div class="card mb-3">
     <div class="card-body">
+        <!-- 快捷状态筛选：订单状态 -->
+        <div class="status-tabs">
+            <a href="{% url 'merchant_orders' %}?{{ request.GET.urlencode|cut:'status='|cut:'&' }}" class="status-tab {% if not status_filter %}active{% endif %}">全部</a>
+            <a href="?status=pending_confirm" class="status-tab {% if status_filter == 'pending_confirm' %}active{% endif %}">待确认</a>
+            <a href="?status=design_confirmed" class="status-tab {% if status_filter == 'design_confirmed' %}active{% endif %}">设计确认</a>
+            <a href="?status=paid" class="status-tab {% if status_filter == 'paid' %}active{% endif %}">已支付</a>
+            <a href="?status=in_production" class="status-tab {% if status_filter == 'in_production' %}active{% endif %}">生产中</a>
+            <a href="?status=shipped" class="status-tab {% if status_filter == 'shipped' %}active{% endif %}">已发货</a>
+            <a href="?status=received" class="status-tab {% if status_filter == 'received' %}active{% endif %}">已完成</a>
+        </div>
+
+        <!-- 快捷状态筛选：对账状态 -->
+        <div class="statement-tabs">
+            <span class="small text-muted me-1" style="display:flex;align-items:center;"><i class="bi bi-receipt"></i> 对账：</span>
+            <a href="{% url 'merchant_orders' %}?{{ request.GET.urlencode|cut:'statement_status='|cut:'&' }}" class="statement-tab {% if not statement_status %}active{% endif %}">全部</a>
+            <a href="?statement_status=unsettled" class="statement-tab {% if statement_status == 'unsettled' %}active{% endif %}">未对账</a>
+            <a href="?statement_status=statemented" class="statement-tab {% if statement_status == 'statemented' %}active{% endif %}">已对账</a>
+            <a href="?statement_status=settled" class="statement-tab {% if statement_status == 'settled' %}active{% endif %}">已结清</a>
+        </div>
+
         <form method="get" class="row g-2 align-items-end">
             <div class="col-md-2">
-                <label class="form-label small text-muted">状态</label>
+                <label class="form-label small text-muted">订单状态</label>
                 <select name="status" class="form-select" onchange="this.form.submit()">
                     <option value="">全部</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-muted">对账状态</label>
+                <select name="statement_status" class="form-select" onchange="this.form.submit()">
+                    <option value="" {% if not statement_status %}selected{% endif %}>全部</option>
+                    <option value="unsettled" {% if statement_status == 'unsettled' %}selected{% endif %}>未对账</option>
+                    <option value="statemented" {% if statement_status == 'statemented' %}selected{% endif %}>已对账</option>
+                    <option value="settled" {% if statement_status == 'settled' %}selected{% endif %}>已结清</option>
                 </select>
             </div>
             <div class="col-md-2"><label class="form-label small text-muted">起始日期</label><input type="date" name="date_from" class="form-control" value="{{ request.GET.date_from }}"></div>
@@ -24,25 +123,97 @@
     </div>
 </div>
 
+<!-- 批量操作栏 -->
+<div class="batch-bar" id="batchBar">
+    <span class="batch-count">已选中 <span id="batchCount">0</span> 个订单</span>
+    <form method="get" action="{% url 'batch_process_orders' %}" class="d-inline">
+        <input type="hidden" name="order_ids" id="batchOrderIds" value="">
+        <button type="submit" class="btn btn-sm btn-primary">
+            <i class="bi bi-arrow-right-circle"></i> 进入批量处理页面
+        </button>
+    </form>
+    <form method="post" action="{% url 'statement_generate' %}" class="d-inline" id="batchStatementForm" onsubmit="return buildStatementBatch()">
+        {% csrf_token %}
+        <input type="hidden" name="order_ids" id="batchStatementIds" value="">
+        <button type="submit" class="btn btn-sm btn-success">
+            <i class="bi bi-receipt"></i> 生成对账单
+        </button>
+    </form>
+</div>
+
 <div class="card">
     <div class="table-responsive">
-        <table class="table mb-0">
-            <thead><tr><th class="ps-4">订单号</th><th>客户</th><th>状态</th><th>金额</th><th>时间</th><th class="pe-4">操作</th></tr></thead>
+        <table class="table mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th style="width:40px;" class="ps-4">
+                        <input type="checkbox" class="form-check-input" id="selectAll" onclick="toggleSelectAll(this.checked)">
+                    </th>
+                    <th>订单号</th>
+                    <th>客户</th>
+                    <th>产品信息</th>
+                    <th>状态</th>
+                    <th>对账</th>
+                    <th>金额</th>
+                    <th>时间</th>
+                    <th class="pe-4">操作</th>
+                </tr>
+            </thead>
             <tbody>
                 {% for o in orders %}
-                <tr>
+                <tr data-order-id="{{ o.id }}" data-status="{{ o.status }}">
                     <td class="ps-4">
+                        <input type="checkbox" class="form-check-input order-check" data-id="{{ o.id }}" onclick="updateBatchBar()">
+                    </td>
+                    <td>
                         <a href="{% url 'merchant_order_detail' o.id %}" class="fw-semibold" style="color:var(--primary);">{{ o.sn }}</a>
                         {% if o.order_type == 'remake' %}<span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;">补版</span>{% endif %}
                     </td>
-                    <td style="color:var(--text-muted);">{{ o.customer.phone }}</td>
+                    <td style="color:var(--text-muted);">
+                        {% if o.customer.customer_profile.company_name %}
+                            {{ o.customer.customer_profile.company_name }}
+                        {% elif o.customer.customer_profile.real_name %}
+                            {{ o.customer.customer_profile.real_name }}
+                        {% else %}
+                            {{ o.customer.phone }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="product-info-cell">
+                            {% for item in o.items.all %}
+                            <div class="pi-row mb-1">
+                                <span class="pi-badge">{{ item.get_product_name_display|truncatechars:10 }}</span>
+                                <span class="pi-badge">{{ item.get_material_display }}</span>
+                                <span class="pi-badge">{{ item.thickness }}mm</span>
+                                <span class="pi-badge">{{ item.length_mm }}×{{ item.width_mm }}mm</span>
+                                <span class="pi-badge">×{{ item.quantity }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </td>
                     <td><span class="badge badge-status status-{{ o.status }}">{{ o.get_status_display }}</span></td>
+                    <td>
+                        {% if o.is_settled %}
+                            <span class="badge bg-secondary">已结清</span>
+                        {% elif o.statement %}
+                            <a href="{% url 'statement_detail' o.statement.id %}" class="badge bg-info text-dark text-decoration-none">{{ o.statement.sn }}</a>
+                        {% elif o.status == 'received' %}
+                            <span class="badge bg-warning text-dark">未对账</span>
+                        {% else %}
+                            <span class="text-muted small">-</span>
+                        {% endif %}
+                    </td>
                     <td class="fw-semibold">{% if o.order_type == 'remake' %}<span class="text-success">¥0.00</span>{% else %}¥{{ o.total_amount }}{% endif %}</td>
                     <td style="color:var(--text-muted);">{{ o.created_at|date:"m-d H:i" }}</td>
-                    <td class="pe-4"><a href="{% url 'merchant_order_detail' o.id %}" class="btn btn-sm btn-outline-primary">详情</a></td>
+                    <td class="pe-4">
+                        <a href="{% url 'merchant_order_detail' o.id %}" class="btn btn-sm btn-outline-primary mb-1">详情</a>
+                        {% if o.status == 'pending_confirm' or o.status == 'design_confirmed' or o.status == 'paid' or o.status == 'in_production' %}
+                        <a href="{% url 'merchant_order_detail' o.id %}" class="btn btn-sm btn-primary mb-1">处理</a>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="text-center text-muted py-5">
+                <tr><td colspan="9" class="text-center text-muted py-5">
                     <i class="bi bi-inbox fs-1 d-block mb-2" style="color:var(--border-light);"></i>
                     暂无订单
                 </td></tr>
@@ -51,4 +222,38 @@
         </table>
     </div>
 </div>
+
+<script>
+function toggleSelectAll(checked) {
+    document.querySelectorAll('.order-check').forEach(function(cb) {
+        cb.checked = checked;
+    });
+    updateBatchBar();
+}
+function updateBatchBar() {
+    var checked = document.querySelectorAll('.order-check:checked');
+    var bar = document.getElementById('batchBar');
+    var count = document.getElementById('batchCount');
+    var idsInput = document.getElementById('batchOrderIds');
+    if (checked.length > 0) {
+        bar.classList.add('show');
+        count.textContent = checked.length;
+        var ids = Array.from(checked).map(function(cb) { return cb.getAttribute('data-id'); }).join(',');
+        idsInput.value = ids;
+    } else {
+        bar.classList.remove('show');
+        count.textContent = '0';
+        idsInput.value = '';
+    }
+}
+function buildStatementBatch() {
+    var ids = document.getElementById('batchOrderIds').value;
+    if (!ids) {
+        alert('请先选择订单');
+        return false;
+    }
+    document.getElementById('batchStatementIds').value = ids;
+    return true;
+}
+</script>
 {% endblock %}

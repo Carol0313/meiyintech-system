@@ -25,7 +25,7 @@ def user_login(request):
         if form.is_valid():
             user = form.get_user()
             login(request, user)
-            messages.success(request, f'欢迎回来，{user.username or user.phone}')
+            messages.success(request, f'登录成功，{user.username or user.phone}')
             return _redirect_by_user_type(user)
         else:
             messages.error(request, '手机号或密码错误')

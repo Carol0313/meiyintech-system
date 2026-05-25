@@ -12,6 +12,9 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+# 允许同站点嵌入（用于PDF文件预览）
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -99,6 +102,29 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# ==================== 阿里云 OSS 存储配置 ====================
+# 使用说明：
+#   1. 登录阿里云控制台 https://oss.console.aliyun.com/
+#   2. 创建 Bucket（建议选择"标准存储" + "公共读"）
+#   3. 在"访问控制 RAM"中创建 AccessKey，获取 ID 和 Secret
+#   4. 将下方配置填入真实值
+#   5. 如需启用 OSS，取消下面 DEFAULT_FILE_STORAGE 的注释
+#   6. 如需保持本地存储（开发环境），保持注释状态即可
+#
+# 可选：配置 CDN 加速域名，降低流量费用
+#   OSS_CUSTOM_DOMAIN = 'https://cdn.yourdomain.com'
+
+OSS_ACCESS_KEY_ID = ''           # AccessKey ID
+OSS_ACCESS_KEY_SECRET = ''       # AccessKey Secret
+OSS_ENDPOINT = 'oss-cn-hangzhou.aliyuncs.com'  # Bucket 所在地域的 Endpoint
+OSS_BUCKET_NAME = ''             # Bucket 名称
+OSS_BASE_DIR = 'magnesium/'      # 文件在 Bucket 中的根目录
+OSS_INTERNAL = False             # ECS 同区域建议使用 True（走内网，免费且更快）
+OSS_CUSTOM_DOMAIN = ''           # CDN 加速域名（可选）
+
+# 启用 OSS：取消下面一行的注释，所有上传文件将自动存入阿里云 OSS
+# DEFAULT_FILE_STORAGE = 'utils.oss_storage.AliyunOSSMediaStorage'
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom user model
@@ -115,3 +141,13 @@ SESSION_COOKIE_AGE = 86400 * 7  # 7 days
 # File upload limits
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
+
+# ==================== 快递100 物流查询配置 ====================
+# 接入步骤：
+# 1. 访问 https://www.kuaidi100.com/openapi/apply.shtml 注册企业账号
+# 2. 在"我的接口"中获取：授权Key 和 Customer ID
+# 3. 将下面的空字符串替换为你的真实值
+# 4. 可选：调整 KUAIDI100_CACHE_SECONDS（物流缓存秒数，默认300秒）
+KUAIDI100_KEY = ''           # 快递100授权Key
+KUAIDI100_CUSTOMER = ''      # 快递100 Customer ID
+KUAIDI100_CACHE_SECONDS = 300  # 物流数据缓存时间（秒）
