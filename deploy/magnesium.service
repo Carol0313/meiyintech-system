@@ -8,7 +8,7 @@ Group=root
 WorkingDirectory=/home/magnesium/magnesium_order_platform
 Environment="PATH=/home/magnesium/magnesium_order_platform/venv/bin"
 Environment="DJANGO_DEBUG=False"
-Environment="DJANGO_ALLOWED_HOSTS=your-domain.com,www.your-domain.com"
+Environment="DJANGO_ALLOWED_HOSTS=www.zhibanhome.com,zhibanhome.com"
 Environment="DJANGO_SECRET_KEY=your-production-secret-key-here-change-it"
 Environment="DB_ENGINE=postgresql"
 Environment="DB_NAME=magnesium_order_db"

@@ -5,6 +5,13 @@ Django settings for magnesium_order_platform project.
 import os
 from pathlib import Path
 
+# PyMySQL 兼容（宝塔面板使用 MySQL 时无需安装 mysqlclient）
+try:
+    import pymysql
+    pymysql.install_as_MySQLdb()
+except ImportError:
+    pass
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ==================== 安全设置 ====================
@@ -22,7 +29,7 @@ X_FRAME_OPTIONS = 'SAMEORIGIN'
 # 生产环境必须配置CSRF可信来源（HTTPS部署时）
 CSRF_TRUSTED_ORIGINS = os.environ.get(
     'CSRF_TRUSTED_ORIGINS',
-    'http://127.0.0.1,http://localhost'
+    'http://127.0.0.1,http://localhost,http://www.zhibanhome.com,https://www.zhibanhome.com'
 ).split(',')
 
 # 生产环境安全设置
@@ -96,6 +103,21 @@ if DB_ENGINE == 'postgresql':
             'PASSWORD': os.environ.get('DB_PASSWORD', ''),
             'HOST': os.environ.get('DB_HOST', 'localhost'),
             'PORT': os.environ.get('DB_PORT', '5432'),
+        }
+    }
+elif DB_ENGINE == 'mysql':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': os.environ.get('DB_NAME', 'magnesium_order_db'),
+            'USER': os.environ.get('DB_USER', 'magnesium_user'),
+            'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '3306'),
+            'OPTIONS': {
+                'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            },
         }
     }
 else:
