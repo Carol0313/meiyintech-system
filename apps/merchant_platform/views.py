@@ -190,6 +190,7 @@ def member_list(request):
     return render(request, 'merchant/member_list.html', {
         'members': members,
         'status_filter': status_filter,
+        'merchant': merchant,
     })
 
 
