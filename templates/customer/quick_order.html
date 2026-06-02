@@ -224,6 +224,13 @@
                         <div class="mt-2" id="priceDisplay" style="display:none;">
                             <span class="badge bg-primary">单价：¥<span id="priceValue">0.00</span> / cm²</span>
                         </div>
+                        <!-- 温馨提醒：红框版边提示 -->
+                        <div class="mt-3" id="borderTip" style="display:none;">
+                            <div class="alert alert-warning py-2 mb-0 d-flex align-items-center" style="font-size:13px;">
+                                <i class="bi bi-info-circle-fill me-2"></i>
+                                <span id="borderTipText"></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -439,6 +446,7 @@ function selectProduct(prodKey) {
     unitPriceInput.value = '0';
     priceDisplay.style.display = 'none';
     calcPrice();
+    updateBorderTip(prodKey);
 
     const catData = SPEC_DATA[categoryInput.value];
     if (!catData || !catData.products[prodKey]) {
@@ -805,6 +813,32 @@ function calcPrice() {
     unitPriceDisplay.textContent = up.toFixed(2);
     totalPriceEl.textContent = total.toFixed(2);
     urgentDisplay.style.display = isUrgent ? 'inline' : 'none';
+}
+
+function updateBorderTip(prodKey) {
+    const tipBox = document.getElementById('borderTip');
+    const tipText = document.getElementById('borderTipText');
+    if (!tipBox || !tipText) return;
+    if (!prodKey) {
+        tipBox.style.display = 'none';
+        return;
+    }
+    let msg = '';
+    if (prodKey.startsWith('etching_')) {
+        msg = '腐蚀版：红框识别后，单边自动 +5mm 版边计算面积';
+    } else if (prodKey.startsWith('carving_')) {
+        msg = '雕刻版：红框识别后，单边自动 +10mm 版边计算面积';
+    } else if (prodKey.startsWith('resin_')) {
+        msg = '树脂版：红框识别后，单边自动 +5mm 版边计算面积';
+    } else if (prodKey.startsWith('film_')) {
+        msg = '菲林：按实际尺寸计算，不添加版边';
+    }
+    if (msg) {
+        tipText.textContent = msg;
+        tipBox.style.display = 'block';
+    } else {
+        tipBox.style.display = 'none';
+    }
 }
 
 urgentCheck.addEventListener('change', calcPrice);

@@ -1181,3 +1181,29 @@ def customer_statement_export(request, statement_id):
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
+
+@login_required
+@customer_required
+def download_customer_file(request, order_id, item_id):
+    """
+    客户安全下载自己的订单文件
+    """
+    order = get_object_or_404(Order, id=order_id, customer=request.user)
+    item = get_object_or_404(OrderItem, id=item_id, order=order)
+
+    if not item.file:
+        messages.error(request, '该订单没有上传文件')
+        return redirect('order_detail', order_id=order.id)
+
+    file_path = item.file.path
+    if not os.path.exists(file_path):
+        messages.error(request, '文件不存在或已被删除')
+        return redirect('order_detail', order_id=order.id)
+
+    with open(file_path, 'rb') as f:
+        response = HttpResponse(f.read(), content_type='application/octet-stream')
+        from urllib.parse import quote
+        filename = item.original_file_name or os.path.basename(item.file.name)
+        response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
+        return response
+
