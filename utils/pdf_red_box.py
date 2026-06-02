@@ -2,9 +2,20 @@
 PDF框识别工具
 从客户上传的PDF中提取任意颜色的矩形框（制版内容区域）
 支持红色、黑色、蓝色等各种颜色的框，排除白色/透明框
+
+2025-06-02 修复记录：
+1. 放宽文字区域过滤阈值（75%→90%），避免误删含文字的有效红框
+2. 放宽绘图路径 items 限制（15→25），避免漏识别复杂路径组成的矩形
+3. 扩大数量文字搜索范围（框四周各80pt），提高数量识别率
+4. 修复 CMYK/灰度白色判断的浮点数精度问题
+5. 增加红色框优先权重，优先识别红色标记框
+6. 增加日志输出，便于排查识别问题
 """
 
 import fitz
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def find_colored_rectangles(file_path):
@@ -15,9 +26,10 @@ def find_colored_rectangles(file_path):
     过滤策略：
     1. 最小尺寸放宽到 15x10pt（约5.3x3.5mm），保留小制版框
     2. 排除页面边框/裁切框（与页面边界重合或面积超过页面90%）
-    3. 排除极端细长条（宽高比>20）和路径过于复杂的图形（>20个items）
+    3. 排除极端细长条（宽高比>20）和路径过于复杂的图形（>25个items）
     4. 排除嵌套在内的大面积内边框（面积>外层60%的内嵌框）
-    5. 最多返回5个框
+    5. 排除与文字块高度重叠的区域（阈值从75%放宽到90%，避免误删含文字的有效框）
+    6. 最多返回5个框
     """
     doc = fitz.open(file_path)
     colored_rects = []
@@ -39,6 +51,9 @@ def find_colored_rectangles(file_path):
             # 检测任意有颜色的框（排除白色/透明）
             is_colored_stroke = _is_colored_box(color)
             is_colored_fill = _is_colored_box(fill)
+            # 红色框给予更高优先级（标记为红色专用框）
+            is_red_stroke = _is_red_box(color)
+            is_red_fill = _is_red_box(fill)
 
             if is_colored_stroke or is_colored_fill:
                 rect = d.get('rect')
@@ -62,8 +77,8 @@ def find_colored_rectangles(file_path):
                     continue
                 
                 # 过滤4：排除路径过于复杂的图形（文字轮廓/复杂装饰通常 items 很多）
-                # 简单矩形框通常 items <= 10；收紧到 15 以过滤短文字轮廓
-                if len(items) > 15:
+                # 简单矩形框通常 items <= 10；收紧到 25 以过滤短文字轮廓
+                if len(items) > 25:
                     continue
                 
                 # 过滤5：排除页面边框
@@ -77,12 +92,15 @@ def find_colored_rectangles(file_path):
                     continue
                 
                 # 过滤6：排除与文字块高度重叠的区域（客户备注/文字注释）
+                # 【修复】阈值从 75% 放宽到 90%，避免误删含文字的有效制版框
+                # 同时增加面积判断：大于 3000pt²（约10cm×10cm）的框即使含文字也保留
                 is_text_area = False
-                for tr in text_rects:
-                    intersect = rect & tr
-                    if intersect and intersect.get_area() > rect_area * 0.75:
-                        is_text_area = True
-                        break
+                if rect_area < 3000:  # 只对较小的框应用文字过滤
+                    for tr in text_rects:
+                        intersect = rect & tr
+                        if intersect and intersect.get_area() > rect_area * 0.90:
+                            is_text_area = True
+                            break
                 if is_text_area:
                     continue
                 
@@ -93,13 +111,16 @@ def find_colored_rectangles(file_path):
                     'width': round(rect.width, 2),
                     'height': round(rect.height, 2),
                     'area': round(rect.width * rect.height, 2),
+                    'is_red': is_red_stroke or is_red_fill,
                 })
 
         # 方法2: 通过注释(Annotation)识别
         for annot in page.annots():
             if annot.type[0] in (2, 8, 22):  # Square, Highlight, Stamp 等
                 color = annot.colors.get('stroke') or annot.colors.get('fill')
-                if _is_colored_box(color):
+                is_colored = _is_colored_box(color)
+                is_red = _is_red_box(color)
+                if is_colored:
                     rect = annot.rect
                     if rect.width >= 15 and rect.height >= 10:
                         rect_area = rect.width * rect.height
@@ -123,14 +144,17 @@ def find_colored_rectangles(file_path):
                             'width': round(rect.width, 2),
                             'height': round(rect.height, 2),
                             'area': round(rect.width * rect.height, 2),
+                            'is_red': is_red,
                         })
 
     doc.close()
 
     # 去重：合并坐标相近的矩形
     colored_rects = _dedup_rects(colored_rects)
-    # 按面积从大到小排序
-    colored_rects.sort(key=lambda r: r['area'], reverse=True)
+    
+    # 【修复】优先按红色框排序，然后按面积排序
+    # 红色框通常是客户明确标记的制版区域，应优先
+    colored_rects.sort(key=lambda r: (not r.get('is_red', False), -r['area']))
 
     # 过滤嵌套内边框：如果一个框完全包含在另一个框内，且面积 > 外层框的 60%，
     # 则认为是内边框/描边副本，予以排除
@@ -154,7 +178,14 @@ def find_colored_rectangles(file_path):
     colored_rects = filtered
 
     # 最多返回5个框
-    return colored_rects[:5]
+    result = colored_rects[:5]
+    
+    if result:
+        logger.info(f"[红框识别] 识别到 {len(result)} 个框: {result}")
+    else:
+        logger.info(f"[红框识别] 未识别到有效框")
+    
+    return result
 
 
 # 保留旧函数名作为别名，兼容现有调用
@@ -178,13 +209,30 @@ def _is_colored_box(color):
     elif len(color) == 4:
         # CMYK
         c, m, y, k = color[0], color[1], color[2], color[3]
-        # 排除白色（C=M=Y=0, K=0）
-        if c == 0 and m == 0 and y == 0 and k == 0:
+        # 【修复】排除白色（C=M=Y≈0, K≈0），使用容差避免浮点精度问题
+        if abs(c) < 0.01 and abs(m) < 0.01 and abs(y) < 0.01 and abs(k) < 0.01:
             return False
         return True
     elif len(color) == 1:
         # 灰度，排除白色
         return color[0] < 0.95
+    return False
+
+
+def _is_red_box(color):
+    """判断是否为明显的红色框（R高，G/B低）"""
+    if not color:
+        return False
+    if len(color) >= 3:
+        r, g, b = color[0], color[1], color[2]
+        # 红色：R通道明显高于G和B
+        if r > 0.5 and r > g + 0.15 and r > b + 0.15:
+            return True
+    elif len(color) == 4:
+        # CMYK红色：M和Y较高，C和K较低
+        c, m, y, k = color[0], color[1], color[2], color[3]
+        if m > 0.3 and y > 0.3 and c < 0.3 and k < 0.5:
+            return True
     return False
 
 
@@ -261,6 +309,7 @@ def smart_extract_boxes(file_path):
     """
     rects = find_colored_rectangles(file_path)
     if not rects:
+        logger.info(f"[红框识别] {file_path} 未识别到框")
         return []
 
     doc = fitz.open(file_path)
@@ -271,11 +320,11 @@ def smart_extract_boxes(file_path):
         length_mm = round(r['width'] * pt_to_mm, 2)
         width_mm = round(r['height'] * pt_to_mm, 2)
 
-        # 提取框附近文字（框下方扩展50pt区域）
+        # 【修复】扩大数量文字搜索范围：框四周各扩展80pt，避免遗漏
         page = doc[r['page']]
         expanded_rect = fitz.Rect(
-            r['x'] - 5, r['y'] - 5,
-            r['x'] + r['width'] + 5, r['y'] + r['height'] + 80
+            r['x'] - 80, r['y'] - 80,
+            r['x'] + r['width'] + 80, r['y'] + r['height'] + 80
         )
         # 确保在页面范围内
         expanded_rect = expanded_rect & page.rect
@@ -295,7 +344,6 @@ def smart_extract_boxes(file_path):
     doc.close()
 
     # 去重：坐标和尺寸都相近（误差±1mm/±2pt）的框视为同一内容，保留第一个
-    # 修正：原逻辑只比较尺寸，会误删同一文件中多个相同尺寸的制版框
     unique = []
     for item in results:
         is_dup = False
@@ -309,28 +357,35 @@ def smart_extract_boxes(file_path):
         if not is_dup:
             unique.append(item)
 
+    logger.info(f"[红框识别] {file_path} 去重后 {len(unique)} 个框")
     return unique
 
 
 def smart_extract_boxes_for_order(file_path):
     """
     为下单流程提取框信息
+    【修复】total_area_cm2 也加入 5mm 版边，与前端和订单模型保持一致
     返回: {
         'boxes': [...],           # 所有唯一框列表
         'box_count': N,           # 框数量
         'first_length': ...,      # 第一个框的长
         'first_width': ...,       # 第一个框的宽
         'first_quantity': ...,    # 第一个框识别的数量
-        'total_area_cm2': ...,    # 所有框的总面积(cm²)
+        'total_area_cm2': ...,    # 所有框的总面积(cm²)，含5mm版边
     }
     """
     boxes = smart_extract_boxes(file_path)
     if not boxes:
+        logger.info(f"[红框识别] {file_path} 无框数据")
         return None
 
-    total_area = sum((b['length_mm'] * b['width_mm'] / 100.0) for b in boxes)
+    # 【修复】计算总面积时加入 5mm 版边，与前端和 OrderItem.save() 保持一致
+    total_area = sum(
+        ((b['length_mm'] + 5.0) * (b['width_mm'] + 5.0) / 100.0) * b['quantity']
+        for b in boxes
+    )
 
-    return {
+    result = {
         'boxes': boxes,
         'box_count': len(boxes),
         'first_length': boxes[0]['length_mm'],
@@ -338,3 +393,5 @@ def smart_extract_boxes_for_order(file_path):
         'first_quantity': boxes[0]['quantity'],
         'total_area_cm2': round(total_area, 2),
     }
+    logger.info(f"[红框识别] {file_path} 订单框信息: {result}")
+    return result

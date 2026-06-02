@@ -135,7 +135,7 @@
                 </div>
                 <div class="d-flex gap-1">
                     {% if batch.production_pdf %}
-                    <a href="{{ batch.production_pdf.url }}" class="btn btn-sm btn-outline-danger" target="_blank" title="下载生产PDF">
+                    <a href="{% url 'download_plate_batch_file' batch.id 'production_pdf' %}" class="btn btn-sm btn-outline-danger" target="_blank" title="下载生产PDF">
                         <i class="bi bi-file-earmark-pdf"></i> PDF
                     </a>
                     {% endif %}
@@ -145,7 +145,7 @@
             <div class="batch-card-body">
                 {% if batch.layout_image %}
                 <a href="{% url 'plate_batch_detail' batch.id %}">
-                    <img src="{{ batch.layout_image.url }}" alt="拼版效果图" loading="lazy">
+                    <img src="{% url 'download_plate_batch_file' batch.id 'layout_image' %}" alt="拼版效果图" loading="lazy">
                 </a>
                 {% else %}
                 <div style="height:180px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;color:#999;">

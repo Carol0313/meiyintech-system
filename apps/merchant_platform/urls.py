@@ -26,6 +26,8 @@ urlpatterns = [
     path('orders/<uuid:order_id>/', views.merchant_order_detail, name='merchant_order_detail'),
     path('orders/<uuid:order_id>/upload-photo/', views.upload_production_photo, name='upload_production_photo'),
     path('orders/<uuid:order_id>/remake/', views.remake_order_create, name='remake_order_create'),
+    path('orders/<uuid:order_id>/items/<uuid:item_id>/download/', views.download_order_file, name='download_order_file'),
+    path('plate-batches/<uuid:batch_id>/download/<str:field_name>/', views.download_plate_batch_file, name='download_plate_batch_file'),
     # 拼版工具（新版：跨订单拼版批次）
     path('plate-batches/', views.plate_batch_list, name='plate_batch_list'),
     path('plate-batches/generate/', views.plate_batch_generate, name='plate_batch_generate'),

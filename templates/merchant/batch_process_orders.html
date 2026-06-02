@@ -111,7 +111,7 @@
                 <span class="pi-badge">{{ item.length_mm }}×{{ item.width_mm }}mm</span>
                 <span class="pi-badge">数量 ×{{ item.quantity }}</span>
                 {% if item.file %}
-                <a href="{{ item.file.url }}" target="_blank" class="small text-primary">查看文件</a>
+                <a href="{% url 'download_order_file' order.id item.id %}" target="_blank" class="small text-primary">查看文件</a>
                 {% else %}
                 <span class="small text-muted">无文件</span>
                 {% endif %}
