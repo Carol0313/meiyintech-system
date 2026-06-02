@@ -257,6 +257,7 @@ class OrderItem(models.Model):
     area = models.DecimalField('面积(cm²)', max_digits=12, decimal_places=2, default=0)
     subtotal = models.DecimalField('小计(元)', max_digits=12, decimal_places=2, default=0)
     file = models.FileField('上传文件', upload_to='order_files/%Y%m/', blank=True, null=True)
+    original_file_name = models.CharField('原始文件名', max_length=255, blank=True, default='')
     file_processed = models.BooleanField('是否处理文件', default=False)
     file_standard_checked = models.BooleanField('文件符合标准（转曲/矢量）', default=False)
     is_image_file = models.BooleanField('文件是图片文件', default=False)

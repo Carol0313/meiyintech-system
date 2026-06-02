@@ -857,6 +857,7 @@ document.getElementById('quickOrderForm').addEventListener('submit', function(e)
     filesDataInput.name = 'files_data';
     filesDataInput.value = JSON.stringify(recognizedFiles.map(f => ({
         file_path: f.file_path,
+        file_name: f.file_name || '',
         length_mm: f.length_mm,
         width_mm: f.width_mm,
         quantity: f.quantity,

@@ -2584,9 +2584,9 @@ def download_order_file(request, order_id, item_id):
 
     with open(file_path, 'rb') as f:
         response = HttpResponse(f.read(), content_type='application/octet-stream')
-        # 支持中文文件名
+        # 支持中文文件名：优先使用原始文件名，没有则使用存储文件名
         from urllib.parse import quote
-        filename = os.path.basename(item.file.name)
+        filename = item.original_file_name or os.path.basename(item.file.name)
         response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
         return response
 
