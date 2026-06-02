@@ -554,18 +554,18 @@
             </div>
             <div class="kb-files">
                 {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.layout_image %}
-                <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}" target="_blank">
+                <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}">
                     <i class="bi bi-image"></i> 拼版效果图
                 </a>
                 {% endif %}
                 {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.production_pdf %}
-                <a class="kb-file-link pdf" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'production_pdf' %}" target="_blank">
+                <a class="kb-file-link pdf" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'production_pdf' %}">
                     <i class="bi bi-file-earmark-pdf"></i> 下载生产PDF
                 </a>
                 {% endif %}
                 {% for item in order.items.all %}
                     {% if item.file %}
-                    <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" target="_blank" title="{{ item.file.name }}">
+                    <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" title="{{ item.file.name }}">
                         <i class="bi bi-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
                     </a>
                     {% endif %}
@@ -656,18 +656,18 @@
             </div>
             <div class="kb-files">
                 {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.layout_image %}
-                <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}" target="_blank">
+                <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}">
                     <i class="bi bi-image"></i> 拼版效果图
                 </a>
                 {% endif %}
                 {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.production_pdf %}
-                <a class="kb-file-link pdf" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'production_pdf' %}" target="_blank">
+                <a class="kb-file-link pdf" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'production_pdf' %}">
                     <i class="bi bi-file-earmark-pdf"></i> 下载生产PDF
                 </a>
                 {% endif %}
                 {% for item in order.items.all %}
                     {% if item.file %}
-                    <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" target="_blank" title="{{ item.file.name }}">
+                    <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" title="{{ item.file.name }}">
                         <i class="bi bi-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
                     </a>
                     {% endif %}
@@ -803,13 +803,13 @@
                 </div>
                 <div class="kb-files">
                     {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.layout_image %}
-                    <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}" target="_blank">
+                    <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}">
                         <i class="bi bi-image"></i> 拼版效果图
                     </a>
                     {% endif %}
                     {% for item in order.items.all %}
                         {% if item.file %}
-                        <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" target="_blank" title="{{ item.file.name }}">
+                        <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" title="{{ item.file.name }}">
                             <i class="bi bi-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
                         </a>
                         {% endif %}
