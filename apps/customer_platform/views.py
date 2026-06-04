@@ -492,13 +492,18 @@ def _draft_summary(draft):
     return f"{products.get(draft.get('product_name'), '')} {materials.get(draft.get('material'), '')} {draft.get('thickness', '')}mm × {draft.get('quantity', 1)}"
 
 
-def _calculate_pdf_area(file_path):
+def _calculate_pdf_area(file_path, box_info=None):
     """
     计算PDF参考面积（cm²）
     优先使用框识别的内容区域尺寸，没有框时回退到PDF页面尺寸
+    :param box_info: 已识别的框信息（可选，避免重复识别）
     """
     try:
-        # 先尝试智能框识别（支持任意颜色框）
+        # 先尝试使用已识别的框信息
+        if box_info:
+            return box_info['total_area_cm2']
+
+        # 否则重新识别
         from utils.pdf_red_box import smart_extract_boxes_for_order
         box_info = smart_extract_boxes_for_order(file_path)
         if box_info:
@@ -750,7 +755,17 @@ def quick_order_upload(request):
         if not local_path:
             return JsonResponse({'success': False, 'error': '文件保存失败'})
 
-        # PDF转纯黑处理（制版需要）
+        # 【修复】先识别红框（必须在转纯黑之前！）
+        from utils.pdf_red_box import smart_extract_boxes_for_order
+        box_info = smart_extract_boxes_for_order(local_path)
+
+        # 计算面积（复用已识别的框信息）
+        area = _calculate_pdf_area(local_path, box_info)
+
+        # 获取页面尺寸
+        pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
+
+        # PDF转纯黑处理（制版需要）- 放在红框识别之后
         try:
             from utils.pdf_processor import convert_pdf_to_black
             convert_pdf_to_black(local_path)
@@ -760,16 +775,6 @@ def quick_order_upload(request):
                     default_storage.save(path, f)
         except Exception:
             pass
-
-        # 智能框识别：获取所有框+数量
-        from utils.pdf_red_box import smart_extract_boxes_for_order
-        box_info = smart_extract_boxes_for_order(local_path)
-
-        # 计算面积
-        area = _calculate_pdf_area(local_path)
-
-        # 获取页面尺寸
-        pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
 
         # 生成纯黑预览图
         preview_url = None
@@ -841,7 +846,17 @@ def batch_upload_files(request):
                 results.append({'success': False, 'error': '文件保存失败', 'file_name': file.name})
                 continue
 
-            # PDF转纯黑处理（制版需要）
+            # 【修复】先识别红框（必须在转纯黑之前！）
+            from utils.pdf_red_box import smart_extract_boxes_for_order
+            box_info = smart_extract_boxes_for_order(local_path)
+
+            # 计算面积（复用已识别的框信息）
+            area = _calculate_pdf_area(local_path, box_info)
+
+            # 获取页面尺寸
+            pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
+
+            # PDF转纯黑处理（制版需要）- 放在红框识别之后
             try:
                 from utils.pdf_processor import convert_pdf_to_black
                 convert_pdf_to_black(local_path)
@@ -851,16 +866,6 @@ def batch_upload_files(request):
                         default_storage.save(path, f)
             except Exception:
                 pass
-
-            # 智能框识别
-            from utils.pdf_red_box import smart_extract_boxes_for_order
-            box_info = smart_extract_boxes_for_order(local_path)
-
-            # 计算面积
-            area = _calculate_pdf_area(local_path)
-
-            # 获取页面尺寸
-            pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
 
             # 生成预览图
             preview_url = None
