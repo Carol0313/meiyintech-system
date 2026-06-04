@@ -2825,9 +2825,9 @@ def download_plate_file(request, order_id, item_id):
 @merchant_required
 def pending_layout_orders(request):
     """
-    待拼版订单列表
-    显示已上传制版文件、且未拼版确认的订单项
-    按 (product_name, material, thickness) 分组
+    待拼版页面（合并原拼版工具功能）
+    上半部分：显示已有的拼版批次列表
+    下半部分：显示可拼版的订单项（按 product_name, material, thickness 分组）
     """
     try:
         merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
@@ -2835,11 +2835,33 @@ def pending_layout_orders(request):
         messages.error(request, '无权访问')
         return redirect('merchant_dashboard')
     
-    # 获取所有已上传制版文件、且未拼版确认的订单项
-    # 条件：
-    # 1. 订单状态在 design_confirmed / paid（生产前）
-    # 2. 已上传 plate_file
-    # 3. 未关联到已确认的拼版批次
+    # ===== 上半部分：已有拼版批次 =====
+    from apps.orders.models import PlateBatch
+    status_filter = request.GET.get('status', '')
+    batches_qs = PlateBatch.objects.filter(merchant=merchant).prefetch_related('items', 'items__order', 'items__order_item')
+    if status_filter:
+        batches_qs = batches_qs.filter(status=status_filter)
+    batches_qs = batches_qs.order_by('-created_at')
+    
+    # 统计
+    stats = {
+        'total': PlateBatch.objects.filter(merchant=merchant).count(),
+        'auto_generated': PlateBatch.objects.filter(merchant=merchant, status='auto_generated').count(),
+        'confirmed': PlateBatch.objects.filter(merchant=merchant, status='confirmed').count(),
+        'in_production': PlateBatch.objects.filter(merchant=merchant, status='in_production').count(),
+    }
+    
+    # 为每个批次预计算客户数
+    batch_list = []
+    for batch in batches_qs:
+        customer_ids = set()
+        for bi in batch.items.all():
+            if bi.order and bi.order.customer_id:
+                customer_ids.add(bi.order.customer_id)
+        batch.customer_count = len(customer_ids)
+        batch_list.append(batch)
+    
+    # ===== 下半部分：可拼版订单项 =====
     items = OrderItem.objects.filter(
         order__merchant=merchant,
         order__status__in=['design_confirmed', 'paid'],
@@ -2863,6 +2885,9 @@ def pending_layout_orders(request):
         groups[key]['items'].append(item)
     
     return render(request, 'merchant/pending_layout_orders.html', {
+        'batches': batch_list,
+        'stats': stats,
+        'status_filter': status_filter,
         'groups': groups,
         'total_items': items.count(),
     })

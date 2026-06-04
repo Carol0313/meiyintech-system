@@ -1,10 +1,71 @@
 {% extends 'base.html' %}
-{% block title %}待拼版订单{% endblock %}
-{% block page_title %}待拼版订单{% endblock %}
-{% block page_subtitle %}选择已上传制版文件的订单项进行拼版{% endblock %}
+{% block title %}待拼版{% endblock %}
+{% block page_title %}待拼版{% endblock %}
+{% block page_subtitle %}拼版批次管理 & 创建新拼版{% endblock %}
 
 {% block content %}
 <style>
+    /* 批次卡片 */
+    .batch-card {
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: #fff;
+        overflow: hidden;
+        transition: box-shadow 0.2s;
+    }
+    .batch-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .batch-card-header {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .batch-card-body img {
+        width: 100%;
+        height: 140px;
+        object-fit: cover;
+        display: block;
+        background: #f5f5f5;
+    }
+    .batch-card-footer {
+        padding: 10px 14px;
+        border-top: 1px solid var(--border-color);
+    }
+    .batch-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 12px;
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 4px;
+    }
+    .batch-meta span {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+    }
+    .stat-card {
+        background: #fff;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 12px;
+        text-align: center;
+    }
+    .stat-value {
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--primary);
+    }
+    .stat-label {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    /* 分组订单 */
     .group-card {
         border: 1px solid var(--border-color);
         border-radius: 10px;
@@ -90,14 +151,151 @@
     }
     .empty-state {
         text-align: center;
-        padding: 60px 20px;
+        padding: 40px 20px;
     }
     .empty-state i {
-        font-size: 48px;
+        font-size: 40px;
         color: #cbd5e1;
-        margin-bottom: 16px;
+        margin-bottom: 12px;
+    }
+    .section-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin: 24px 0 12px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid var(--primary-light);
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 </style>
+
+<!-- ===== 上半部分：已有拼版批次 ===== -->
+<div class="section-title">
+    <i class="bi bi-grid-3x3"></i> 拼版批次
+    <span class="badge bg-secondary">{{ stats.total }}</span>
+</div>
+
+<!-- 统计栏 -->
+<div class="row g-2 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total }}</div>
+            <div class="stat-label">全部批次</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" style="color:var(--primary);">{{ stats.auto_generated }}</div>
+            <div class="stat-label">待确认</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" style="color:var(--green);">{{ stats.confirmed }}</div>
+            <div class="stat-label">已确认</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" style="color:var(--orange);">{{ stats.in_production }}</div>
+            <div class="stat-label">生产中</div>
+        </div>
+    </div>
+</div>
+
+<!-- 筛选 + 自动拼版 -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <form method="get" class="d-flex gap-2">
+        <select name="status" class="form-select form-select-sm" style="width:auto;min-width:140px;" onchange="this.form.submit()">
+            <option value="" {% if not status_filter %}selected{% endif %}>全部状态</option>
+            <option value="auto_generated" {% if status_filter == 'auto_generated' %}selected{% endif %}>待确认</option>
+            <option value="confirmed" {% if status_filter == 'confirmed' %}selected{% endif %}>已确认</option>
+            <option value="in_production" {% if status_filter == 'in_production' %}selected{% endif %}>生产中</option>
+            <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>已驳回</option>
+        </select>
+    </form>
+    <form method="post" action="{% url 'plate_batch_generate' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-magic"></i> 自动跨订单拼版
+        </button>
+    </form>
+</div>
+
+<!-- 批次卡片 -->
+{% if batches %}
+<div class="row g-3 mb-4">
+    {% for batch in batches %}
+    <div class="col-12 col-md-6 col-xl-4">
+        <div class="batch-card">
+            <div class="batch-card-header">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge
+                        {% if batch.status == 'auto_generated' %}bg-primary
+                        {% elif batch.status == 'confirmed' %}bg-success
+                        {% elif batch.status == 'in_production' %}bg-warning text-dark
+                        {% elif batch.status == 'rejected' %}bg-danger
+                        {% else %}bg-secondary{% endif %}">
+                        {{ batch.get_status_display }}
+                    </span>
+                    <span class="small fw-medium">{{ batch.plate_spec_name }}</span>
+                </div>
+                <div class="d-flex gap-1">
+                    {% if batch.production_pdf %}
+                    <a href="{% url 'download_plate_batch_file' batch.id 'production_pdf' %}" class="btn btn-sm btn-outline-danger" title="下载生产PDF">
+                        <i class="bi bi-file-earmark-pdf"></i> PDF
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'plate_batch_detail' batch.id %}" class="btn btn-sm btn-outline-primary">查看</a>
+                </div>
+            </div>
+            <div class="batch-card-body">
+                {% if batch.layout_image %}
+                <a href="{% url 'plate_batch_detail' batch.id %}">
+                    <img src="{% url 'download_plate_batch_file' batch.id 'layout_image' %}" alt="拼版效果图" loading="lazy">
+                </a>
+                {% else %}
+                <div style="height:140px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;color:#999;">
+                    <i class="bi bi-image" style="font-size:28px;"></i>
+                </div>
+                {% endif %}
+            </div>
+            <div class="batch-card-footer">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="small fw-medium">
+                        {{ batch.product_name }}
+                        <span class="text-muted">· {{ batch.material }} {{ batch.thickness }}mm</span>
+                    </div>
+                    <div class="small" style="color:var(--green);font-weight:600;">
+                        {% if batch.usage_rate %}{{ batch.usage_rate|floatformat:1 }}%{% endif %}
+                    </div>
+                </div>
+                <div class="batch-meta">
+                    <span><i class="bi bi-layers"></i> {{ batch.items.count }} 件</span>
+                    <span><i class="bi bi-clock"></i> {{ batch.created_at|date:"m-d H:i" }}</span>
+                    <span><i class="bi bi-telephone"></i> {{ batch.customer_count }} 位客户</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card mb-4">
+    <div class="empty-state">
+        <i class="bi bi-grid-3x3-gap"></i>
+        <p class="text-muted mb-0">暂无拼版批次</p>
+    </div>
+</div>
+{% endif %}
+
+<!-- ===== 下半部分：创建新拼版 ===== -->
+<div class="section-title">
+    <i class="bi bi-plus-circle"></i> 创建新拼版
+    <span class="badge bg-secondary">{{ total_items }}</span>
+</div>
 
 <!-- 统计信息 -->
 <div class="card mb-3">
@@ -205,8 +403,8 @@ function toggleGroup(groupKey, checked) {
     });
 }
 
-// 表单提交前验证
-document.querySelectorAll('form').forEach(function(form) {
+// 表单提交前验证（只针对创建拼版的表单）
+document.querySelectorAll('.group-card form').forEach(function(form) {
     form.addEventListener('submit', function(e) {
         const checked = form.querySelectorAll('input[name="item_ids"]:checked');
         if (checked.length === 0) {
