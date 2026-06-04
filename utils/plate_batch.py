@@ -17,6 +17,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.files.base import ContentFile
 from PIL import Image, ImageDraw, ImageFont
+import fitz  # PyMuPDF
 
 from apps.orders.models import OrderItem, PlateBatch, PlateBatchItem
 from utils.plate_type_rules import PLATE_SPECS, get_spacing_mm

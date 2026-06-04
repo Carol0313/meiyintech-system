@@ -2380,6 +2380,60 @@ def plate_batch_detail(request, batch_id):
                 batch.factory = default_factory
             batch.save()
 
+            # === 阶段4：确认时重新生成高清生产PDF和效果图 ===
+            try:
+                from utils.plate_pdf import generate_plate_production_pdf
+                pdf_rel_path, pdf_url = generate_plate_production_pdf(batch, use_plate_file=True)
+                if pdf_rel_path:
+                    batch.production_pdf = pdf_rel_path
+                    batch.save(update_fields=['production_pdf'])
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f'[生产PDF生成失败] batch={batch.id.hex[:8]} error={e}')
+
+            try:
+                from utils.plate_batch import generate_plate_image
+                # 使用当前 layout_data 重新生成高清效果图（300 DPI）
+                plate_result = {
+                    'spec': {
+                        'width': batch.plate_width,
+                        'height': batch.plate_height,
+                        'name': batch.plate_spec_name,
+                    },
+                    'placed': [],
+                    'usage_rate': batch.usage_rate or 0,
+                }
+                for rect in data.get('rectangles', []):
+                    # 找到对应的 OrderItem
+                    rid = rect.get('id', '')
+                    order_item_id = rid.rsplit('_', 1)[0] if '_' in rid else rid
+                    item = None
+                    for bi in batch.items.select_related('order_item').all():
+                        if str(bi.order_item_id) == order_item_id:
+                            item = bi.order_item
+                            break
+                    plate_result['placed'].append({
+                        'id': rid,
+                        'x': rect.get('x', 0),
+                        'y': rect.get('y', 0),
+                        'orig_width': rect.get('width', 0),
+                        'orig_height': rect.get('height', 0),
+                        'label': rect.get('label', ''),
+                        'order_sn': rect.get('order_sn', ''),
+                        'customer_phone': rect.get('customer_phone', ''),
+                        'original_item': item,
+                    })
+                img_rel_path, img_url = generate_plate_image(plate_result, dpi=300, use_plate_file=True)
+                if img_rel_path:
+                    batch.layout_image = img_rel_path
+                    batch.save(update_fields=['layout_image'])
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f'[高清效果图生成失败] batch={batch.id.hex[:8]} error={e}')
+            # === 阶段4结束 ===
+
             # 更新关联订单状态为 confirmed 并下发工厂
             affected_orders = set()
             for bi in batch.items.all():
