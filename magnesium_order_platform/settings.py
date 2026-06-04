@@ -165,7 +165,7 @@ OSS_ACCESS_KEY_SECRET = os.environ.get('OSS_ACCESS_KEY_SECRET', '')       # Acce
 OSS_ENDPOINT = 'oss-cn-shanghai.aliyuncs.com'  # Bucket 所在地域的 Endpoint
 OSS_BUCKET_NAME = 'zbhomefiles'             # Bucket 名称
 OSS_BASE_DIR = 'magnesium/'      # 文件在 Bucket 中的根目录
-OSS_INTERNAL = True             # ECS 同区域建议使用 True（走内网，免费且更快）
+OSS_INTERNAL = False            # 本地开发设为 False；ECS 同区域部署时改为 True（走内网，免费且更快）
 OSS_CUSTOM_DOMAIN = ''           # CDN 加速域名（可选）
 
 # 启用 OSS：取消下面一行的注释，所有上传文件将自动存入阿里云 OSS
