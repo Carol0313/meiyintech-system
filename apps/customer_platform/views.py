@@ -219,9 +219,15 @@ def order_step2(request, draft_id):
             path = default_storage.save(filename, file)
             # PDF转纯黑处理（制版需要）
             try:
-                from utils.pdf_processor import convert_pdf_to_black
-                full_path = os.path.join(settings.MEDIA_ROOT, path)
-                convert_pdf_to_black(full_path)
+                from utils.pdf_processor import convert_pdf_to_black, _get_pdf_local_path
+                local_path = _get_pdf_local_path(path)
+                if local_path:
+                    convert_pdf_to_black(local_path)
+                    # 如果原始文件在 OSS，把处理后的文件上传回去
+                    if local_path != os.path.join(settings.MEDIA_ROOT, path):
+                        with open(local_path, 'rb') as f:
+                            default_storage.save(path, f)
+                        os.unlink(local_path)
             except Exception:
                 pass
             draft['file_path'] = path
@@ -243,13 +249,12 @@ def order_step3(request, draft_id):
         messages.error(request, '文件信息缺失')
         return redirect('place_order')
     # 计算PDF面积（优先红框，其次页面尺寸）
-    file_full_path = os.path.join(settings.MEDIA_ROOT, draft['file_path'])
-    area = _calculate_pdf_area(file_full_path)
+    area = _calculate_pdf_area(draft['file_path'])
     draft['area'] = str(area)
     request.session[f"draft_{draft_id}"] = draft
 
     # 获取PDF页面尺寸，与用户填写尺寸做差异对比
-    pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(file_full_path)
+    pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(draft['file_path'])
     user_l = float(draft.get('length_mm', 0) or 0)
     user_w = float(draft.get('width_mm', 0) or 0)
 
@@ -292,18 +297,16 @@ def order_step4(request, draft_id):
         return redirect('place_order')
     # 生成PDF第一页纯黑预览图
     preview_url = None
-    file_full_path = os.path.join(settings.MEDIA_ROOT, draft['file_path'])
-    if os.path.exists(file_full_path):
-        preview_filename = f"previews/{draft_id}.png"
-        preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
-        os.makedirs(os.path.dirname(preview_path), exist_ok=True)
-        try:
-            from utils.pdf_processor import generate_pdf_preview
-            preview_url = generate_pdf_preview(file_full_path, preview_filename, dpi=150, black_only=True)
-            draft['preview_url'] = preview_url
-            request.session[f"draft_{draft_id}"] = draft
-        except Exception:
-            pass
+    preview_filename = f"previews/{draft_id}.png"
+    preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
+    os.makedirs(os.path.dirname(preview_path), exist_ok=True)
+    try:
+        from utils.pdf_processor import generate_pdf_preview
+        preview_url = generate_pdf_preview(draft['file_path'], preview_filename, dpi=150, black_only=True)
+        draft['preview_url'] = preview_url
+        request.session[f"draft_{draft_id}"] = draft
+    except Exception:
+        pass
     return render(request, 'customer/order_step4.html', {'draft': draft, 'preview_url': preview_url})
 
 
@@ -517,14 +520,24 @@ def _calculate_pdf_area(file_path):
 
 def _get_pdf_page_dimensions(file_path):
     """获取PDF页面尺寸（mm），用于与用户填写尺寸对比"""
+    from utils.pdf_processor import _get_pdf_local_path
     try:
-        doc = fitz.open(file_path)
+        local_path = _get_pdf_local_path(file_path)
+        if not local_path:
+            return None, None
+        doc = fitz.open(local_path)
         page = doc[0]
         rect = page.rect
         pt_to_mm = 25.4 / 72.0
         width_mm = round(rect.width * pt_to_mm, 1)
         height_mm = round(rect.height * pt_to_mm, 1)
         doc.close()
+        # 清理临时文件
+        if local_path != file_path and not local_path.startswith(str(settings.MEDIA_ROOT)):
+            try:
+                os.unlink(local_path)
+            except:
+                pass
         return width_mm, height_mm
     except Exception:
         return None, None
@@ -646,8 +659,8 @@ def order_detail(request, order_id):
         item.file_exists = False
         item.preview_url = None
         if item.file:
-            file_path = os.path.join(settings.MEDIA_ROOT, item.file.name)
-            item.file_exists = os.path.exists(file_path)
+            # 检查文件是否在存储后端（OSS 或本地）存在
+            item.file_exists = default_storage.exists(item.file.name)
             if item.file_exists:
                 preview_rel = f"customer_previews/{item.id}.png"
                 preview_path = os.path.join(settings.MEDIA_ROOT, preview_rel)
@@ -730,24 +743,33 @@ def quick_order_upload(request):
     try:
         filename = f"order_files/{request.user.id}/{uuid.uuid4().hex}{ext}"
         path = default_storage.save(filename, file)
-        full_path = os.path.join(settings.MEDIA_ROOT, path)
+
+        # 获取本地文件路径（OSS 文件会下载到临时文件）
+        from utils.pdf_processor import _get_pdf_local_path
+        local_path = _get_pdf_local_path(path)
+        if not local_path:
+            return JsonResponse({'success': False, 'error': '文件保存失败'})
 
         # PDF转纯黑处理（制版需要）
         try:
             from utils.pdf_processor import convert_pdf_to_black
-            convert_pdf_to_black(full_path)
+            convert_pdf_to_black(local_path)
+            # 如果原始文件在 OSS，把处理后的文件上传回去
+            if local_path != os.path.join(settings.MEDIA_ROOT, path):
+                with open(local_path, 'rb') as f:
+                    default_storage.save(path, f)
         except Exception:
             pass
 
         # 智能框识别：获取所有框+数量
         from utils.pdf_red_box import smart_extract_boxes_for_order
-        box_info = smart_extract_boxes_for_order(full_path)
+        box_info = smart_extract_boxes_for_order(local_path)
 
         # 计算面积
-        area = _calculate_pdf_area(full_path)
+        area = _calculate_pdf_area(local_path)
 
         # 获取页面尺寸
-        pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(full_path)
+        pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
 
         # 生成纯黑预览图
         preview_url = None
@@ -756,9 +778,16 @@ def quick_order_upload(request):
             preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
             os.makedirs(os.path.dirname(preview_path), exist_ok=True)
             from utils.pdf_processor import generate_pdf_preview
-            preview_url = generate_pdf_preview(full_path, preview_filename, dpi=150, black_only=True)
+            preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
         except Exception:
             pass
+
+        # 清理临时文件
+        if local_path != os.path.join(settings.MEDIA_ROOT, path):
+            try:
+                os.unlink(local_path)
+            except:
+                pass
 
         response_data = {
             'success': True,
@@ -804,33 +833,50 @@ def batch_upload_files(request):
         try:
             filename = f"order_files/{request.user.id}/{uuid.uuid4().hex}{ext}"
             path = default_storage.save(filename, file)
-            full_path = os.path.join(settings.MEDIA_ROOT, path)
+
+            # 获取本地文件路径（OSS 文件会下载到临时文件）
+            from utils.pdf_processor import _get_pdf_local_path
+            local_path = _get_pdf_local_path(path)
+            if not local_path:
+                results.append({'success': False, 'error': '文件保存失败', 'file_name': file.name})
+                continue
 
             # PDF转纯黑处理（制版需要）
             try:
                 from utils.pdf_processor import convert_pdf_to_black
-                convert_pdf_to_black(full_path)
+                convert_pdf_to_black(local_path)
+                # 如果原始文件在 OSS，把处理后的文件上传回去
+                if local_path != os.path.join(settings.MEDIA_ROOT, path):
+                    with open(local_path, 'rb') as f:
+                        default_storage.save(path, f)
             except Exception:
                 pass
 
             # 智能框识别
             from utils.pdf_red_box import smart_extract_boxes_for_order
-            box_info = smart_extract_boxes_for_order(full_path)
+            box_info = smart_extract_boxes_for_order(local_path)
 
             # 计算面积
-            area = _calculate_pdf_area(full_path)
+            area = _calculate_pdf_area(local_path)
 
             # 获取页面尺寸
-            pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(full_path)
+            pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
 
             # 生成预览图
             preview_url = None
             try:
                 preview_filename = f"previews/{uuid.uuid4().hex}.png"
                 from utils.pdf_processor import generate_pdf_preview
-                preview_url = generate_pdf_preview(full_path, preview_filename, dpi=150, black_only=True)
+                preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
             except Exception:
                 pass
+
+            # 清理临时文件
+            if local_path != os.path.join(settings.MEDIA_ROOT, path):
+                try:
+                    os.unlink(local_path)
+                except:
+                    pass
 
             file_result = {
                 'success': True,
@@ -858,53 +904,89 @@ def batch_upload_files(request):
 
 @transaction.atomic
 def _handle_quick_order_post(request, profile, tier):
-    """处理单页下单的POST请求（支持多文件）"""
+    """处理单页下单的POST请求（支持规格组模式 / 混合规格下单）"""
     from utils.pricing_tiers import get_customer_price
     import json
 
-    # 基础字段
-    product_name = request.POST.get('product_name')
-    material = request.POST.get('material')
-    thickness = request.POST.get('thickness')
-    unit_price_str = request.POST.get('unit_price', '0')
-
-    # 文件数据（JSON数组）
-    files_data_json = request.POST.get('files_data', '[]')
-    try:
-        files_data = json.loads(files_data_json)
-    except json.JSONDecodeError:
-        files_data = []
-
-    # 如果没有files_data，尝试兼容旧版单文件字段
-    if not files_data:
-        file_path = request.POST.get('file_path', '')
-        if file_path:
-            files_data = [{
-                'file_path': file_path,
-                'length_mm': request.POST.get('length_mm', 0) or 0,
-                'width_mm': request.POST.get('width_mm', 0) or 0,
-                'quantity': request.POST.get('quantity', 1),
-            }]
-
-    if not files_data:
-        messages.error(request, '请上传至少一个文件')
-        return redirect('place_order')
-
-    # 文件类型
-    file_type = request.POST.get('file_type', 'processed')
-    file_processed = (file_type == 'processed')
-    file_standard_checked = (file_type == 'standard')
-    is_image_file = (file_type == 'image')
-
-    # 其他
+    # 其他字段
     special_requests = request.POST.get('special_requests', '')
     preset_options = request.POST.getlist('preset_options')
     urgent = request.POST.get('urgent') == 'on'
     delivery_type = request.POST.get('delivery_type', 'express')
     address_id = request.POST.get('address_id')
 
-    # 定价
-    unit_price = get_customer_price(profile, product_name, material, thickness)
+    # 文件类型（旧兼容）
+    file_type = request.POST.get('file_type', 'processed')
+    file_processed = (file_type == 'processed')
+    file_standard_checked = (file_type == 'standard')
+    is_image_file = (file_type == 'image')
+
+    # ========== 尝试规格组模式 ==========
+    spec_groups_json = request.POST.get('spec_groups_data', '')
+    spec_groups = []
+    if spec_groups_json:
+        try:
+            spec_groups = json.loads(spec_groups_json)
+        except json.JSONDecodeError:
+            spec_groups = []
+
+    # ========== 回退到旧 files_data 模式 ==========
+    if not spec_groups:
+        files_data_json = request.POST.get('files_data', '[]')
+        try:
+            files_data = json.loads(files_data_json)
+        except json.JSONDecodeError:
+            files_data = []
+
+        # 兼容旧版单文件字段
+        if not files_data:
+            file_path = request.POST.get('file_path', '')
+            if file_path:
+                files_data = [{
+                    'file_path': file_path,
+                    'length_mm': request.POST.get('length_mm', 0) or 0,
+                    'width_mm': request.POST.get('width_mm', 0) or 0,
+                    'quantity': request.POST.get('quantity', 1),
+                }]
+
+        if not files_data:
+            messages.error(request, '请上传至少一个文件')
+            return redirect('place_order')
+
+        product_name = request.POST.get('product_name')
+        material = request.POST.get('material')
+        thickness = request.POST.get('thickness')
+        unit_price = get_customer_price(profile, product_name, material, thickness)
+
+        spec_groups = [{
+            'product_name': product_name,
+            'material': material,
+            'thickness': thickness,
+            'unit_price': float(unit_price) if unit_price else 0,
+            'files': files_data,
+        }]
+
+    if not spec_groups:
+        messages.error(request, '请添加至少一个规格组并上传文件')
+        return redirect('place_order')
+
+    # 检查所有规格组数据
+    total_files = 0
+    for gi, sg in enumerate(spec_groups):
+        if not sg.get('product_name'):
+            messages.error(request, f'规格组 {gi+1}：请选择细分产品')
+            return redirect('place_order')
+        if not sg.get('material'):
+            messages.error(request, f'规格组 {gi+1}：请选择材质')
+            return redirect('place_order')
+        if not sg.get('thickness'):
+            messages.error(request, f'规格组 {gi+1}：请选择厚度')
+            return redirect('place_order')
+        files = sg.get('files', [])
+        if not files:
+            messages.error(request, f'规格组 {gi+1}：请上传至少一个文件')
+            return redirect('place_order')
+        total_files += len(files)
 
     # 创建订单
     order = Order.objects.create(
@@ -926,27 +1008,41 @@ def _handle_quick_order_post(request, profile, tier):
         except Address.DoesNotExist:
             pass
 
-    # 为每个文件创建订单明细
-    for fd in files_data:
-        item_length = Decimal(str(fd.get('length_mm', 0) or 0))
-        item_width = Decimal(str(fd.get('width_mm', 0) or 0))
-        item_qty = int(fd.get('quantity', 1))
-        OrderItem.objects.create(
-            order=order,
-            product_name=product_name,
-            material=material,
-            thickness=thickness,
-            length_mm=item_length,
-            width_mm=item_width,
-            quantity=item_qty,
-            unit_price=unit_price,
-            file=fd.get('file_path', ''),
-            original_file_name=fd.get('file_name', ''),
-            file_processed=file_processed,
-            file_standard_checked=file_standard_checked,
-            is_image_file=is_image_file,
-            red_box_data=json.dumps(fd.get('boxes', [])),
-        )
+    # 为每个规格组的每个文件创建订单明细
+    all_items = []
+    for sg in spec_groups:
+        product_name = sg.get('product_name')
+        material = sg.get('material')
+        thickness = sg.get('thickness')
+        unit_price = Decimal(str(sg.get('unit_price', 0) or 0))
+        # 如果前端没传 unit_price，从定价表获取
+        if not unit_price or unit_price <= 0:
+            unit_price = get_customer_price(profile, product_name, material, thickness)
+            if not unit_price:
+                unit_price = Decimal('0')
+
+        files = sg.get('files', [])
+        for fd in files:
+            item_length = Decimal(str(fd.get('length_mm', 0) or 0))
+            item_width = Decimal(str(fd.get('width_mm', 0) or 0))
+            item_qty = int(fd.get('quantity', 1))
+            item = OrderItem.objects.create(
+                order=order,
+                product_name=product_name,
+                material=material,
+                thickness=thickness,
+                length_mm=item_length,
+                width_mm=item_width,
+                quantity=item_qty,
+                unit_price=unit_price,
+                file=fd.get('file_path', ''),
+                original_file_name=fd.get('file_name', ''),
+                file_processed=file_processed,
+                file_standard_checked=file_standard_checked,
+                is_image_file=is_image_file,
+                red_box_data=json.dumps(fd.get('boxes', [])),
+            )
+            all_items.append(item)
 
     order.update_total()
 
@@ -964,10 +1060,10 @@ def _handle_quick_order_post(request, profile, tier):
         auto_generate_plate_layout_for_order(order)
         order.plate_status = 'auto_generated'
         order.save(update_fields=['plate_status'])
-        messages.success(request, f'订单 {order.sn} 提交成功（含{len(files_data)}个文件），已使用信用额度支付。')
+        messages.success(request, f'订单 {order.sn} 提交成功（含{total_files}个文件），已使用信用额度支付。')
     else:
         order.transition_status('pending_payment', operator=request.user, remark='信用额度不足')
-        messages.warning(request, f'订单 {order.sn} 提交成功（含{len(files_data)}个文件），但信用额度不足，订单状态为待支付。')
+        messages.warning(request, f'订单 {order.sn} 提交成功（含{total_files}个文件），但信用额度不足，订单状态为待支付。')
 
     return redirect('my_orders')
 

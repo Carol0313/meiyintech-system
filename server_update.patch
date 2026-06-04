@@ -1,0 +1,2207 @@
+From 74d077e4b0265c7a01cb52fbccde16cd481a5442 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E5=BC=80=E5=8F=91=E8=80=85?= <dev@example.com>
+Date: Wed, 3 Jun 2026 07:55:14 +0800
+Subject: [PATCH] update: customer views, settings, templates and utils
+
+---
+ apps/customer_platform/views.py               |  282 +++--
+ magnesium_order_platform/settings.py          |   14 +-
+ network_check.bat                             |   30 +
+ templates/customer/place_order.html           | 1075 +++++++++--------
+ utils/oss_storage.py                          |   10 +-
+ utils/pdf_processor.py                        |   57 +-
+ utils/pdf_red_box.py                          |   47 +-
+ ...13\350\257\225\350\257\264\346\230\216.md" |  164 +++
+ ...4\272\213\346\265\213\350\257\225ping.txt" |   31 +
+ 9 files changed, 1119 insertions(+), 591 deletions(-)
+ create mode 100644 network_check.bat
+ create mode 100644 "\346\265\213\350\257\225\350\257\264\346\230\216.md"
+ create mode 100644 "\350\256\251\345\220\214\344\272\213\346\265\213\350\257\225ping.txt"
+
+diff --git a/apps/customer_platform/views.py b/apps/customer_platform/views.py
+index b7a0300..061b8ac 100644
+--- a/apps/customer_platform/views.py
++++ b/apps/customer_platform/views.py
+@@ -219,9 +219,15 @@ def order_step2(request, draft_id):
+             path = default_storage.save(filename, file)
+             # PDF转纯黑处理（制版需要）
+             try:
+-                from utils.pdf_processor import convert_pdf_to_black
+-                full_path = os.path.join(settings.MEDIA_ROOT, path)
+-                convert_pdf_to_black(full_path)
++                from utils.pdf_processor import convert_pdf_to_black, _get_pdf_local_path
++                local_path = _get_pdf_local_path(path)
++                if local_path:
++                    convert_pdf_to_black(local_path)
++                    # 如果原始文件在 OSS，把处理后的文件上传回去
++                    if local_path != os.path.join(settings.MEDIA_ROOT, path):
++                        with open(local_path, 'rb') as f:
++                            default_storage.save(path, f)
++                        os.unlink(local_path)
+             except Exception:
+                 pass
+             draft['file_path'] = path
+@@ -243,13 +249,12 @@ def order_step3(request, draft_id):
+         messages.error(request, '文件信息缺失')
+         return redirect('place_order')
+     # 计算PDF面积（优先红框，其次页面尺寸）
+-    file_full_path = os.path.join(settings.MEDIA_ROOT, draft['file_path'])
+-    area = _calculate_pdf_area(file_full_path)
++    area = _calculate_pdf_area(draft['file_path'])
+     draft['area'] = str(area)
+     request.session[f"draft_{draft_id}"] = draft
+ 
+     # 获取PDF页面尺寸，与用户填写尺寸做差异对比
+-    pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(file_full_path)
++    pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(draft['file_path'])
+     user_l = float(draft.get('length_mm', 0) or 0)
+     user_w = float(draft.get('width_mm', 0) or 0)
+ 
+@@ -292,18 +297,16 @@ def order_step4(request, draft_id):
+         return redirect('place_order')
+     # 生成PDF第一页纯黑预览图
+     preview_url = None
+-    file_full_path = os.path.join(settings.MEDIA_ROOT, draft['file_path'])
+-    if os.path.exists(file_full_path):
+-        preview_filename = f"previews/{draft_id}.png"
+-        preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
+-        os.makedirs(os.path.dirname(preview_path), exist_ok=True)
+-        try:
+-            from utils.pdf_processor import generate_pdf_preview
+-            preview_url = generate_pdf_preview(file_full_path, preview_filename, dpi=150, black_only=True)
+-            draft['preview_url'] = preview_url
+-            request.session[f"draft_{draft_id}"] = draft
+-        except Exception:
+-            pass
++    preview_filename = f"previews/{draft_id}.png"
++    preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
++    os.makedirs(os.path.dirname(preview_path), exist_ok=True)
++    try:
++        from utils.pdf_processor import generate_pdf_preview
++        preview_url = generate_pdf_preview(draft['file_path'], preview_filename, dpi=150, black_only=True)
++        draft['preview_url'] = preview_url
++        request.session[f"draft_{draft_id}"] = draft
++    except Exception:
++        pass
+     return render(request, 'customer/order_step4.html', {'draft': draft, 'preview_url': preview_url})
+ 
+ 
+@@ -517,14 +520,24 @@ def _calculate_pdf_area(file_path):
+ 
+ def _get_pdf_page_dimensions(file_path):
+     """获取PDF页面尺寸（mm），用于与用户填写尺寸对比"""
++    from utils.pdf_processor import _get_pdf_local_path
+     try:
+-        doc = fitz.open(file_path)
++        local_path = _get_pdf_local_path(file_path)
++        if not local_path:
++            return None, None
++        doc = fitz.open(local_path)
+         page = doc[0]
+         rect = page.rect
+         pt_to_mm = 25.4 / 72.0
+         width_mm = round(rect.width * pt_to_mm, 1)
+         height_mm = round(rect.height * pt_to_mm, 1)
+         doc.close()
++        # 清理临时文件
++        if local_path != file_path and not local_path.startswith(str(settings.MEDIA_ROOT)):
++            try:
++                os.unlink(local_path)
++            except:
++                pass
+         return width_mm, height_mm
+     except Exception:
+         return None, None
+@@ -646,8 +659,8 @@ def order_detail(request, order_id):
+         item.file_exists = False
+         item.preview_url = None
+         if item.file:
+-            file_path = os.path.join(settings.MEDIA_ROOT, item.file.name)
+-            item.file_exists = os.path.exists(file_path)
++            # 检查文件是否在存储后端（OSS 或本地）存在
++            item.file_exists = default_storage.exists(item.file.name)
+             if item.file_exists:
+                 preview_rel = f"customer_previews/{item.id}.png"
+                 preview_path = os.path.join(settings.MEDIA_ROOT, preview_rel)
+@@ -730,24 +743,33 @@ def quick_order_upload(request):
+     try:
+         filename = f"order_files/{request.user.id}/{uuid.uuid4().hex}{ext}"
+         path = default_storage.save(filename, file)
+-        full_path = os.path.join(settings.MEDIA_ROOT, path)
++
++        # 获取本地文件路径（OSS 文件会下载到临时文件）
++        from utils.pdf_processor import _get_pdf_local_path
++        local_path = _get_pdf_local_path(path)
++        if not local_path:
++            return JsonResponse({'success': False, 'error': '文件保存失败'})
+ 
+         # PDF转纯黑处理（制版需要）
+         try:
+             from utils.pdf_processor import convert_pdf_to_black
+-            convert_pdf_to_black(full_path)
++            convert_pdf_to_black(local_path)
++            # 如果原始文件在 OSS，把处理后的文件上传回去
++            if local_path != os.path.join(settings.MEDIA_ROOT, path):
++                with open(local_path, 'rb') as f:
++                    default_storage.save(path, f)
+         except Exception:
+             pass
+ 
+         # 智能框识别：获取所有框+数量
+         from utils.pdf_red_box import smart_extract_boxes_for_order
+-        box_info = smart_extract_boxes_for_order(full_path)
++        box_info = smart_extract_boxes_for_order(local_path)
+ 
+         # 计算面积
+-        area = _calculate_pdf_area(full_path)
++        area = _calculate_pdf_area(local_path)
+ 
+         # 获取页面尺寸
+-        pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(full_path)
++        pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
+ 
+         # 生成纯黑预览图
+         preview_url = None
+@@ -756,10 +778,17 @@ def quick_order_upload(request):
+             preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
+             os.makedirs(os.path.dirname(preview_path), exist_ok=True)
+             from utils.pdf_processor import generate_pdf_preview
+-            preview_url = generate_pdf_preview(full_path, preview_filename, dpi=150, black_only=True)
++            preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
+         except Exception:
+             pass
+ 
++        # 清理临时文件
++        if local_path != os.path.join(settings.MEDIA_ROOT, path):
++            try:
++                os.unlink(local_path)
++            except:
++                pass
++
+         response_data = {
+             'success': True,
+             'file_path': path,
+@@ -804,34 +833,51 @@ def batch_upload_files(request):
+         try:
+             filename = f"order_files/{request.user.id}/{uuid.uuid4().hex}{ext}"
+             path = default_storage.save(filename, file)
+-            full_path = os.path.join(settings.MEDIA_ROOT, path)
++
++            # 获取本地文件路径（OSS 文件会下载到临时文件）
++            from utils.pdf_processor import _get_pdf_local_path
++            local_path = _get_pdf_local_path(path)
++            if not local_path:
++                results.append({'success': False, 'error': '文件保存失败', 'file_name': file.name})
++                continue
+ 
+             # PDF转纯黑处理（制版需要）
+             try:
+                 from utils.pdf_processor import convert_pdf_to_black
+-                convert_pdf_to_black(full_path)
++                convert_pdf_to_black(local_path)
++                # 如果原始文件在 OSS，把处理后的文件上传回去
++                if local_path != os.path.join(settings.MEDIA_ROOT, path):
++                    with open(local_path, 'rb') as f:
++                        default_storage.save(path, f)
+             except Exception:
+                 pass
+ 
+             # 智能框识别
+             from utils.pdf_red_box import smart_extract_boxes_for_order
+-            box_info = smart_extract_boxes_for_order(full_path)
++            box_info = smart_extract_boxes_for_order(local_path)
+ 
+             # 计算面积
+-            area = _calculate_pdf_area(full_path)
++            area = _calculate_pdf_area(local_path)
+ 
+             # 获取页面尺寸
+-            pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(full_path)
++            pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
+ 
+             # 生成预览图
+             preview_url = None
+             try:
+                 preview_filename = f"previews/{uuid.uuid4().hex}.png"
+                 from utils.pdf_processor import generate_pdf_preview
+-                preview_url = generate_pdf_preview(full_path, preview_filename, dpi=150, black_only=True)
++                preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
+             except Exception:
+                 pass
+ 
++            # 清理临时文件
++            if local_path != os.path.join(settings.MEDIA_ROOT, path):
++                try:
++                    os.unlink(local_path)
++                except:
++                    pass
++
+             file_result = {
+                 'success': True,
+                 'file_path': path,
+@@ -858,53 +904,89 @@ def batch_upload_files(request):
+ 
+ @transaction.atomic
+ def _handle_quick_order_post(request, profile, tier):
+-    """处理单页下单的POST请求（支持多文件）"""
++    """处理单页下单的POST请求（支持规格组模式 / 混合规格下单）"""
+     from utils.pricing_tiers import get_customer_price
+     import json
+ 
+-    # 基础字段
+-    product_name = request.POST.get('product_name')
+-    material = request.POST.get('material')
+-    thickness = request.POST.get('thickness')
+-    unit_price_str = request.POST.get('unit_price', '0')
+-
+-    # 文件数据（JSON数组）
+-    files_data_json = request.POST.get('files_data', '[]')
+-    try:
+-        files_data = json.loads(files_data_json)
+-    except json.JSONDecodeError:
+-        files_data = []
+-
+-    # 如果没有files_data，尝试兼容旧版单文件字段
+-    if not files_data:
+-        file_path = request.POST.get('file_path', '')
+-        if file_path:
+-            files_data = [{
+-                'file_path': file_path,
+-                'length_mm': request.POST.get('length_mm', 0) or 0,
+-                'width_mm': request.POST.get('width_mm', 0) or 0,
+-                'quantity': request.POST.get('quantity', 1),
+-            }]
+-
+-    if not files_data:
+-        messages.error(request, '请上传至少一个文件')
+-        return redirect('place_order')
++    # 其他字段
++    special_requests = request.POST.get('special_requests', '')
++    preset_options = request.POST.getlist('preset_options')
++    urgent = request.POST.get('urgent') == 'on'
++    delivery_type = request.POST.get('delivery_type', 'express')
++    address_id = request.POST.get('address_id')
+ 
+-    # 文件类型
++    # 文件类型（旧兼容）
+     file_type = request.POST.get('file_type', 'processed')
+     file_processed = (file_type == 'processed')
+     file_standard_checked = (file_type == 'standard')
+     is_image_file = (file_type == 'image')
+ 
+-    # 其他
+-    special_requests = request.POST.get('special_requests', '')
+-    preset_options = request.POST.getlist('preset_options')
+-    urgent = request.POST.get('urgent') == 'on'
+-    delivery_type = request.POST.get('delivery_type', 'express')
+-    address_id = request.POST.get('address_id')
++    # ========== 尝试规格组模式 ==========
++    spec_groups_json = request.POST.get('spec_groups_data', '')
++    spec_groups = []
++    if spec_groups_json:
++        try:
++            spec_groups = json.loads(spec_groups_json)
++        except json.JSONDecodeError:
++            spec_groups = []
++
++    # ========== 回退到旧 files_data 模式 ==========
++    if not spec_groups:
++        files_data_json = request.POST.get('files_data', '[]')
++        try:
++            files_data = json.loads(files_data_json)
++        except json.JSONDecodeError:
++            files_data = []
++
++        # 兼容旧版单文件字段
++        if not files_data:
++            file_path = request.POST.get('file_path', '')
++            if file_path:
++                files_data = [{
++                    'file_path': file_path,
++                    'length_mm': request.POST.get('length_mm', 0) or 0,
++                    'width_mm': request.POST.get('width_mm', 0) or 0,
++                    'quantity': request.POST.get('quantity', 1),
++                }]
++
++        if not files_data:
++            messages.error(request, '请上传至少一个文件')
++            return redirect('place_order')
++
++        product_name = request.POST.get('product_name')
++        material = request.POST.get('material')
++        thickness = request.POST.get('thickness')
++        unit_price = get_customer_price(profile, product_name, material, thickness)
++
++        spec_groups = [{
++            'product_name': product_name,
++            'material': material,
++            'thickness': thickness,
++            'unit_price': float(unit_price) if unit_price else 0,
++            'files': files_data,
++        }]
++
++    if not spec_groups:
++        messages.error(request, '请添加至少一个规格组并上传文件')
++        return redirect('place_order')
+ 
+-    # 定价
+-    unit_price = get_customer_price(profile, product_name, material, thickness)
++    # 检查所有规格组数据
++    total_files = 0
++    for gi, sg in enumerate(spec_groups):
++        if not sg.get('product_name'):
++            messages.error(request, f'规格组 {gi+1}：请选择细分产品')
++            return redirect('place_order')
++        if not sg.get('material'):
++            messages.error(request, f'规格组 {gi+1}：请选择材质')
++            return redirect('place_order')
++        if not sg.get('thickness'):
++            messages.error(request, f'规格组 {gi+1}：请选择厚度')
++            return redirect('place_order')
++        files = sg.get('files', [])
++        if not files:
++            messages.error(request, f'规格组 {gi+1}：请上传至少一个文件')
++            return redirect('place_order')
++        total_files += len(files)
+ 
+     # 创建订单
+     order = Order.objects.create(
+@@ -926,27 +1008,41 @@ def _handle_quick_order_post(request, profile, tier):
+         except Address.DoesNotExist:
+             pass
+ 
+-    # 为每个文件创建订单明细
+-    for fd in files_data:
+-        item_length = Decimal(str(fd.get('length_mm', 0) or 0))
+-        item_width = Decimal(str(fd.get('width_mm', 0) or 0))
+-        item_qty = int(fd.get('quantity', 1))
+-        OrderItem.objects.create(
+-            order=order,
+-            product_name=product_name,
+-            material=material,
+-            thickness=thickness,
+-            length_mm=item_length,
+-            width_mm=item_width,
+-            quantity=item_qty,
+-            unit_price=unit_price,
+-            file=fd.get('file_path', ''),
+-            original_file_name=fd.get('file_name', ''),
+-            file_processed=file_processed,
+-            file_standard_checked=file_standard_checked,
+-            is_image_file=is_image_file,
+-            red_box_data=json.dumps(fd.get('boxes', [])),
+-        )
++    # 为每个规格组的每个文件创建订单明细
++    all_items = []
++    for sg in spec_groups:
++        product_name = sg.get('product_name')
++        material = sg.get('material')
++        thickness = sg.get('thickness')
++        unit_price = Decimal(str(sg.get('unit_price', 0) or 0))
++        # 如果前端没传 unit_price，从定价表获取
++        if not unit_price or unit_price <= 0:
++            unit_price = get_customer_price(profile, product_name, material, thickness)
++            if not unit_price:
++                unit_price = Decimal('0')
++
++        files = sg.get('files', [])
++        for fd in files:
++            item_length = Decimal(str(fd.get('length_mm', 0) or 0))
++            item_width = Decimal(str(fd.get('width_mm', 0) or 0))
++            item_qty = int(fd.get('quantity', 1))
++            item = OrderItem.objects.create(
++                order=order,
++                product_name=product_name,
++                material=material,
++                thickness=thickness,
++                length_mm=item_length,
++                width_mm=item_width,
++                quantity=item_qty,
++                unit_price=unit_price,
++                file=fd.get('file_path', ''),
++                original_file_name=fd.get('file_name', ''),
++                file_processed=file_processed,
++                file_standard_checked=file_standard_checked,
++                is_image_file=is_image_file,
++                red_box_data=json.dumps(fd.get('boxes', [])),
++            )
++            all_items.append(item)
+ 
+     order.update_total()
+ 
+@@ -964,10 +1060,10 @@ def _handle_quick_order_post(request, profile, tier):
+         auto_generate_plate_layout_for_order(order)
+         order.plate_status = 'auto_generated'
+         order.save(update_fields=['plate_status'])
+-        messages.success(request, f'订单 {order.sn} 提交成功（含{len(files_data)}个文件），已使用信用额度支付。')
++        messages.success(request, f'订单 {order.sn} 提交成功（含{total_files}个文件），已使用信用额度支付。')
+     else:
+         order.transition_status('pending_payment', operator=request.user, remark='信用额度不足')
+-        messages.warning(request, f'订单 {order.sn} 提交成功（含{len(files_data)}个文件），但信用额度不足，订单状态为待支付。')
++        messages.warning(request, f'订单 {order.sn} 提交成功（含{total_files}个文件），但信用额度不足，订单状态为待支付。')
+ 
+     return redirect('my_orders')
+ 
+diff --git a/magnesium_order_platform/settings.py b/magnesium_order_platform/settings.py
+index 32a1660..8784f3d 100644
+--- a/magnesium_order_platform/settings.py
++++ b/magnesium_order_platform/settings.py
+@@ -145,7 +145,7 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
+ # 生产环境执行 collectstatic 后收集到此目录
+ STATIC_ROOT = BASE_DIR / 'staticfiles'
+ 
+-MEDIA_URL = 'media/'
++MEDIA_URL = '/media/'
+ MEDIA_ROOT = BASE_DIR / 'media'
+ 
+ # ==================== 阿里云 OSS 存储配置 ====================
+@@ -160,16 +160,16 @@ MEDIA_ROOT = BASE_DIR / 'media'
+ # 可选：配置 CDN 加速域名，降低流量费用
+ #   OSS_CUSTOM_DOMAIN = 'https://cdn.yourdomain.com'
+ 
+-OSS_ACCESS_KEY_ID = ''           # AccessKey ID
+-OSS_ACCESS_KEY_SECRET = ''       # AccessKey Secret
+-OSS_ENDPOINT = 'oss-cn-hangzhou.aliyuncs.com'  # Bucket 所在地域的 Endpoint
+-OSS_BUCKET_NAME = ''             # Bucket 名称
++OSS_ACCESS_KEY_ID = os.environ.get('OSS_ACCESS_KEY_ID', '')           # AccessKey ID
++OSS_ACCESS_KEY_SECRET = os.environ.get('OSS_ACCESS_KEY_SECRET', '')       # AccessKey Secret
++OSS_ENDPOINT = 'oss-cn-shanghai.aliyuncs.com'  # Bucket 所在地域的 Endpoint
++OSS_BUCKET_NAME = 'zbhomefiles'             # Bucket 名称
+ OSS_BASE_DIR = 'magnesium/'      # 文件在 Bucket 中的根目录
+-OSS_INTERNAL = False             # ECS 同区域建议使用 True（走内网，免费且更快）
++OSS_INTERNAL = True             # ECS 同区域建议使用 True（走内网，免费且更快）
+ OSS_CUSTOM_DOMAIN = ''           # CDN 加速域名（可选）
+ 
+ # 启用 OSS：取消下面一行的注释，所有上传文件将自动存入阿里云 OSS
+-# DEFAULT_FILE_STORAGE = 'utils.oss_storage.AliyunOSSMediaStorage'
++DEFAULT_FILE_STORAGE = 'utils.oss_storage.AliyunOSSMediaStorage'
+ 
+ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+ 
+diff --git a/network_check.bat b/network_check.bat
+new file mode 100644
+index 0000000..e8485ee
+--- /dev/null
++++ b/network_check.bat
+@@ -0,0 +1,30 @@
++@echo off
++chcp 65001 >nul
++echo ==========================================
++echo   网络连通性排查工具
++echo ==========================================
++echo.
++
++echo 【1/3】本机IP信息：
++ipconfig | findstr /i "IPv4"
++echo.
++
++echo 【2/3】端口8000监听状态：
++netstat -ano | findstr :8000
++echo.
++
++echo 【3/3】防火墙规则：
++netsh advfirewall firewall show rule name="制版系统内测"
++echo.
++
++echo ==========================================
++echo 如果以上都正常，请让同事做以下测试：
++echo.
++echo   1. 让同事按 Win+R，输入 cmd
++echo   2. 输入：ping 192.168.0.141
++echo   3. 看是否显示"已接收=4"或"Reply from..."
++echo.
++echo   如果ping不通 =^> 不在同一个网络
++echo   如果ping得通但网页打不开 =^> 可能是其他防火墙/安全软件拦截
++echo ==========================================
++pause
+diff --git a/templates/customer/place_order.html b/templates/customer/place_order.html
+index 10b2b46..868e727 100644
+--- a/templates/customer/place_order.html
++++ b/templates/customer/place_order.html
+@@ -124,12 +124,29 @@
+     .preset-option input {
+         display: none;
+     }
+-    /* 规格勾选式选择 */
+-    .spec-group {
+-        margin-bottom: 18px;
++    /* 规格组卡片 */
++    .spec-group-card {
++        border: 1px solid var(--border-color);
++        border-radius: var(--radius-md);
++        background: #fff;
++        margin-bottom: 16px;
++        position: relative;
+     }
+-    .spec-group:last-child {
+-        margin-bottom: 0;
++    .spec-group-card .card-header {
++        display: flex;
++        justify-content: space-between;
++        align-items: center;
++        padding: 12px 16px;
++        background: #f8f9fa;
++        border-bottom: 1px solid var(--border-color);
++        border-radius: var(--radius-md) var(--radius-md) 0 0;
++    }
++    .spec-group-card .card-header .group-title {
++        font-weight: 600;
++        font-size: 14px;
++    }
++    .spec-group-card .card-body {
++        padding: 16px;
+     }
+     .spec-grid {
+         display: flex;
+@@ -171,115 +188,31 @@
+         font-size: 13px;
+         padding: 8px 0;
+     }
++    .spec-subgroup {
++        margin-bottom: 14px;
++    }
++    .spec-subgroup:last-child {
++        margin-bottom: 0;
++    }
+ </style>
+ {% endblock %}
+ 
+ {% block content %}
+ <form method="post" id="quickOrderForm" enctype="multipart/form-data">
+     {% csrf_token %}
+-    <input type="hidden" name="unit_price" id="unitPriceInput" value="0">
+ 
+     <div class="row g-3">
+-        <!-- 左侧：产品规格 + 文件上传 -->
++        <!-- 左侧：规格组列表 + 特殊要求 -->
+         <div class="col-lg-8">
+-            <!-- 1. 产品规格 -->
+-            <div class="card mb-3">
+-                <div class="card-body">
+-                    <div class="section-title"><i class="bi bi-box-seam"></i> 产品规格</div>
+-                    
+-                    <!-- 隐藏的表单字段 -->
+-                    <input type="hidden" name="product_category" id="productCategory" value="">
+-                    <input type="hidden" name="product_name" id="productName" value="">
+-                    <input type="hidden" name="material" id="material" value="">
+-                    <input type="hidden" name="thickness" id="thickness" value="">
+-                    
+-                    <!-- 产品大类 -->
+-                    <div class="spec-group">
+-                        <label class="form-label">产品大类 <span class="text-danger">*</span></label>
+-                        <div class="spec-grid" id="categoryGrid"></div>
+-                    </div>
+-                    
+-                    <!-- 细分产品 -->
+-                    <div class="spec-group">
+-                        <label class="form-label">细分产品 <span class="text-danger">*</span></label>
+-                        <div class="spec-grid" id="productGrid">
+-                            <div class="spec-placeholder">请先选择产品大类</div>
+-                        </div>
+-                    </div>
+-                    
+-                    <!-- 材质 -->
+-                    <div class="spec-group">
+-                        <label class="form-label">材质 <span class="text-danger">*</span></label>
+-                        <div class="spec-grid" id="materialGrid">
+-                            <div class="spec-placeholder">请先选择细分产品</div>
+-                        </div>
+-                    </div>
+-                    
+-                    <!-- 厚度 -->
+-                    <div class="spec-group">
+-                        <label class="form-label">厚度 <span class="text-danger">*</span></label>
+-                        <div class="spec-grid" id="thicknessGrid">
+-                            <div class="spec-placeholder">请先选择材质</div>
+-                        </div>
+-                        <div class="mt-2" id="priceDisplay" style="display:none;">
+-                            <span class="badge bg-primary">单价：¥<span id="priceValue">0.00</span> / cm²</span>
+-                        </div>
+-                        <!-- 温馨提醒：红框版边提示 -->
+-                        <div class="mt-3" id="borderTip" style="display:none;">
+-                            <div class="alert alert-warning py-2 mb-0 d-flex align-items-center" style="font-size:13px;">
+-                                <i class="bi bi-info-circle-fill me-2"></i>
+-                                <span id="borderTipText"></span>
+-                            </div>
+-                        </div>
+-                    </div>
+-                </div>
+-            </div>
+-
+-            <!-- 2. 文件上传 -->
+-            <div class="card mb-3">
+-                <div class="card-body">
+-                    <div class="section-title"><i class="bi bi-file-earmark-arrow-up"></i> 上传文件</div>
+-                    <div id="uploadArea">
+-                        <div class="upload-zone" id="uploadZone">
+-                            <i class="bi bi-cloud-arrow-up"></i>
+-                            <p class="fw-medium text-dark">点击或拖拽上传 PDF 文件</p>
+-                            <p>支持一次选择多个文件，选择完成后点击"开始识别"</p>
+-                            <input type="file" id="pdfInput" accept=".pdf" multiple style="display:none;">
+-                        </div>
+-                    </div>
+-
+-                    <!-- 待识别文件列表 -->
+-                    <div id="pendingFilesArea" style="display:none;" class="mt-3">
+-                        <div class="d-flex justify-content-between align-items-center mb-2">
+-                            <span class="fw-medium">待识别文件 (<span id="pendingCount">0</span>)</span>
+-                            <button type="button" class="btn btn-sm btn-primary" id="startRecognizeBtn">
+-                                <i class="bi bi-magic"></i> 开始识别
+-                            </button>
+-                        </div>
+-                        <div id="pendingFilesList" class="list-group list-group-flush border rounded"></div>
+-                    </div>
+-
+-                    <!-- 识别结果区域 -->
+-                    <div id="filesResultArea" style="display:none;" class="mt-3"></div>
++            <!-- 规格组容器 -->
++            <div id="specGroupsContainer"></div>
+ 
+-                    <div class="mt-3 d-flex gap-3">
+-                        <div class="form-check">
+-                            <input class="form-check-input" type="radio" name="file_type" id="fileStandard" value="standard" required>
+-                            <label class="form-check-label" for="fileStandard">文件已转曲/矢量化</label>
+-                        </div>
+-                        <div class="form-check">
+-                            <input class="form-check-input" type="radio" name="file_type" id="fileProcessed" value="processed" checked required>
+-                            <label class="form-check-label" for="fileProcessed">需要客服处理文件</label>
+-                        </div>
+-                        <div class="form-check">
+-                            <input class="form-check-input" type="radio" name="file_type" id="fileImage" value="image" required>
+-                            <label class="form-check-label" for="fileImage">文件是图片文件</label>
+-                        </div>
+-                    </div>
+-                </div>
+-            </div>
++            <!-- 添加规格组按钮 -->
++            <button type="button" class="btn btn-outline-primary w-100 mb-3" id="addSpecGroupBtn">
++                <i class="bi bi-plus-lg"></i> 添加规格组
++            </button>
+ 
+-            <!-- 3. 特殊要求 -->
++            <!-- 特殊要求（全局） -->
+             <div class="card">
+                 <div class="card-body">
+                     <div class="section-title"><i class="bi bi-chat-left-text"></i> 其他要求</div>
+@@ -343,14 +276,16 @@
+                         </div>
+                     </div>
+ 
++                    <!-- 各规格组小计 -->
++                    <div id="groupPriceDetails"></div>
++
+                     <hr>
+ 
+                     <div class="price-panel mb-3">
+                         <div class="price-label">预估总价</div>
+                         <div class="price-value">¥<span id="totalPrice">0.00</span></div>
+                         <div class="small text-muted mt-1">
+-                            面积 <span id="areaDisplay">0</span> cm² × 
+-                            单价 <span id="unitPriceDisplay">0.00</span> 元
++                            共 <span id="groupCountDisplay">0</span> 个规格组
+                             <span id="urgentDisplay" style="display:none;"> + 加急10%</span>
+                         </div>
+                     </div>
+@@ -379,284 +314,455 @@
+ <script>
+ const SPEC_DATA = {{ spec_data_json|safe }};
+ 
+-// ===== 规格联动（勾选式）=====
+-const categoryInput = document.getElementById('productCategory');
+-const productInput = document.getElementById('productName');
+-const materialInput = document.getElementById('material');
+-const thicknessInput = document.getElementById('thickness');
+-const categoryGrid = document.getElementById('categoryGrid');
+-const productGrid = document.getElementById('productGrid');
+-const materialGrid = document.getElementById('materialGrid');
+-const thicknessGrid = document.getElementById('thicknessGrid');
+-const unitPriceInput = document.getElementById('unitPriceInput');
+-const priceDisplay = document.getElementById('priceDisplay');
+-const priceValue = document.getElementById('priceValue');
+-
+-function renderCategories() {
+-    categoryGrid.innerHTML = '';
+-    Object.keys(SPEC_DATA).forEach(key => {
+-        const item = document.createElement('div');
+-        item.className = 'spec-option';
+-        item.dataset.value = key;
+-        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].label;
+-        item.addEventListener('click', () => selectCategory(key));
+-        categoryGrid.appendChild(item);
+-    });
++// ===== 规格组管理器 =====
++let specGroupCounter = 0;
++const specGroups = []; // { id, product_name, material, thickness, unit_price, files: [] }
++
++function createSpecGroup() {
++    const id = specGroupCounter++;
++    const group = {
++        id,
++        product_name: '',
++        material: '',
++        thickness: '',
++        unit_price: 0,
++        pendingFiles: [],
++        recognizedFiles: [],
++    };
++    specGroups.push(group);
++    renderSpecGroup(id);
++    updateGroupHeaders();
++    return id;
+ }
+ 
+-function selectCategory(key) {
+-    categoryInput.value = key;
+-    categoryGrid.querySelectorAll('.spec-option').forEach(el => {
+-        el.classList.toggle('active', el.dataset.value === key);
+-    });
+-    // 重置下级
+-    productInput.value = '';
+-    materialInput.value = '';
+-    thicknessInput.value = '';
+-    unitPriceInput.value = '0';
+-    priceDisplay.style.display = 'none';
+-    calcPrice();
+-
+-    if (!key || !SPEC_DATA[key]) {
+-        productGrid.innerHTML = '<div class="spec-placeholder">请先选择产品大类</div>';
+-        materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
+-        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
++function removeSpecGroup(id) {
++    if (specGroups.length <= 1) {
++        alert('至少需要保留一个规格组');
+         return;
+     }
+-    productGrid.innerHTML = '';
+-    Object.keys(SPEC_DATA[key].products).forEach(prodKey => {
+-        const item = document.createElement('div');
+-        item.className = 'spec-option';
+-        item.dataset.value = prodKey;
+-        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].products[prodKey].label;
+-        item.addEventListener('click', () => selectProduct(prodKey));
+-        productGrid.appendChild(item);
+-    });
+-    materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
+-    thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
++    const idx = specGroups.findIndex(g => g.id === id);
++    if (idx >= 0) {
++        specGroups.splice(idx, 1);
++        const card = document.getElementById(`specGroup-${id}`);
++        if (card) card.remove();
++        updateGroupHeaders();
++        calcTotalPrice();
++    }
+ }
+ 
+-function selectProduct(prodKey) {
+-    productInput.value = prodKey;
+-    productGrid.querySelectorAll('.spec-option').forEach(el => {
+-        el.classList.toggle('active', el.dataset.value === prodKey);
++function updateGroupHeaders() {
++    specGroups.forEach((g, idx) => {
++        const title = document.querySelector(`#specGroup-${g.id} .group-title`);
++        if (title) title.textContent = `规格组 ${idx + 1}`;
+     });
+-    materialInput.value = '';
+-    thicknessInput.value = '';
+-    unitPriceInput.value = '0';
+-    priceDisplay.style.display = 'none';
+-    calcPrice();
+-    updateBorderTip(prodKey);
+-
+-    const catData = SPEC_DATA[categoryInput.value];
+-    if (!catData || !catData.products[prodKey]) {
+-        materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
+-        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+-        return;
+-    }
+-    materialGrid.innerHTML = '';
+-    Object.keys(catData.products[prodKey].materials).forEach(matKey => {
+-        const item = document.createElement('div');
+-        item.className = 'spec-option';
+-        item.dataset.value = matKey;
+-        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + catData.products[prodKey].materials[matKey].label;
+-        item.addEventListener('click', () => selectMaterial(matKey));
+-        materialGrid.appendChild(item);
+-    });
+-    thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
++    document.getElementById('groupCountDisplay').textContent = specGroups.length;
+ }
+ 
+-function selectMaterial(matKey) {
+-    materialInput.value = matKey;
+-    materialGrid.querySelectorAll('.spec-option').forEach(el => {
+-        el.classList.toggle('active', el.dataset.value === matKey);
+-    });
+-    thicknessInput.value = '';
+-    unitPriceInput.value = '0';
+-    priceDisplay.style.display = 'none';
+-    calcPrice();
+-
+-    const catData = SPEC_DATA[categoryInput.value];
+-    if (!catData) return;
+-    const prodData = catData.products[productInput.value];
+-    if (!prodData || !prodData.materials[matKey]) {
++function renderSpecGroup(id) {
++    const container = document.getElementById('specGroupsContainer');
++    const html = `
++    <div class="spec-group-card" id="specGroup-${id}" data-group-id="${id}">
++        <div class="card-header">
++            <span class="group-title">规格组 ${specGroups.length}</span>
++            <button type="button" class="btn btn-sm btn-link text-danger" onclick="removeSpecGroup(${id})">
++                <i class="bi bi-trash"></i> 删除
++            </button>
++        </div>
++        <div class="card-body">
++            <!-- 产品规格 -->
++            <div class="spec-subgroup">
++                <label class="form-label">产品大类 <span class="text-danger">*</span></label>
++                <div class="spec-grid category-grid" data-group="${id}"></div>
++            </div>
++            <div class="spec-subgroup">
++                <label class="form-label">细分产品 <span class="text-danger">*</span></label>
++                <div class="spec-grid product-grid" data-group="${id}">
++                    <div class="spec-placeholder">请先选择产品大类</div>
++                </div>
++            </div>
++            <div class="spec-subgroup">
++                <label class="form-label">材质 <span class="text-danger">*</span></label>
++                <div class="spec-grid material-grid" data-group="${id}">
++                    <div class="spec-placeholder">请先选择细分产品</div>
++                </div>
++            </div>
++            <div class="spec-subgroup">
++                <label class="form-label">厚度 <span class="text-danger">*</span></label>
++                <div class="spec-grid thickness-grid" data-group="${id}">
++                    <div class="spec-placeholder">请先选择材质</div>
++                </div>
++                <div class="mt-2 price-display" data-group="${id}" style="display:none;">
++                    <span class="badge bg-primary">单价：¥<span class="price-value">0.00</span> / cm²</span>
++                </div>
++                <div class="mt-2 border-tip" data-group="${id}" style="display:none;">
++                    <div class="alert alert-warning py-2 mb-0 d-flex align-items-center" style="font-size:13px;">
++                        <i class="bi bi-info-circle-fill me-2"></i>
++                        <span class="border-tip-text"></span>
++                    </div>
++                </div>
++            </div>
++
++            <!-- 文件上传 -->
++            <div class="spec-subgroup">
++                <label class="form-label">上传文件</label>
++                <div class="upload-zone upload-zone-group" data-group="${id}">
++                    <i class="bi bi-cloud-arrow-up"></i>
++                    <p class="fw-medium text-dark">点击或拖拽上传 PDF 文件</p>
++                    <p>支持一次选择多个文件，选择完成后点击"开始识别"</p>
++                    <input type="file" class="pdf-input-group" accept=".pdf" multiple style="display:none;" data-group="${id}">
++                </div>
++            </div>
++
++            <!-- 待识别文件列表 -->
++            <div class="pending-files-area mt-2" data-group="${id}" style="display:none;">
++                <div class="d-flex justify-content-between align-items-center mb-2">
++                    <span class="fw-medium small">待识别文件 (<span class="pending-count">0</span>)</span>
++                    <button type="button" class="btn btn-sm btn-primary start-recognize-btn" data-group="${id}">
++                        <i class="bi bi-magic"></i> 开始识别
++                    </button>
++                </div>
++                <div class="list-group list-group-flush border rounded pending-files-list"></div>
++            </div>
++
++            <!-- 识别结果区域 -->
++            <div class="files-result-area mt-2" data-group="${id}" style="display:none;"></div>
++        </div>
++    </div>`;
++    container.insertAdjacentHTML('beforeend', html);
++
++    // 绑定规格选择事件
++    bindSpecEvents(id);
++    // 绑定文件上传事件
++    bindUploadEvents(id);
++}
++
++// ===== 规格联动（按组）=====
++function bindSpecEvents(groupId) {
++    const card = document.getElementById(`specGroup-${groupId}`);
++    const categoryGrid = card.querySelector('.category-grid');
++    const productGrid = card.querySelector('.product-grid');
++    const materialGrid = card.querySelector('.material-grid');
++    const thicknessGrid = card.querySelector('.thickness-grid');
++    const priceDisplay = card.querySelector('.price-display');
++    const priceValue = card.querySelector('.price-value');
++    const group = specGroups.find(g => g.id === groupId);
++
++    function renderCategories() {
++        categoryGrid.innerHTML = '';
++        Object.keys(SPEC_DATA).forEach(key => {
++            const item = document.createElement('div');
++            item.className = 'spec-option';
++            item.dataset.value = key;
++            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].label;
++            item.addEventListener('click', () => selectCategory(key));
++            categoryGrid.appendChild(item);
++        });
++    }
++
++    function selectCategory(key) {
++        group.product_name = '';
++        group.material = '';
++        group.thickness = '';
++        group.unit_price = 0;
++        priceDisplay.style.display = 'none';
++        calcTotalPrice();
++
++        categoryGrid.querySelectorAll('.spec-option').forEach(el => {
++            el.classList.toggle('active', el.dataset.value === key);
++        });
++
++        if (!key || !SPEC_DATA[key]) {
++            productGrid.innerHTML = '<div class="spec-placeholder">请先选择产品大类</div>';
++            materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
++            thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
++            return;
++        }
++        productGrid.innerHTML = '';
++        Object.keys(SPEC_DATA[key].products).forEach(prodKey => {
++            const item = document.createElement('div');
++            item.className = 'spec-option';
++            item.dataset.value = prodKey;
++            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].products[prodKey].label;
++            item.addEventListener('click', () => selectProduct(prodKey));
++            productGrid.appendChild(item);
++        });
++        materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
+         thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+-        return;
+     }
+-    thicknessGrid.innerHTML = '';
+-    prodData.materials[matKey].thicknesses.forEach(t => {
+-        const item = document.createElement('div');
+-        item.className = 'spec-option';
+-        item.dataset.value = t.value;
+-        item.dataset.price = t.price;
+-        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + t.label + ' <span class="text-muted small">(¥' + t.price + '/cm²)</span>';
+-        item.addEventListener('click', () => selectThickness(t.value, t.price));
+-        thicknessGrid.appendChild(item);
+-    });
+-}
+ 
+-function selectThickness(value, price) {
+-    thicknessInput.value = value;
+-    thicknessGrid.querySelectorAll('.spec-option').forEach(el => {
+-        el.classList.toggle('active', el.dataset.value === value);
+-    });
+-    unitPriceInput.value = price;
+-    priceValue.textContent = parseFloat(price).toFixed(2);
+-    priceDisplay.style.display = 'inline-block';
+-    calcPrice();
+-}
++    function selectProduct(prodKey) {
++        group.product_name = prodKey;
++        group.material = '';
++        group.thickness = '';
++        group.unit_price = 0;
++        priceDisplay.style.display = 'none';
++        calcTotalPrice();
++        updateBorderTip(groupId, prodKey);
+ 
+-// 初始化渲染
+-renderCategories();
++        productGrid.querySelectorAll('.spec-option').forEach(el => {
++            el.classList.toggle('active', el.dataset.value === prodKey);
++        });
+ 
+-// ===== 多文件上传 =====
+-const uploadZone = document.getElementById('uploadZone');
+-const pdfInput = document.getElementById('pdfInput');
+-const uploadArea = document.getElementById('uploadArea');
+-const pendingFilesArea = document.getElementById('pendingFilesArea');
+-const pendingFilesList = document.getElementById('pendingFilesList');
+-const pendingCount = document.getElementById('pendingCount');
+-const startRecognizeBtn = document.getElementById('startRecognizeBtn');
+-const filesResultArea = document.getElementById('filesResultArea');
+-const uploadOverlay = document.getElementById('uploadOverlay');
++        const catData = SPEC_DATA[Object.keys(SPEC_DATA).find(k => {
++            return SPEC_DATA[k].products && SPEC_DATA[k].products[prodKey];
++        })];
++        if (!catData || !catData.products[prodKey]) {
++            materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
++            thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
++            return;
++        }
++        materialGrid.innerHTML = '';
++        Object.keys(catData.products[prodKey].materials).forEach(matKey => {
++            const item = document.createElement('div');
++            item.className = 'spec-option';
++            item.dataset.value = matKey;
++            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + catData.products[prodKey].materials[matKey].label;
++            item.addEventListener('click', () => selectMaterial(matKey));
++            materialGrid.appendChild(item);
++        });
++        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
++    }
+ 
+-let pendingFiles = [];      // 待识别的 File 对象数组
+-let recognizedFiles = [];   // 已识别的文件信息数组
++    function selectMaterial(matKey) {
++        group.material = matKey;
++        group.thickness = '';
++        group.unit_price = 0;
++        priceDisplay.style.display = 'none';
++        calcTotalPrice();
+ 
+-uploadZone.addEventListener('click', () => pdfInput.click());
++        materialGrid.querySelectorAll('.spec-option').forEach(el => {
++            el.classList.toggle('active', el.dataset.value === matKey);
++        });
+ 
+-uploadZone.addEventListener('dragover', (e) => {
+-    e.preventDefault();
+-    uploadZone.classList.add('dragover');
+-});
+-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+-uploadZone.addEventListener('drop', (e) => {
+-    e.preventDefault();
+-    uploadZone.classList.remove('dragover');
+-    handleFiles(Array.from(e.dataTransfer.files));
+-});
++        const catData = SPEC_DATA[Object.keys(SPEC_DATA).find(k => {
++            return SPEC_DATA[k].products && SPEC_DATA[k].products[group.product_name];
++        })];
++        if (!catData) return;
++        const prodData = catData.products[group.product_name];
++        if (!prodData || !prodData.materials[matKey]) {
++            thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
++            return;
++        }
++        thicknessGrid.innerHTML = '';
++        prodData.materials[matKey].thicknesses.forEach(t => {
++            const item = document.createElement('div');
++            item.className = 'spec-option';
++            item.dataset.value = t.value;
++            item.dataset.price = t.price;
++            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + t.label + ' <span class="text-muted small">(¥' + t.price + '/cm²)</span>';
++            item.addEventListener('click', () => selectThickness(t.value, t.price));
++            thicknessGrid.appendChild(item);
++        });
++    }
+ 
+-pdfInput.addEventListener('change', () => {
+-    handleFiles(Array.from(pdfInput.files));
+-    pdfInput.value = '';
+-});
++    function selectThickness(value, price) {
++        group.thickness = value;
++        group.unit_price = parseFloat(price);
++        priceValue.textContent = group.unit_price.toFixed(2);
++        priceDisplay.style.display = 'inline-block';
++        calcTotalPrice();
+ 
+-function handleFiles(files) {
+-    const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+-    const invalid = files.length - validFiles.length;
+-    if (invalid > 0) {
+-        alert(`已过滤 ${invalid} 个非PDF文件，仅支持PDF格式`);
++        thicknessGrid.querySelectorAll('.spec-option').forEach(el => {
++            el.classList.toggle('active', el.dataset.value === value);
++        });
+     }
+-    if (validFiles.length === 0) return;
+-    pendingFiles.push(...validFiles);
+-    renderPendingFiles();
++
++    renderCategories();
+ }
+ 
+-function renderPendingFiles() {
+-    if (pendingFiles.length === 0) {
+-        pendingFilesArea.style.display = 'none';
++function updateBorderTip(groupId, prodKey) {
++    const card = document.getElementById(`specGroup-${groupId}`);
++    const tipBox = card.querySelector('.border-tip');
++    const tipText = card.querySelector('.border-tip-text');
++    if (!tipBox || !tipText) return;
++    if (!prodKey) {
++        tipBox.style.display = 'none';
+         return;
+     }
+-    pendingFilesArea.style.display = 'block';
+-    pendingCount.textContent = pendingFiles.length;
+-    pendingFilesList.innerHTML = pendingFiles.map((file, idx) => `
+-        <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+-            <span class="small"><i class="bi bi-file-earmark-pdf text-danger"></i> ${file.name}</span>
+-            <button type="button" class="btn btn-sm btn-link text-danger" onclick="removePendingFile(${idx})">
+-                <i class="bi bi-x-lg"></i>
+-            </button>
+-        </div>
+-    `).join('');
++    let msg = '';
++    if (prodKey.startsWith('etching_')) {
++        msg = '腐蚀版：红框识别后，单边自动 +5mm 版边计算面积';
++    } else if (prodKey.startsWith('carving_')) {
++        msg = '雕刻版：红框识别后，单边自动 +10mm 版边计算面积';
++    } else if (prodKey.startsWith('resin_')) {
++        msg = '树脂版：红框识别后，单边自动 +5mm 版边计算面积';
++    } else if (prodKey.startsWith('film_')) {
++        msg = '菲林：按实际尺寸计算，不添加版边';
++    }
++    if (msg) {
++        tipText.textContent = msg;
++        tipBox.style.display = 'block';
++    } else {
++        tipBox.style.display = 'none';
++    }
+ }
+ 
+-function removePendingFile(idx) {
+-    pendingFiles.splice(idx, 1);
+-    renderPendingFiles();
+-}
++// ===== 文件上传（按组）=====
++function bindUploadEvents(groupId) {
++    const card = document.getElementById(`specGroup-${groupId}`);
++    const uploadZone = card.querySelector('.upload-zone-group');
++    const pdfInput = card.querySelector('.pdf-input-group');
++    const pendingArea = card.querySelector('.pending-files-area');
++    const pendingList = card.querySelector('.pending-files-list');
++    const pendingCount = card.querySelector('.pending-count');
++    const startBtn = card.querySelector('.start-recognize-btn');
++    const resultArea = card.querySelector('.files-result-area');
++    const group = specGroups.find(g => g.id === groupId);
++
++    uploadZone.addEventListener('click', () => pdfInput.click());
++    uploadZone.addEventListener('dragover', (e) => {
++        e.preventDefault();
++        uploadZone.classList.add('dragover');
++    });
++    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
++    uploadZone.addEventListener('drop', (e) => {
++        e.preventDefault();
++        uploadZone.classList.remove('dragover');
++        handleFiles(Array.from(e.dataTransfer.files));
++    });
++    pdfInput.addEventListener('change', () => {
++        handleFiles(Array.from(pdfInput.files));
++        pdfInput.value = '';
++    });
+ 
+-startRecognizeBtn.addEventListener('click', () => {
+-    if (pendingFiles.length === 0) return;
+-    uploadOverlay.style.display = 'flex';
+-
+-    const formData = new FormData();
+-    pendingFiles.forEach(file => formData.append('pdf_files', file));
+-    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+-
+-    fetch('{% url "batch_upload_files" %}', {
+-        method: 'POST',
+-        body: formData,
+-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+-    })
+-    .then(r => {
+-        if (!r.ok) {
+-            return r.text().then(text => {
+-                throw new Error('服务器错误 [' + r.status + ']：' + text.substring(0, 200));
+-            });
+-        }
+-        const ct = r.headers.get('content-type') || '';
+-        if (!ct.includes('application/json')) {
+-            return r.text().then(text => {
+-                throw new Error('返回格式错误：' + text.substring(0, 200));
+-            });
++    function handleFiles(files) {
++        const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
++        const invalid = files.length - validFiles.length;
++        if (invalid > 0) {
++            alert(`已过滤 ${invalid} 个非PDF文件，仅支持PDF格式`);
+         }
+-        return r.json();
+-    })
+-    .then(data => {
+-        uploadOverlay.style.display = 'none';
+-        if (!data.success) {
+-            alert(data.error || '识别失败');
++        if (validFiles.length === 0) return;
++        group.pendingFiles.push(...validFiles);
++        renderPendingFiles();
++    }
++
++    function renderPendingFiles() {
++        if (group.pendingFiles.length === 0) {
++            pendingArea.style.display = 'none';
+             return;
+         }
+-        // 清空待识别
+-        pendingFiles = [];
+-        pendingFilesArea.style.display = 'none';
+-
+-        // 合并到已识别列表
+-        data.files.forEach(f => {
+-            if (f.success) {
+-                const long = f.first_length && f.first_width
+-                    ? Math.max(f.first_length, f.first_width)
+-                    : (f.pdf_width_mm && f.pdf_height_mm ? Math.max(f.pdf_width_mm, f.pdf_height_mm) : 0);
+-                const short = f.first_length && f.first_width
+-                    ? Math.min(f.first_length, f.first_width)
+-                    : (f.pdf_width_mm && f.pdf_height_mm ? Math.min(f.pdf_width_mm, f.pdf_height_mm) : 0);
+-                recognizedFiles.push({
+-                    file_path: f.file_path,
+-                    file_name: f.file_name,
+-                    preview_url: f.preview_url,
+-                    length_mm: long,
+-                    width_mm: short,
+-                    quantity: f.first_quantity || 1,
+-                    area: f.area || 0,
+-                    boxes: f.boxes || null,
+-                    box_count: f.box_count || 0,
++        pendingArea.style.display = 'block';
++        pendingCount.textContent = group.pendingFiles.length;
++        pendingList.innerHTML = group.pendingFiles.map((file, idx) => `
++            <div class="list-group-item d-flex justify-content-between align-items-center py-2">
++                <span class="small"><i class="bi bi-file-earmark-pdf text-danger"></i> ${file.name}</span>
++                <button type="button" class="btn btn-sm btn-link text-danger" onclick="removePendingFile(${groupId}, ${idx})">
++                    <i class="bi bi-x-lg"></i>
++                </button>
++            </div>
++        `).join('');
++    }
++
++    startBtn.addEventListener('click', () => {
++        if (group.pendingFiles.length === 0) return;
++        document.getElementById('uploadOverlay').style.display = 'flex';
++
++        const formData = new FormData();
++        group.pendingFiles.forEach(file => formData.append('pdf_files', file));
++        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
++
++        fetch('{% url "batch_upload_files" %}', {
++            method: 'POST',
++            body: formData,
++            headers: { 'X-Requested-With': 'XMLHttpRequest' }
++        })
++        .then(r => {
++            if (!r.ok) {
++                return r.text().then(text => {
++                    throw new Error('服务器错误 [' + r.status + ']：' + text.substring(0, 200));
++                });
++            }
++            const ct = r.headers.get('content-type') || '';
++            if (!ct.includes('application/json')) {
++                return r.text().then(text => {
++                    throw new Error('返回格式错误：' + text.substring(0, 200));
+                 });
+             }
++            return r.json();
++        })
++        .then(data => {
++            document.getElementById('uploadOverlay').style.display = 'none';
++            if (!data.success) {
++                alert(data.error || '识别失败');
++                return;
++            }
++            group.pendingFiles = [];
++            pendingArea.style.display = 'none';
++
++            data.files.forEach(f => {
++                if (f.success) {
++                    const long = f.first_length && f.first_width
++                        ? Math.max(f.first_length, f.first_width)
++                        : (f.pdf_width_mm && f.pdf_height_mm ? Math.max(f.pdf_width_mm, f.pdf_height_mm) : 0);
++                    const short = f.first_length && f.first_width
++                        ? Math.min(f.first_length, f.first_width)
++                        : (f.pdf_width_mm && f.pdf_height_mm ? Math.min(f.pdf_width_mm, f.pdf_height_mm) : 0);
++                    group.recognizedFiles.push({
++                        file_path: f.file_path,
++                        file_name: f.file_name,
++                        preview_url: f.preview_url,
++                        length_mm: long,
++                        width_mm: short,
++                        quantity: f.first_quantity || 1,
++                        area: f.area || 0,
++                        boxes: f.boxes || null,
++                        box_count: f.box_count || 0,
++                    });
++                }
++            });
++            renderRecognizedFiles(groupId);
++            calcTotalPrice();
++        })
++        .catch(err => {
++            document.getElementById('uploadOverlay').style.display = 'none';
++            alert('上传出错：' + err);
+         });
+-        renderRecognizedFiles();
+-        calcPrice();
+-    })
+-    .catch(err => {
+-        uploadOverlay.style.display = 'none';
+-        alert('上传出错：' + err);
+     });
+-});
++}
+ 
+-function renderRecognizedFiles() {
+-    if (recognizedFiles.length === 0) {
+-        filesResultArea.style.display = 'none';
+-        uploadArea.style.display = 'block';
++function removePendingFile(groupId, idx) {
++    const group = specGroups.find(g => g.id === groupId);
++    if (group) {
++        group.pendingFiles.splice(idx, 1);
++        const card = document.getElementById(`specGroup-${groupId}`);
++        const pendingCount = card.querySelector('.pending-count');
++        const pendingArea = card.querySelector('.pending-files-area');
++        const pendingList = card.querySelector('.pending-files-list');
++        if (group.pendingFiles.length === 0) {
++            pendingArea.style.display = 'none';
++        } else {
++            pendingCount.textContent = group.pendingFiles.length;
++            pendingList.innerHTML = group.pendingFiles.map((file, i) => `
++                <div class="list-group-item d-flex justify-content-between align-items-center py-2">
++                    <span class="small"><i class="bi bi-file-earmark-pdf text-danger"></i> ${file.name}</span>
++                    <button type="button" class="btn btn-sm btn-link text-danger" onclick="removePendingFile(${groupId}, ${i})">
++                        <i class="bi bi-x-lg"></i>
++                    </button>
++                </div>
++            `).join('');
++        }
++    }
++}
++
++function renderRecognizedFiles(groupId) {
++    const group = specGroups.find(g => g.id === groupId);
++    const card = document.getElementById(`specGroup-${groupId}`);
++    const resultArea = card.querySelector('.files-result-area');
++    const uploadZone = card.querySelector('.upload-zone-group');
++
++    if (group.recognizedFiles.length === 0) {
++        resultArea.style.display = 'none';
++        uploadZone.style.display = 'block';
+         return;
+     }
+-    uploadArea.style.display = 'none';
+-    filesResultArea.style.display = 'block';
++    uploadZone.style.display = 'none';
++    resultArea.style.display = 'block';
+ 
+-    filesResultArea.innerHTML = recognizedFiles.map((f, idx) => {
++    resultArea.innerHTML = group.recognizedFiles.map((f, idx) => {
+         const previewHtml = f.preview_url
+             ? `<img src="${f.preview_url}" class="img-fluid rounded" style="max-height:120px;" alt="预览">`
+             : `<div class="text-muted py-3"><i class="bi bi-file-earmark-pdf" style="font-size:36px;"></i><br>PDF</div>`;
+ 
+-        // 多框时：为每个框渲染一组输入框
+         let dimensionsHtml = '';
+         if (f.boxes && f.boxes.length > 1) {
+             dimensionsHtml = f.boxes.map((box, bidx) => `
+@@ -666,33 +772,32 @@ function renderRecognizedFiles() {
+                     </div>
+                     <div class="col-3">
+                         <label class="form-label small mb-0">长(mm)</label>
+-                        <input type="number" step="0.01" class="form-control form-control-sm file-length-box" data-index="${idx}" data-box-index="${bidx}" value="${box.length_mm ? box.length_mm.toFixed(1) : ''}">
++                        <input type="number" step="0.01" class="form-control form-control-sm file-length-box" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.length_mm ? box.length_mm.toFixed(1) : ''}">
+                     </div>
+                     <div class="col-3">
+                         <label class="form-label small mb-0">宽(mm)</label>
+-                        <input type="number" step="0.01" class="form-control form-control-sm file-width-box" data-index="${idx}" data-box-index="${bidx}" value="${box.width_mm ? box.width_mm.toFixed(1) : ''}">
++                        <input type="number" step="0.01" class="form-control form-control-sm file-width-box" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.width_mm ? box.width_mm.toFixed(1) : ''}">
+                     </div>
+                     <div class="col-3">
+                         <label class="form-label small mb-0">数量</label>
+-                        <input type="number" min="1" class="form-control form-control-sm file-qty-box" data-index="${idx}" data-box-index="${bidx}" value="${box.quantity || 1}">
++                        <input type="number" min="1" class="form-control form-control-sm file-qty-box" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.quantity || 1}">
+                     </div>
+                 </div>
+             `).join('');
+         } else {
+-            // 单框或无框时：保持原有的一组输入框
+             dimensionsHtml = `
+                 <div class="row g-2 mt-1">
+                     <div class="col-4">
+                         <label class="form-label small mb-0">长(mm)</label>
+-                        <input type="number" step="0.01" class="form-control form-control-sm file-length" data-index="${idx}" value="${f.length_mm ? f.length_mm.toFixed(1) : ''}">
++                        <input type="number" step="0.01" class="form-control form-control-sm file-length" data-group="${groupId}" data-index="${idx}" value="${f.length_mm ? f.length_mm.toFixed(1) : ''}">
+                     </div>
+                     <div class="col-4">
+                         <label class="form-label small mb-0">宽(mm)</label>
+-                        <input type="number" step="0.01" class="form-control form-control-sm file-width" data-index="${idx}" value="${f.width_mm ? f.width_mm.toFixed(1) : ''}">
++                        <input type="number" step="0.01" class="form-control form-control-sm file-width" data-group="${groupId}" data-index="${idx}" value="${f.width_mm ? f.width_mm.toFixed(1) : ''}">
+                     </div>
+                     <div class="col-4">
+                         <label class="form-label small mb-0">数量</label>
+-                        <input type="number" min="1" class="form-control form-control-sm file-qty" data-index="${idx}" value="${f.quantity}">
++                        <input type="number" min="1" class="form-control form-control-sm file-qty" data-group="${groupId}" data-index="${idx}" value="${f.quantity}">
+                     </div>
+                 </div>`;
+         }
+@@ -702,14 +807,14 @@ function renderRecognizedFiles() {
+             : '';
+ 
+         return `
+-        <div class="card mb-2 file-result-card" data-index="${idx}">
++        <div class="card mb-2 file-result-card" data-group="${groupId}" data-index="${idx}">
+             <div class="card-body py-2 px-3">
+                 <div class="d-flex gap-3">
+                     <div class="flex-shrink-0 text-center" style="width:100px;">${previewHtml}</div>
+                     <div class="flex-grow-1">
+                         <div class="d-flex justify-content-between align-items-start">
+                             <span class="small fw-medium text-truncate" style="max-width:200px;" title="${f.file_name}">${f.file_name}</span>
+-                            <button type="button" class="btn btn-sm btn-link text-danger py-0" onclick="removeRecognizedFile(${idx})">
++                            <button type="button" class="btn btn-sm btn-link text-danger py-0" onclick="removeRecognizedFile(${groupId}, ${idx})">
+                                 <i class="bi bi-trash"></i>
+                             </button>
+                         </div>
+@@ -722,126 +827,111 @@ function renderRecognizedFiles() {
+     }).join('');
+ 
+     // 绑定单框输入事件
+-    filesResultArea.querySelectorAll('.file-length, .file-width, .file-qty').forEach(input => {
++    resultArea.querySelectorAll('.file-length, .file-width, .file-qty').forEach(input => {
+         input.addEventListener('input', () => {
++            const gid = parseInt(input.dataset.group);
+             const idx = parseInt(input.dataset.index);
+-            const card = filesResultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
+-            recognizedFiles[idx].length_mm = parseFloat(card.querySelector('.file-length').value) || 0;
+-            recognizedFiles[idx].width_mm = parseFloat(card.querySelector('.file-width').value) || 0;
+-            recognizedFiles[idx].quantity = parseInt(card.querySelector('.file-qty').value) || 1;
+-            calcPrice();
++            const g = specGroups.find(x => x.id === gid);
++            const card = resultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
++            g.recognizedFiles[idx].length_mm = parseFloat(card.querySelector('.file-length').value) || 0;
++            g.recognizedFiles[idx].width_mm = parseFloat(card.querySelector('.file-width').value) || 0;
++            g.recognizedFiles[idx].quantity = parseInt(card.querySelector('.file-qty').value) || 1;
++            calcTotalPrice();
+         });
+     });
+ 
+     // 绑定多框输入事件
+-    filesResultArea.querySelectorAll('.file-length-box, .file-width-box, .file-qty-box').forEach(input => {
++    resultArea.querySelectorAll('.file-length-box, .file-width-box, .file-qty-box').forEach(input => {
+         input.addEventListener('input', () => {
++            const gid = parseInt(input.dataset.group);
+             const idx = parseInt(input.dataset.index);
+             const boxIdx = parseInt(input.dataset.boxIndex);
+-            const card = filesResultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
++            const g = specGroups.find(x => x.id === gid);
++            const card = resultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
+             const row = card.querySelector(`.box-row[data-box-index="${boxIdx}"]`);
+-            recognizedFiles[idx].boxes[boxIdx].length_mm = parseFloat(row.querySelector('.file-length-box').value) || 0;
+-            recognizedFiles[idx].boxes[boxIdx].width_mm = parseFloat(row.querySelector('.file-width-box').value) || 0;
+-            recognizedFiles[idx].boxes[boxIdx].quantity = parseInt(row.querySelector('.file-qty-box').value) || 1;
+-            // 同步第一个框的值到顶层字段，保持兼容
++            g.recognizedFiles[idx].boxes[boxIdx].length_mm = parseFloat(row.querySelector('.file-length-box').value) || 0;
++            g.recognizedFiles[idx].boxes[boxIdx].width_mm = parseFloat(row.querySelector('.file-width-box').value) || 0;
++            g.recognizedFiles[idx].boxes[boxIdx].quantity = parseInt(row.querySelector('.file-qty-box').value) || 1;
+             if (boxIdx === 0) {
+-                recognizedFiles[idx].length_mm = recognizedFiles[idx].boxes[0].length_mm;
+-                recognizedFiles[idx].width_mm = recognizedFiles[idx].boxes[0].width_mm;
+-                recognizedFiles[idx].quantity = recognizedFiles[idx].boxes[0].quantity;
++                g.recognizedFiles[idx].length_mm = g.recognizedFiles[idx].boxes[0].length_mm;
++                g.recognizedFiles[idx].width_mm = g.recognizedFiles[idx].boxes[0].width_mm;
++                g.recognizedFiles[idx].quantity = g.recognizedFiles[idx].boxes[0].quantity;
+             }
+-            calcPrice();
++            calcTotalPrice();
+         });
+     });
+ }
+ 
+-function removeRecognizedFile(idx) {
+-    recognizedFiles.splice(idx, 1);
+-    renderRecognizedFiles();
+-    calcPrice();
+-    if (recognizedFiles.length === 0) {
+-        uploadArea.style.display = 'block';
++function removeRecognizedFile(groupId, idx) {
++    const group = specGroups.find(g => g.id === groupId);
++    if (group) {
++        group.recognizedFiles.splice(idx, 1);
++        renderRecognizedFiles(groupId);
++        calcTotalPrice();
+     }
+ }
+ 
+-// ===== 价格计算（多文件累加） =====
+-const totalPriceEl = document.getElementById('totalPrice');
+-const areaDisplay = document.getElementById('areaDisplay');
+-const unitPriceDisplay = document.getElementById('unitPriceDisplay');
+-const urgentCheck = document.getElementById('urgentCheck');
+-const urgentDisplay = document.getElementById('urgentDisplay');
+-
+-function calcPrice() {
+-    const up = parseFloat(unitPriceInput.value) || 0;
+-    const isUrgent = urgentCheck.checked;
+-    const productName = productInput.value;
+-    const isEtching = productName && (productName.startsWith('etching_'));
+-
+-    let totalArea = 0;
++// ===== 价格计算（汇总所有规格组）=====
++function calcTotalPrice() {
+     let total = 0;
+-
+-    if (up > 0) {
+-        recognizedFiles.forEach(f => {
+-            const l = parseFloat(f.length_mm) || 0;
+-            const w = parseFloat(f.width_mm) || 0;
+-            const q = parseInt(f.quantity) || 1;
+-            let fileArea = 0;
+-            if (f.boxes && f.boxes.length > 0 && isEtching) {
+-                fileArea = f.boxes.reduce((sum, box) => {
+-                    const bl = parseFloat(box.length_mm) || 0;
+-                    const bw = parseFloat(box.width_mm) || 0;
+-                    const bq = parseInt(box.quantity) || 1;
+-                    if (bl > 0 && bw > 0) return sum + ((bl + 5) * (bw + 5) / 100.0 * bq);
+-                    return sum;
+-                }, 0);
+-            } else if (l > 0 && w > 0) {
+-                if (isEtching) {
+-                    fileArea = ((l + 5) * (w + 5)) / 100.0 * q;
+-                } else {
+-                    fileArea = ((l + 20) * (w + 20)) / 100.0 * q;
++    const isUrgent = document.getElementById('urgentCheck').checked;
++    const detailsEl = document.getElementById('groupPriceDetails');
++    let detailsHtml = '';
++
++    specGroups.forEach((g, gi) => {
++        const up = g.unit_price;
++        const productName = g.product_name;
++        const isEtching = productName && productName.startsWith('etching_');
++        let groupArea = 0;
++        let groupTotal = 0;
++
++        if (up > 0) {
++            g.recognizedFiles.forEach(f => {
++                const l = parseFloat(f.length_mm) || 0;
++                const w = parseFloat(f.width_mm) || 0;
++                const q = parseInt(f.quantity) || 1;
++                let fileArea = 0;
++                if (f.boxes && f.boxes.length > 0 && isEtching) {
++                    fileArea = f.boxes.reduce((sum, box) => {
++                        const bl = parseFloat(box.length_mm) || 0;
++                        const bw = parseFloat(box.width_mm) || 0;
++                        const bq = parseInt(box.quantity) || 1;
++                        if (bl > 0 && bw > 0) return sum + ((bl + 5) * (bw + 5) / 100.0 * bq);
++                        return sum;
++                    }, 0);
++                } else if (l > 0 && w > 0) {
++                    if (isEtching) {
++                        fileArea = ((l + 5) * (w + 5)) / 100.0 * q;
++                    } else {
++                        fileArea = ((l + 20) * (w + 20)) / 100.0 * q;
++                    }
+                 }
++                groupArea += fileArea;
++            });
++            if (groupArea > 0) {
++                groupTotal = groupArea * up;
+             }
+-            totalArea += fileArea;
+-        });
++        }
+ 
+-        if (totalArea > 0) {
+-            total = totalArea * up;
+-            if (isUrgent) total *= 1.10;
++        total += groupTotal;
++
++        if (groupTotal > 0) {
++            detailsHtml += `
++                <div class="d-flex justify-content-between small mb-1">
++                    <span class="text-muted">规格组 ${gi + 1}（${g.thickness ? g.thickness + 'mm' : '未选厚度'}）</span>
++                    <span>¥${groupTotal.toFixed(2)}</span>
++                </div>`;
+         }
+-    }
++    });
+ 
+-    areaDisplay.textContent = totalArea.toFixed(2);
+-    unitPriceDisplay.textContent = up.toFixed(2);
+-    totalPriceEl.textContent = total.toFixed(2);
+-    urgentDisplay.style.display = isUrgent ? 'inline' : 'none';
+-}
++    if (isUrgent && total > 0) total *= 1.10;
+ 
+-function updateBorderTip(prodKey) {
+-    const tipBox = document.getElementById('borderTip');
+-    const tipText = document.getElementById('borderTipText');
+-    if (!tipBox || !tipText) return;
+-    if (!prodKey) {
+-        tipBox.style.display = 'none';
+-        return;
+-    }
+-    let msg = '';
+-    if (prodKey.startsWith('etching_')) {
+-        msg = '腐蚀版：红框识别后，单边自动 +5mm 版边计算面积';
+-    } else if (prodKey.startsWith('carving_')) {
+-        msg = '雕刻版：红框识别后，单边自动 +10mm 版边计算面积';
+-    } else if (prodKey.startsWith('resin_')) {
+-        msg = '树脂版：红框识别后，单边自动 +5mm 版边计算面积';
+-    } else if (prodKey.startsWith('film_')) {
+-        msg = '菲林：按实际尺寸计算，不添加版边';
+-    }
+-    if (msg) {
+-        tipText.textContent = msg;
+-        tipBox.style.display = 'block';
+-    } else {
+-        tipBox.style.display = 'none';
+-    }
++    detailsEl.innerHTML = detailsHtml;
++    document.getElementById('totalPrice').textContent = total.toFixed(2);
++    document.getElementById('urgentDisplay').style.display = isUrgent ? 'inline' : 'none';
+ }
+ 
+-urgentCheck.addEventListener('change', calcPrice);
++document.getElementById('urgentCheck').addEventListener('change', calcTotalPrice);
+ 
+ // ===== 快捷选项切换 =====
+ document.querySelectorAll('.preset-option').forEach(label => {
+@@ -852,52 +942,81 @@ document.querySelectorAll('.preset-option').forEach(label => {
+     });
+ });
+ 
++// ===== 添加规格组按钮 =====
++document.getElementById('addSpecGroupBtn').addEventListener('click', () => {
++    createSpecGroup();
++});
++
+ // ===== 表单验证 =====
+ document.getElementById('quickOrderForm').addEventListener('submit', function(e) {
+-    if (!productInput.value) {
+-        alert('请选择细分产品');
++    if (specGroups.length === 0) {
++        alert('请至少添加一个规格组');
+         e.preventDefault();
+         return;
+     }
+-    if (!materialInput.value) {
+-        alert('请选择材质');
+-        e.preventDefault();
+-        return;
+-    }
+-    if (!thicknessInput.value) {
+-        alert('请选择厚度');
+-        e.preventDefault();
+-        return;
+-    }
+-    if (recognizedFiles.length === 0) {
+-        alert('请上传至少一个PDF文件');
+-        e.preventDefault();
+-        return;
+-    }
+-    // 检查每个文件是否填写了尺寸
+-    for (let i = 0; i < recognizedFiles.length; i++) {
+-        const f = recognizedFiles[i];
+-        if (!f.length_mm || !f.width_mm) {
+-            alert(`第 ${i+1} 个文件（${f.file_name}）未填写尺寸`);
++
++    const specGroupsData = [];
++
++    for (let gi = 0; gi < specGroups.length; gi++) {
++        const g = specGroups[gi];
++        if (!g.product_name) {
++            alert(`规格组 ${gi + 1}：请选择细分产品`);
++            e.preventDefault();
++            return;
++        }
++        if (!g.material) {
++            alert(`规格组 ${gi + 1}：请选择材质`);
+             e.preventDefault();
+             return;
+         }
++        if (!g.thickness) {
++            alert(`规格组 ${gi + 1}：请选择厚度`);
++            e.preventDefault();
++            return;
++        }
++        if (g.recognizedFiles.length === 0) {
++            alert(`规格组 ${gi + 1}：请上传至少一个PDF文件`);
++            e.preventDefault();
++            return;
++        }
++        // 检查每个文件是否填写了尺寸
++        for (let i = 0; i < g.recognizedFiles.length; i++) {
++            const f = g.recognizedFiles[i];
++            if (!f.length_mm || !f.width_mm) {
++                alert(`规格组 ${gi + 1}：第 ${i + 1} 个文件（${f.file_name}）未填写尺寸`);
++                e.preventDefault();
++                return;
++            }
++        }
++
++        specGroupsData.push({
++            product_name: g.product_name,
++            material: g.material,
++            thickness: g.thickness,
++            unit_price: g.unit_price,
++            files: g.recognizedFiles.map(f => ({
++                file_path: f.file_path,
++                file_name: f.file_name || '',
++                length_mm: f.length_mm,
++                width_mm: f.width_mm,
++                quantity: f.quantity,
++                boxes: f.boxes,
++            })),
++        });
+     }
+-    // 将文件数据写入隐藏字段（先移除旧的）
+-    const oldInput = this.querySelector('input[name="files_data"]');
++
++    // 移除旧的隐藏字段
++    const oldInput = this.querySelector('input[name="spec_groups_data"]');
+     if (oldInput) oldInput.remove();
+-    const filesDataInput = document.createElement('input');
+-    filesDataInput.type = 'hidden';
+-    filesDataInput.name = 'files_data';
+-    filesDataInput.value = JSON.stringify(recognizedFiles.map(f => ({
+-        file_path: f.file_path,
+-        file_name: f.file_name || '',
+-        length_mm: f.length_mm,
+-        width_mm: f.width_mm,
+-        quantity: f.quantity,
+-        boxes: f.boxes,
+-    })));
+-    this.appendChild(filesDataInput);
++
++    const input = document.createElement('input');
++    input.type = 'hidden';
++    input.name = 'spec_groups_data';
++    input.value = JSON.stringify(specGroupsData);
++    this.appendChild(input);
+ });
++
++// 初始化：创建一个默认规格组
++createSpecGroup();
+ </script>
+ {% endblock %}
+diff --git a/utils/oss_storage.py b/utils/oss_storage.py
+index a5dd1eb..33d07af 100644
+--- a/utils/oss_storage.py
++++ b/utils/oss_storage.py
+@@ -43,9 +43,9 @@ class AliyunOSSStorage(Storage):
+         self.use_internal = kwargs.get('use_internal') or getattr(settings, 'OSS_INTERNAL', False)
+         self.custom_domain = kwargs.get('custom_domain') or getattr(settings, 'OSS_CUSTOM_DOMAIN', '')
+ 
+-        # 如果启用内网，将 endpoint 中的 .aliyuncs.com 替换为 .internal.aliyuncs.com
+-        if self.use_internal and '.aliyuncs.com' in self.endpoint and '.internal.aliyuncs.com' not in self.endpoint:
+-            self.endpoint = self.endpoint.replace('.aliyuncs.com', '.internal.aliyuncs.com')
++        # 如果启用内网，将 endpoint 中的 .aliyuncs.com 替换为 -internal.aliyuncs.com
++        if self.use_internal and '.aliyuncs.com' in self.endpoint and '-internal' not in self.endpoint:
++            self.endpoint = self.endpoint.replace('.aliyuncs.com', '-internal.aliyuncs.com')
+ 
+         self._bucket = None
+         super().__init__()
+@@ -131,7 +131,8 @@ class AliyunOSSStorage(Storage):
+ 
+ class AliyunOSSMediaStorage(AliyunOSSStorage):
+     """
+-    专用于 Media 文件的 OSS Storage（带 public-read ACL）
++    专用于 Media 文件的 OSS Storage
++    注意：如需公开访问，请在阿里云 OSS 控制台将 Bucket 设为"公共读"
+     """
+     def _save(self, name, content):
+         object_name = self._get_object_name(name)
+@@ -144,7 +145,6 @@ class AliyunOSSMediaStorage(AliyunOSSStorage):
+ 
+         headers = {
+             'Content-Type': content_type,
+-            'x-oss-object-acl': 'public-read',  # 媒体文件公开可读
+         }
+         self.bucket.put_object(object_name, content, headers=headers)
+         return name
+diff --git a/utils/pdf_processor.py b/utils/pdf_processor.py
+index a314692..a4f0289 100644
+--- a/utils/pdf_processor.py
++++ b/utils/pdf_processor.py
+@@ -5,12 +5,39 @@ PDF处理工具
+ 
+ import os
+ import io
++import tempfile
+ import fitz
+ from PIL import Image
+ from django.conf import settings
+ from django.core.files.storage import default_storage
+ 
+ 
++def _get_pdf_local_path(file_path):
++    """
++    获取 PDF 的本地路径。如果文件在本地不存在，尝试从存储后端（如 OSS）下载到临时文件。
++    :param file_path: 文件路径（绝对路径或相对于 MEDIA_ROOT 的路径）
++    :return: 本地文件路径，失败返回 None
++    """
++    if os.path.isabs(file_path):
++        if os.path.exists(file_path):
++            return file_path
++    else:
++        local_path = os.path.join(settings.MEDIA_ROOT, file_path)
++        if os.path.exists(local_path):
++            return local_path
++        # 尝试从存储后端（OSS）读取到临时文件
++        try:
++            f = default_storage.open(file_path, 'rb')
++            suffix = os.path.splitext(file_path)[1] or '.pdf'
++            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
++                for chunk in f.chunks():
++                    tmp.write(chunk)
++                return tmp.name
++        except Exception as e:
++            print(f"[_get_pdf_local_path] 从存储后端读取失败 ({file_path}): {e}")
++    return None
++
++
+ def calculate_pdf_area(file_path):
+     """
+     计算PDF第一页的面积（cm²）
+@@ -18,11 +45,10 @@ def calculate_pdf_area(file_path):
+     :return: float 面积(cm²)，失败返回0
+     """
+     try:
+-        if not os.path.isabs(file_path):
+-            file_path = os.path.join(settings.MEDIA_ROOT, file_path)
+-        if not os.path.exists(file_path):
++        local_path = _get_pdf_local_path(file_path)
++        if not local_path:
+             return 0
+-        doc = fitz.open(file_path)
++        doc = fitz.open(local_path)
+         page = doc[0]
+         rect = page.rect
+         # 1 point = 1/72 inch = 25.4/72 mm
+@@ -30,6 +56,12 @@ def calculate_pdf_area(file_path):
+         height_mm = rect.height * 25.4 / 72
+         area_cm2 = (width_mm * height_mm) / 100.0
+         doc.close()
++        # 清理临时文件
++        if local_path != file_path and not local_path.startswith(str(settings.MEDIA_ROOT)):
++            try:
++                os.unlink(local_path)
++            except:
++                pass
+         return round(area_cm2, 2)
+     except Exception as e:
+         return 0
+@@ -111,11 +143,14 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
+     :return: 输出文件URL 或 None
+     """
+     try:
+-        if not os.path.isabs(pdf_path):
+-            pdf_path = os.path.join(settings.MEDIA_ROOT, pdf_path)
++        local_pdf_path = _get_pdf_local_path(pdf_path)
++        if not local_pdf_path:
++            print(f"[generate_pdf_preview] PDF 文件不存在: {pdf_path}")
++            return None
++        
+         output_path = os.path.join(settings.MEDIA_ROOT, output_filename)
+         os.makedirs(os.path.dirname(output_path), exist_ok=True)
+-        doc = fitz.open(pdf_path)
++        doc = fitz.open(local_pdf_path)
+         page = doc[0]
+         zoom = dpi / 72
+         mat = fitz.Matrix(zoom, zoom)
+@@ -137,6 +172,14 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
+             pix = page.get_pixmap(matrix=mat)
+             pix.save(output_path)
+         doc.close()
++        
++        # 清理临时文件
++        if local_pdf_path != pdf_path and not local_pdf_path.startswith(str(settings.MEDIA_ROOT)):
++            try:
++                os.unlink(local_pdf_path)
++            except:
++                pass
++        
+         return settings.MEDIA_URL + output_filename
+     except Exception as e:
+         print(f"[generate_pdf_preview] 生成预览图失败: {e}")
+diff --git a/utils/pdf_red_box.py b/utils/pdf_red_box.py
+index 1484fc6..46e6147 100644
+--- a/utils/pdf_red_box.py
++++ b/utils/pdf_red_box.py
+@@ -177,6 +177,13 @@ def find_colored_rectangles(file_path):
+             filtered.append(r)
+     colored_rects = filtered
+ 
++    # 【改进】如果检测到红色框，优先只保留红色框（客户明确用红色标记内容区域）
++    # 过滤掉蓝色/黑色的备注框和文字注释框
++    red_rects = [r for r in colored_rects if r.get('is_red', False)]
++    if red_rects:
++        colored_rects = red_rects
++        logger.info(f"[红框识别] 检测到红色标记框，过滤其他颜色，保留 {len(red_rects)} 个红色框")
++    
+     # 最多返回5个框
+     result = colored_rects[:5]
+     
+@@ -301,9 +308,34 @@ def extract_quantity_from_text(text):
+     return 1
+ 
+ 
++def extract_global_quantity_semantic(text):
++    """
++    从全局文字中提取数量语义
++    返回: (quantity, mode)
++      mode='each'  -> "各3块"，每个框都是3个
++      mode='total' -> "共3块"，总共3个（需要分配）
++      None         -> 没有找到全局数量语义
++    """
++    if not text:
++        return None, None
++    
++    # "各3块"、"各 3 块"、"各3个"等
++    match = re.search(r'各\s*(\d+)\s*[块个只片张]', text)
++    if match:
++        return int(match.group(1)), 'each'
++    
++    # "共3块"、"总共3块"等
++    match = re.search(r'共\s*(\d+)\s*[块个只片张]', text)
++    if match:
++        return int(match.group(1)), 'total'
++    
++    return None, None
++
++
+ def smart_extract_boxes(file_path):
+     """
+     智能识别PDF中所有框及其对应的数量
++    支持全局数量语义理解（如"各3块"）
+     对尺寸相同的框去重（认为是同一内容的重复）
+     返回: [{'length_mm': ..., 'width_mm': ..., 'quantity': ..., 'nearby_text': ...}, ...]
+     """
+@@ -316,6 +348,15 @@ def smart_extract_boxes(file_path):
+     pt_to_mm = 25.4 / 72.0
+     results = []
+ 
++    # 【改进】先提取整个页面的文字，用于全局数量语义理解
++    full_page_text = ""
++    for page_num in range(len(doc)):
++        full_page_text += doc[page_num].get_text()
++    
++    global_qty, global_mode = extract_global_quantity_semantic(full_page_text)
++    if global_qty:
++        logger.info(f"[红框识别] 检测到全局数量语义: {global_mode} {global_qty} 块")
++
+     for r in rects:
+         length_mm = round(r['width'] * pt_to_mm, 2)
+         width_mm = round(r['height'] * pt_to_mm, 2)
+@@ -330,7 +371,11 @@ def smart_extract_boxes(file_path):
+         expanded_rect = expanded_rect & page.rect
+         nearby_text = page.get_textbox(expanded_rect)
+ 
+-        quantity = extract_quantity_from_text(nearby_text)
++        # 【改进】优先使用全局数量语义（如"各3块"）
++        if global_qty and global_mode == 'each':
++            quantity = global_qty
++        else:
++            quantity = extract_quantity_from_text(nearby_text)
+ 
+         results.append({
+             'length_mm': length_mm,
+diff --git "a/\346\265\213\350\257\225\350\257\264\346\230\216.md" "b/\346\265\213\350\257\225\350\257\264\346\230\216.md"
+new file mode 100644
+index 0000000..0c51682
+--- /dev/null
++++ "b/\346\265\213\350\257\225\350\257\264\346\230\216.md"
+@@ -0,0 +1,164 @@
++# 镁印制版下单系统 - 内部测试说明
++
++> 本文档面向公司内部测试人员，说明如何在不安装任何开发环境的情况下参与系统测试。
++
++---
++
++## 一、基本原理
++
++系统部署在一台**主机电脑**上作为服务器，其他同事的电脑只需通过浏览器访问主机的局域网地址即可，**不需要安装 Python、虚拟环境或任何软件**。
++
++---
++
++## 二、主机电脑操作（由管理员执行）
++
++### 1. 启动服务器
++
++在项目文件夹内，双击运行：
++
++```
++start_server.bat
++```
++
++启动成功后，命令行窗口会显示：
++
++```
++服务器已启动，请用浏览器访问：
++http://127.0.0.1:8000/login/
++```
++
++> ⚠️ **不要关闭这个窗口**，关闭即停止服务。
++
++### 2. 确认主机局域网 IP
++
++启动服务器后，在命令行中查看本机内网 IP（或让管理员告知）。
++
++示例：`192.168.1.18`
++
++### 3. 防火墙设置（重要）
++
++如果同事无法访问，请执行以下任一操作：
++
++**方式A：临时关闭防火墙（仅测试期间）**
++以管理员身份运行 CMD，输入：
++```bash
++netsh advfirewall set allprofiles state off
++```
++
++**方式B：仅开放 8000 端口（推荐）**
++以管理员身份运行 CMD，输入：
++```bash
++netsh advfirewall firewall add rule name="Django Dev Server" dir=in action=allow protocol=tcp localport=8000
++```
++
++---
++
++## 三、测试人员操作（其他同事）
++
++### 1. 打开浏览器
++
++推荐使用 **Chrome** 或 **Edge** 浏览器。
++
++### 2. 访问系统
++
++在地址栏输入主机电脑的局域网地址，例如：
++
++```
++http://192.168.1.18:8000/
++```
++
++> 请将 `192.168.1.18` 替换为实际的主机 IP。
++
++### 3. 登录测试
++
++系统包含三个独立的操作平台，请根据测试任务选择对应入口：
++
++| 平台 | 访问路径 | 测试账号 | 密码 | 用途 |
++|------|---------|---------|------|------|
++| **总平台** | `/login/` | 13800000000 | admin123 | 平台管理员审核商家、管理权限 |
++| **商家后台** | `/login/` | 13800138000 | admin123 | 商家管理会员、订单、工厂、商品规格 |
++| **终端客户** | `/login/` | 13900139000 | admin123 | 客户下单、查看订单、子账号管理 |
++
++> 终端客户也可以直接在注册页面（`/register/`）用商家邀请码 `MA1B2C3` 注册新账号体验注册流程。
++
++---
++
++## 四、商家岗位子账号测试
++
++商家后台支持创建**岗位子账号**，不同岗位拥有不同权限：
++
++| 岗位 | 权限范围 |
++|------|---------|
++| **客服岗** | 查看订单、审核订单、安排生产、发货、拼版、会员管理、工厂管理、规格管理、财务管理 |
++| **设计岗** | 查看订单、审核订单、安排生产、发货、拼版、会员管理 |
++| **财务岗** | 查看订单、审核订单、财务管理 |
++| **生产岗** | 查看订单、安排生产、发货 |
++| **总管理员** | 全部权限（含子账号管理） |
++
++### 创建子账号的方法
++
++1. 用商家管理员（13800138000）登录商家后台
++2. 进入 **系统设置 → 子账号**
++3. 点击"新增子账号"，填写手机号、密码、选择岗位角色
++4. 保存后即可用新手机号登录测试
++
++---
++
++## 五、核心业务流程（建议按此顺序测试）
++
++```
++1. 客户注册（填写商家邀请码 MA1B2C3）
++      ↓
++2. 商家后台审核客户（设置报价单 + 信用额度）
++      ↓
++3. 客户登录下单（上传文件、选择规格）
++      ↓
++4. 商家后台审核订单 → 安排生产 → 发货
++      ↓
++5. 客户确认收货 / 发起补版
++      ↓
++6. 商家财务对账、结算
++```
++
++---
++
++## 六、常见问题
++
++### Q1：浏览器提示"无法访问此网站"
++- 检查主机电脑是否已启动 `start_server.bat`
++- 确认输入的 IP 地址和端口是否正确（例如 `192.168.1.18:8000`）
++- 检查主机防火墙是否已开放 8000 端口
++- 确认主机和测试电脑连接在同一个局域网（同一个 WiFi / 路由器）
++
++### Q2：页面样式错乱或白屏
++- 按 `Ctrl + F5` 强制刷新
++- 换用 Chrome 或 Edge 浏览器
++
++### Q3：上传文件失败
++- 检查文件大小是否超过限制
++- 确认网络连接稳定
++
++### Q4：登录提示"账号或密码错误"
++- 确认使用的是正确的平台和对应账号
++- 注意区分总平台、商家后台、客户平台的登录入口
++
++### Q5：主机电脑关机后还能访问吗？
++- **不能**。这是开发测试服务器，主机电脑关机或关闭命令行窗口后服务即停止。
++
++---
++
++## 七、测试反馈
++
++测试过程中发现问题，请记录：
++1. 操作步骤
++2. 预期结果
++3. 实际结果
++4. 截图（如有）
++
++统一汇总后提交给开发人员进行修复。
++
++---
++
++**测试日期**：___________  
++**主机管理员**：___________  
++**主机 IP**：___________
+diff --git "a/\350\256\251\345\220\214\344\272\213\346\265\213\350\257\225ping.txt" "b/\350\256\251\345\220\214\344\272\213\346\265\213\350\257\225ping.txt"
+new file mode 100644
+index 0000000..61dc774
+--- /dev/null
++++ "b/\350\256\251\345\220\214\344\272\213\346\265\213\350\257\225ping.txt"
+@@ -0,0 +1,31 @@
++=== 让同事这样操作 ===
++
++第1步：同事按键盘上的 Win + R
++       （Win键就是键盘左下角那个窗户图标）
++
++第2步：弹出一个"运行"窗口，输入 cmd，按回车
++       
++第3步：黑窗口里输入下面这行，按回车：
++       ping 192.168.0.141
++
++第4步：看结果：
++
++【情况A - 能通】显示这样就是通的：
++       Reply from 192.168.0.141: bytes=32 time=2ms TTL=128
++       Reply from 192.168.0.141: bytes=32 time=1ms TTL=128
++       ...
++       已发送 = 4，已接收 = 4
++       （说明网络没问题，是其他原因）
++
++【情况B - 不通】显示这样就是不通：
++       Request timed out.
++       Request timed out.
++       ...
++       已发送 = 4，已接收 = 0
++       （说明WiFi和网线不在同一个网络）
++
++【情况C - 找不到主机】
++       Ping 请求找不到主机 192.168.0.141
++       （也是不通的意思）
++
++=== 把结果截图发给你 ===
+-- 
+2.52.0.windows.1
+

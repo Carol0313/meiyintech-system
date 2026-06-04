@@ -5,10 +5,37 @@ PDF处理工具
 
 import os
 import io
+import tempfile
 import fitz
 from PIL import Image
 from django.conf import settings
 from django.core.files.storage import default_storage
+
+
+def _get_pdf_local_path(file_path):
+    """
+    获取 PDF 的本地路径。如果文件在本地不存在，尝试从存储后端（如 OSS）下载到临时文件。
+    :param file_path: 文件路径（绝对路径或相对于 MEDIA_ROOT 的路径）
+    :return: 本地文件路径，失败返回 None
+    """
+    if os.path.isabs(file_path):
+        if os.path.exists(file_path):
+            return file_path
+    else:
+        local_path = os.path.join(settings.MEDIA_ROOT, file_path)
+        if os.path.exists(local_path):
+            return local_path
+        # 尝试从存储后端（OSS）读取到临时文件
+        try:
+            f = default_storage.open(file_path, 'rb')
+            suffix = os.path.splitext(file_path)[1] or '.pdf'
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                for chunk in f.chunks():
+                    tmp.write(chunk)
+                return tmp.name
+        except Exception as e:
+            print(f"[_get_pdf_local_path] 从存储后端读取失败 ({file_path}): {e}")
+    return None
 
 
 def calculate_pdf_area(file_path):
@@ -18,11 +45,10 @@ def calculate_pdf_area(file_path):
     :return: float 面积(cm²)，失败返回0
     """
     try:
-        if not os.path.isabs(file_path):
-            file_path = os.path.join(settings.MEDIA_ROOT, file_path)
-        if not os.path.exists(file_path):
+        local_path = _get_pdf_local_path(file_path)
+        if not local_path:
             return 0
-        doc = fitz.open(file_path)
+        doc = fitz.open(local_path)
         page = doc[0]
         rect = page.rect
         # 1 point = 1/72 inch = 25.4/72 mm
@@ -30,6 +56,12 @@ def calculate_pdf_area(file_path):
         height_mm = rect.height * 25.4 / 72
         area_cm2 = (width_mm * height_mm) / 100.0
         doc.close()
+        # 清理临时文件
+        if local_path != file_path and not local_path.startswith(str(settings.MEDIA_ROOT)):
+            try:
+                os.unlink(local_path)
+            except:
+                pass
         return round(area_cm2, 2)
     except Exception as e:
         return 0
@@ -111,11 +143,14 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
     :return: 输出文件URL 或 None
     """
     try:
-        if not os.path.isabs(pdf_path):
-            pdf_path = os.path.join(settings.MEDIA_ROOT, pdf_path)
+        local_pdf_path = _get_pdf_local_path(pdf_path)
+        if not local_pdf_path:
+            print(f"[generate_pdf_preview] PDF 文件不存在: {pdf_path}")
+            return None
+        
         output_path = os.path.join(settings.MEDIA_ROOT, output_filename)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        doc = fitz.open(pdf_path)
+        doc = fitz.open(local_pdf_path)
         page = doc[0]
         zoom = dpi / 72
         mat = fitz.Matrix(zoom, zoom)
@@ -137,6 +172,14 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
             pix = page.get_pixmap(matrix=mat)
             pix.save(output_path)
         doc.close()
+        
+        # 清理临时文件
+        if local_pdf_path != pdf_path and not local_pdf_path.startswith(str(settings.MEDIA_ROOT)):
+            try:
+                os.unlink(local_pdf_path)
+            except:
+                pass
+        
         return settings.MEDIA_URL + output_filename
     except Exception as e:
         print(f"[generate_pdf_preview] 生成预览图失败: {e}")

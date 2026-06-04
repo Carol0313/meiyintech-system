@@ -177,6 +177,13 @@ def find_colored_rectangles(file_path):
             filtered.append(r)
     colored_rects = filtered
 
+    # 【改进】如果检测到红色框，优先只保留红色框（客户明确用红色标记内容区域）
+    # 过滤掉蓝色/黑色的备注框和文字注释框
+    red_rects = [r for r in colored_rects if r.get('is_red', False)]
+    if red_rects:
+        colored_rects = red_rects
+        logger.info(f"[红框识别] 检测到红色标记框，过滤其他颜色，保留 {len(red_rects)} 个红色框")
+    
     # 最多返回5个框
     result = colored_rects[:5]
     
@@ -301,9 +308,34 @@ def extract_quantity_from_text(text):
     return 1
 
 
+def extract_global_quantity_semantic(text):
+    """
+    从全局文字中提取数量语义
+    返回: (quantity, mode)
+      mode='each'  -> "各3块"，每个框都是3个
+      mode='total' -> "共3块"，总共3个（需要分配）
+      None         -> 没有找到全局数量语义
+    """
+    if not text:
+        return None, None
+    
+    # "各3块"、"各 3 块"、"各3个"等
+    match = re.search(r'各\s*(\d+)\s*[块个只片张]', text)
+    if match:
+        return int(match.group(1)), 'each'
+    
+    # "共3块"、"总共3块"等
+    match = re.search(r'共\s*(\d+)\s*[块个只片张]', text)
+    if match:
+        return int(match.group(1)), 'total'
+    
+    return None, None
+
+
 def smart_extract_boxes(file_path):
     """
     智能识别PDF中所有框及其对应的数量
+    支持全局数量语义理解（如"各3块"）
     对尺寸相同的框去重（认为是同一内容的重复）
     返回: [{'length_mm': ..., 'width_mm': ..., 'quantity': ..., 'nearby_text': ...}, ...]
     """
@@ -315,6 +347,15 @@ def smart_extract_boxes(file_path):
     doc = fitz.open(file_path)
     pt_to_mm = 25.4 / 72.0
     results = []
+
+    # 【改进】先提取整个页面的文字，用于全局数量语义理解
+    full_page_text = ""
+    for page_num in range(len(doc)):
+        full_page_text += doc[page_num].get_text()
+    
+    global_qty, global_mode = extract_global_quantity_semantic(full_page_text)
+    if global_qty:
+        logger.info(f"[红框识别] 检测到全局数量语义: {global_mode} {global_qty} 块")
 
     for r in rects:
         length_mm = round(r['width'] * pt_to_mm, 2)
@@ -330,7 +371,11 @@ def smart_extract_boxes(file_path):
         expanded_rect = expanded_rect & page.rect
         nearby_text = page.get_textbox(expanded_rect)
 
-        quantity = extract_quantity_from_text(nearby_text)
+        # 【改进】优先使用全局数量语义（如"各3块"）
+        if global_qty and global_mode == 'each':
+            quantity = global_qty
+        else:
+            quantity = extract_quantity_from_text(nearby_text)
 
         results.append({
             'length_mm': length_mm,

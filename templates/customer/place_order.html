@@ -124,12 +124,29 @@
     .preset-option input {
         display: none;
     }
-    /* 规格勾选式选择 */
-    .spec-group {
-        margin-bottom: 18px;
+    /* 规格组卡片 */
+    .spec-group-card {
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: #fff;
+        margin-bottom: 16px;
+        position: relative;
     }
-    .spec-group:last-child {
-        margin-bottom: 0;
+    .spec-group-card .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: #f8f9fa;
+        border-bottom: 1px solid var(--border-color);
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
+    }
+    .spec-group-card .card-header .group-title {
+        font-weight: 600;
+        font-size: 14px;
+    }
+    .spec-group-card .card-body {
+        padding: 16px;
     }
     .spec-grid {
         display: flex;
@@ -171,115 +188,31 @@
         font-size: 13px;
         padding: 8px 0;
     }
+    .spec-subgroup {
+        margin-bottom: 14px;
+    }
+    .spec-subgroup:last-child {
+        margin-bottom: 0;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <form method="post" id="quickOrderForm" enctype="multipart/form-data">
     {% csrf_token %}
-    <input type="hidden" name="unit_price" id="unitPriceInput" value="0">
 
     <div class="row g-3">
-        <!-- 左侧：产品规格 + 文件上传 -->
+        <!-- 左侧：规格组列表 + 特殊要求 -->
         <div class="col-lg-8">
-            <!-- 1. 产品规格 -->
-            <div class="card mb-3">
-                <div class="card-body">
-                    <div class="section-title"><i class="bi bi-box-seam"></i> 产品规格</div>
-                    
-                    <!-- 隐藏的表单字段 -->
-                    <input type="hidden" name="product_category" id="productCategory" value="">
-                    <input type="hidden" name="product_name" id="productName" value="">
-                    <input type="hidden" name="material" id="material" value="">
-                    <input type="hidden" name="thickness" id="thickness" value="">
-                    
-                    <!-- 产品大类 -->
-                    <div class="spec-group">
-                        <label class="form-label">产品大类 <span class="text-danger">*</span></label>
-                        <div class="spec-grid" id="categoryGrid"></div>
-                    </div>
-                    
-                    <!-- 细分产品 -->
-                    <div class="spec-group">
-                        <label class="form-label">细分产品 <span class="text-danger">*</span></label>
-                        <div class="spec-grid" id="productGrid">
-                            <div class="spec-placeholder">请先选择产品大类</div>
-                        </div>
-                    </div>
-                    
-                    <!-- 材质 -->
-                    <div class="spec-group">
-                        <label class="form-label">材质 <span class="text-danger">*</span></label>
-                        <div class="spec-grid" id="materialGrid">
-                            <div class="spec-placeholder">请先选择细分产品</div>
-                        </div>
-                    </div>
-                    
-                    <!-- 厚度 -->
-                    <div class="spec-group">
-                        <label class="form-label">厚度 <span class="text-danger">*</span></label>
-                        <div class="spec-grid" id="thicknessGrid">
-                            <div class="spec-placeholder">请先选择材质</div>
-                        </div>
-                        <div class="mt-2" id="priceDisplay" style="display:none;">
-                            <span class="badge bg-primary">单价：¥<span id="priceValue">0.00</span> / cm²</span>
-                        </div>
-                        <!-- 温馨提醒：红框版边提示 -->
-                        <div class="mt-3" id="borderTip" style="display:none;">
-                            <div class="alert alert-warning py-2 mb-0 d-flex align-items-center" style="font-size:13px;">
-                                <i class="bi bi-info-circle-fill me-2"></i>
-                                <span id="borderTipText"></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <!-- 规格组容器 -->
+            <div id="specGroupsContainer"></div>
 
-            <!-- 2. 文件上传 -->
-            <div class="card mb-3">
-                <div class="card-body">
-                    <div class="section-title"><i class="bi bi-file-earmark-arrow-up"></i> 上传文件</div>
-                    <div id="uploadArea">
-                        <div class="upload-zone" id="uploadZone">
-                            <i class="bi bi-cloud-arrow-up"></i>
-                            <p class="fw-medium text-dark">点击或拖拽上传 PDF 文件</p>
-                            <p>支持一次选择多个文件，选择完成后点击"开始识别"</p>
-                            <input type="file" id="pdfInput" accept=".pdf" multiple style="display:none;">
-                        </div>
-                    </div>
+            <!-- 添加规格组按钮 -->
+            <button type="button" class="btn btn-outline-primary w-100 mb-3" id="addSpecGroupBtn">
+                <i class="bi bi-plus-lg"></i> 添加规格组
+            </button>
 
-                    <!-- 待识别文件列表 -->
-                    <div id="pendingFilesArea" style="display:none;" class="mt-3">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="fw-medium">待识别文件 (<span id="pendingCount">0</span>)</span>
-                            <button type="button" class="btn btn-sm btn-primary" id="startRecognizeBtn">
-                                <i class="bi bi-magic"></i> 开始识别
-                            </button>
-                        </div>
-                        <div id="pendingFilesList" class="list-group list-group-flush border rounded"></div>
-                    </div>
-
-                    <!-- 识别结果区域 -->
-                    <div id="filesResultArea" style="display:none;" class="mt-3"></div>
-
-                    <div class="mt-3 d-flex gap-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="file_type" id="fileStandard" value="standard" required>
-                            <label class="form-check-label" for="fileStandard">文件已转曲/矢量化</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="file_type" id="fileProcessed" value="processed" checked required>
-                            <label class="form-check-label" for="fileProcessed">需要客服处理文件</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="file_type" id="fileImage" value="image" required>
-                            <label class="form-check-label" for="fileImage">文件是图片文件</label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 3. 特殊要求 -->
+            <!-- 特殊要求（全局） -->
             <div class="card">
                 <div class="card-body">
                     <div class="section-title"><i class="bi bi-chat-left-text"></i> 其他要求</div>
@@ -343,14 +276,16 @@
                         </div>
                     </div>
 
+                    <!-- 各规格组小计 -->
+                    <div id="groupPriceDetails"></div>
+
                     <hr>
 
                     <div class="price-panel mb-3">
                         <div class="price-label">预估总价</div>
                         <div class="price-value">¥<span id="totalPrice">0.00</span></div>
                         <div class="small text-muted mt-1">
-                            面积 <span id="areaDisplay">0</span> cm² × 
-                            单价 <span id="unitPriceDisplay">0.00</span> 元
+                            共 <span id="groupCountDisplay">0</span> 个规格组
                             <span id="urgentDisplay" style="display:none;"> + 加急10%</span>
                         </div>
                     </div>
@@ -379,445 +314,266 @@
 <script>
 const SPEC_DATA = {{ spec_data_json|safe }};
 
-// ===== 规格联动（勾选式）=====
-const categoryInput = document.getElementById('productCategory');
-const productInput = document.getElementById('productName');
-const materialInput = document.getElementById('material');
-const thicknessInput = document.getElementById('thickness');
-const categoryGrid = document.getElementById('categoryGrid');
-const productGrid = document.getElementById('productGrid');
-const materialGrid = document.getElementById('materialGrid');
-const thicknessGrid = document.getElementById('thicknessGrid');
-const unitPriceInput = document.getElementById('unitPriceInput');
-const priceDisplay = document.getElementById('priceDisplay');
-const priceValue = document.getElementById('priceValue');
+// ===== 规格组管理器 =====
+let specGroupCounter = 0;
+const specGroups = []; // { id, product_name, material, thickness, unit_price, files: [] }
 
-function renderCategories() {
-    categoryGrid.innerHTML = '';
-    Object.keys(SPEC_DATA).forEach(key => {
-        const item = document.createElement('div');
-        item.className = 'spec-option';
-        item.dataset.value = key;
-        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].label;
-        item.addEventListener('click', () => selectCategory(key));
-        categoryGrid.appendChild(item);
-    });
+function createSpecGroup() {
+    const id = specGroupCounter++;
+    const group = {
+        id,
+        product_name: '',
+        material: '',
+        thickness: '',
+        unit_price: 0,
+        pendingFiles: [],
+        recognizedFiles: [],
+    };
+    specGroups.push(group);
+    renderSpecGroup(id);
+    updateGroupHeaders();
+    return id;
 }
 
-function selectCategory(key) {
-    categoryInput.value = key;
-    categoryGrid.querySelectorAll('.spec-option').forEach(el => {
-        el.classList.toggle('active', el.dataset.value === key);
-    });
-    // 重置下级
-    productInput.value = '';
-    materialInput.value = '';
-    thicknessInput.value = '';
-    unitPriceInput.value = '0';
-    priceDisplay.style.display = 'none';
-    calcPrice();
-
-    if (!key || !SPEC_DATA[key]) {
-        productGrid.innerHTML = '<div class="spec-placeholder">请先选择产品大类</div>';
-        materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
-        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+function removeSpecGroup(id) {
+    if (specGroups.length <= 1) {
+        alert('至少需要保留一个规格组');
         return;
     }
-    productGrid.innerHTML = '';
-    Object.keys(SPEC_DATA[key].products).forEach(prodKey => {
-        const item = document.createElement('div');
-        item.className = 'spec-option';
-        item.dataset.value = prodKey;
-        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].products[prodKey].label;
-        item.addEventListener('click', () => selectProduct(prodKey));
-        productGrid.appendChild(item);
-    });
-    materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
-    thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
-}
-
-function selectProduct(prodKey) {
-    productInput.value = prodKey;
-    productGrid.querySelectorAll('.spec-option').forEach(el => {
-        el.classList.toggle('active', el.dataset.value === prodKey);
-    });
-    materialInput.value = '';
-    thicknessInput.value = '';
-    unitPriceInput.value = '0';
-    priceDisplay.style.display = 'none';
-    calcPrice();
-    updateBorderTip(prodKey);
-
-    const catData = SPEC_DATA[categoryInput.value];
-    if (!catData || !catData.products[prodKey]) {
-        materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
-        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
-        return;
+    const idx = specGroups.findIndex(g => g.id === id);
+    if (idx >= 0) {
+        specGroups.splice(idx, 1);
+        const card = document.getElementById(`specGroup-${id}`);
+        if (card) card.remove();
+        updateGroupHeaders();
+        calcTotalPrice();
     }
-    materialGrid.innerHTML = '';
-    Object.keys(catData.products[prodKey].materials).forEach(matKey => {
-        const item = document.createElement('div');
-        item.className = 'spec-option';
-        item.dataset.value = matKey;
-        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + catData.products[prodKey].materials[matKey].label;
-        item.addEventListener('click', () => selectMaterial(matKey));
-        materialGrid.appendChild(item);
-    });
-    thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
 }
 
-function selectMaterial(matKey) {
-    materialInput.value = matKey;
-    materialGrid.querySelectorAll('.spec-option').forEach(el => {
-        el.classList.toggle('active', el.dataset.value === matKey);
+function updateGroupHeaders() {
+    specGroups.forEach((g, idx) => {
+        const title = document.querySelector(`#specGroup-${g.id} .group-title`);
+        if (title) title.textContent = `规格组 ${idx + 1}`;
     });
-    thicknessInput.value = '';
-    unitPriceInput.value = '0';
-    priceDisplay.style.display = 'none';
-    calcPrice();
-
-    const catData = SPEC_DATA[categoryInput.value];
-    if (!catData) return;
-    const prodData = catData.products[productInput.value];
-    if (!prodData || !prodData.materials[matKey]) {
-        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
-        return;
-    }
-    thicknessGrid.innerHTML = '';
-    prodData.materials[matKey].thicknesses.forEach(t => {
-        const item = document.createElement('div');
-        item.className = 'spec-option';
-        item.dataset.value = t.value;
-        item.dataset.price = t.price;
-        item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + t.label + ' <span class="text-muted small">(¥' + t.price + '/cm²)</span>';
-        item.addEventListener('click', () => selectThickness(t.value, t.price));
-        thicknessGrid.appendChild(item);
-    });
+    document.getElementById('groupCountDisplay').textContent = specGroups.length;
 }
 
-function selectThickness(value, price) {
-    thicknessInput.value = value;
-    thicknessGrid.querySelectorAll('.spec-option').forEach(el => {
-        el.classList.toggle('active', el.dataset.value === value);
-    });
-    unitPriceInput.value = price;
-    priceValue.textContent = parseFloat(price).toFixed(2);
-    priceDisplay.style.display = 'inline-block';
-    calcPrice();
-}
-
-// 初始化渲染
-renderCategories();
-
-// ===== 多文件上传 =====
-const uploadZone = document.getElementById('uploadZone');
-const pdfInput = document.getElementById('pdfInput');
-const uploadArea = document.getElementById('uploadArea');
-const pendingFilesArea = document.getElementById('pendingFilesArea');
-const pendingFilesList = document.getElementById('pendingFilesList');
-const pendingCount = document.getElementById('pendingCount');
-const startRecognizeBtn = document.getElementById('startRecognizeBtn');
-const filesResultArea = document.getElementById('filesResultArea');
-const uploadOverlay = document.getElementById('uploadOverlay');
-
-let pendingFiles = [];      // 待识别的 File 对象数组
-let recognizedFiles = [];   // 已识别的文件信息数组
-
-uploadZone.addEventListener('click', () => pdfInput.click());
-
-uploadZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    uploadZone.classList.add('dragover');
-});
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
-uploadZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    uploadZone.classList.remove('dragover');
-    handleFiles(Array.from(e.dataTransfer.files));
-});
-
-pdfInput.addEventListener('change', () => {
-    handleFiles(Array.from(pdfInput.files));
-    pdfInput.value = '';
-});
-
-function handleFiles(files) {
-    const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
-    const invalid = files.length - validFiles.length;
-    if (invalid > 0) {
-        alert(`已过滤 ${invalid} 个非PDF文件，仅支持PDF格式`);
-    }
-    if (validFiles.length === 0) return;
-    pendingFiles.push(...validFiles);
-    renderPendingFiles();
-}
-
-function renderPendingFiles() {
-    if (pendingFiles.length === 0) {
-        pendingFilesArea.style.display = 'none';
-        return;
-    }
-    pendingFilesArea.style.display = 'block';
-    pendingCount.textContent = pendingFiles.length;
-    pendingFilesList.innerHTML = pendingFiles.map((file, idx) => `
-        <div class="list-group-item d-flex justify-content-between align-items-center py-2">
-            <span class="small"><i class="bi bi-file-earmark-pdf text-danger"></i> ${file.name}</span>
-            <button type="button" class="btn btn-sm btn-link text-danger" onclick="removePendingFile(${idx})">
-                <i class="bi bi-x-lg"></i>
+function renderSpecGroup(id) {
+    const container = document.getElementById('specGroupsContainer');
+    const html = `
+    <div class="spec-group-card" id="specGroup-${id}" data-group-id="${id}">
+        <div class="card-header">
+            <span class="group-title">规格组 ${specGroups.length}</span>
+            <button type="button" class="btn btn-sm btn-link text-danger" onclick="removeSpecGroup(${id})">
+                <i class="bi bi-trash"></i> 删除
             </button>
         </div>
-    `).join('');
-}
-
-function removePendingFile(idx) {
-    pendingFiles.splice(idx, 1);
-    renderPendingFiles();
-}
-
-startRecognizeBtn.addEventListener('click', () => {
-    if (pendingFiles.length === 0) return;
-    uploadOverlay.style.display = 'flex';
-
-    const formData = new FormData();
-    pendingFiles.forEach(file => formData.append('pdf_files', file));
-    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
-
-    fetch('{% url "batch_upload_files" %}', {
-        method: 'POST',
-        body: formData,
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    })
-    .then(r => {
-        if (!r.ok) {
-            return r.text().then(text => {
-                throw new Error('服务器错误 [' + r.status + ']：' + text.substring(0, 200));
-            });
-        }
-        const ct = r.headers.get('content-type') || '';
-        if (!ct.includes('application/json')) {
-            return r.text().then(text => {
-                throw new Error('返回格式错误：' + text.substring(0, 200));
-            });
-        }
-        return r.json();
-    })
-    .then(data => {
-        uploadOverlay.style.display = 'none';
-        if (!data.success) {
-            alert(data.error || '识别失败');
-            return;
-        }
-        // 清空待识别
-        pendingFiles = [];
-        pendingFilesArea.style.display = 'none';
-
-        // 合并到已识别列表
-        data.files.forEach(f => {
-            if (f.success) {
-                const long = f.first_length && f.first_width
-                    ? Math.max(f.first_length, f.first_width)
-                    : (f.pdf_width_mm && f.pdf_height_mm ? Math.max(f.pdf_width_mm, f.pdf_height_mm) : 0);
-                const short = f.first_length && f.first_width
-                    ? Math.min(f.first_length, f.first_width)
-                    : (f.pdf_width_mm && f.pdf_height_mm ? Math.min(f.pdf_width_mm, f.pdf_height_mm) : 0);
-                recognizedFiles.push({
-                    file_path: f.file_path,
-                    file_name: f.file_name,
-                    preview_url: f.preview_url,
-                    length_mm: long,
-                    width_mm: short,
-                    quantity: f.first_quantity || 1,
-                    area: f.area || 0,
-                    boxes: f.boxes || null,
-                    box_count: f.box_count || 0,
-                });
-            }
-        });
-        renderRecognizedFiles();
-        calcPrice();
-    })
-    .catch(err => {
-        uploadOverlay.style.display = 'none';
-        alert('上传出错：' + err);
-    });
-});
-
-function renderRecognizedFiles() {
-    if (recognizedFiles.length === 0) {
-        filesResultArea.style.display = 'none';
-        uploadArea.style.display = 'block';
-        return;
-    }
-    uploadArea.style.display = 'none';
-    filesResultArea.style.display = 'block';
-
-    filesResultArea.innerHTML = recognizedFiles.map((f, idx) => {
-        const previewHtml = f.preview_url
-            ? `<img src="${f.preview_url}" class="img-fluid rounded" style="max-height:120px;" alt="预览">`
-            : `<div class="text-muted py-3"><i class="bi bi-file-earmark-pdf" style="font-size:36px;"></i><br>PDF</div>`;
-
-        // 多框时：为每个框渲染一组输入框
-        let dimensionsHtml = '';
-        if (f.boxes && f.boxes.length > 1) {
-            dimensionsHtml = f.boxes.map((box, bidx) => `
-                <div class="row g-2 mt-1 box-row" data-box-index="${bidx}">
-                    <div class="col-1 d-flex align-items-end pb-1">
-                        <span class="badge bg-secondary">框${bidx + 1}</span>
-                    </div>
-                    <div class="col-3">
-                        <label class="form-label small mb-0">长(mm)</label>
-                        <input type="number" step="0.01" class="form-control form-control-sm file-length-box" data-index="${idx}" data-box-index="${bidx}" value="${box.length_mm ? box.length_mm.toFixed(1) : ''}">
-                    </div>
-                    <div class="col-3">
-                        <label class="form-label small mb-0">宽(mm)</label>
-                        <input type="number" step="0.01" class="form-control form-control-sm file-width-box" data-index="${idx}" data-box-index="${bidx}" value="${box.width_mm ? box.width_mm.toFixed(1) : ''}">
-                    </div>
-                    <div class="col-3">
-                        <label class="form-label small mb-0">数量</label>
-                        <input type="number" min="1" class="form-control form-control-sm file-qty-box" data-index="${idx}" data-box-index="${bidx}" value="${box.quantity || 1}">
-                    </div>
+        <div class="card-body">
+            <!-- 产品规格 -->
+            <div class="spec-subgroup">
+                <label class="form-label">产品大类 <span class="text-danger">*</span></label>
+                <div class="spec-grid category-grid" data-group="${id}"></div>
+            </div>
+            <div class="spec-subgroup">
+                <label class="form-label">细分产品 <span class="text-danger">*</span></label>
+                <div class="spec-grid product-grid" data-group="${id}">
+                    <div class="spec-placeholder">请先选择产品大类</div>
                 </div>
-            `).join('');
-        } else {
-            // 单框或无框时：保持原有的一组输入框
-            dimensionsHtml = `
-                <div class="row g-2 mt-1">
-                    <div class="col-4">
-                        <label class="form-label small mb-0">长(mm)</label>
-                        <input type="number" step="0.01" class="form-control form-control-sm file-length" data-index="${idx}" value="${f.length_mm ? f.length_mm.toFixed(1) : ''}">
-                    </div>
-                    <div class="col-4">
-                        <label class="form-label small mb-0">宽(mm)</label>
-                        <input type="number" step="0.01" class="form-control form-control-sm file-width" data-index="${idx}" value="${f.width_mm ? f.width_mm.toFixed(1) : ''}">
-                    </div>
-                    <div class="col-4">
-                        <label class="form-label small mb-0">数量</label>
-                        <input type="number" min="1" class="form-control form-control-sm file-qty" data-index="${idx}" value="${f.quantity}">
-                    </div>
-                </div>`;
-        }
-
-        const boxInfo = f.box_count > 0
-            ? `<div class="small text-info mt-1"><i class="bi bi-bounding-box"></i> 检测到 ${f.box_count} 个内容框</div>`
-            : '';
-
-        return `
-        <div class="card mb-2 file-result-card" data-index="${idx}">
-            <div class="card-body py-2 px-3">
-                <div class="d-flex gap-3">
-                    <div class="flex-shrink-0 text-center" style="width:100px;">${previewHtml}</div>
-                    <div class="flex-grow-1">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <span class="small fw-medium text-truncate" style="max-width:200px;" title="${f.file_name}">${f.file_name}</span>
-                            <button type="button" class="btn btn-sm btn-link text-danger py-0" onclick="removeRecognizedFile(${idx})">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                        ${dimensionsHtml}
-                        ${boxInfo}
+            </div>
+            <div class="spec-subgroup">
+                <label class="form-label">材质 <span class="text-danger">*</span></label>
+                <div class="spec-grid material-grid" data-group="${id}">
+                    <div class="spec-placeholder">请先选择细分产品</div>
+                </div>
+            </div>
+            <div class="spec-subgroup">
+                <label class="form-label">厚度 <span class="text-danger">*</span></label>
+                <div class="spec-grid thickness-grid" data-group="${id}">
+                    <div class="spec-placeholder">请先选择材质</div>
+                </div>
+                <div class="mt-2 price-display" data-group="${id}" style="display:none;">
+                    <span class="badge bg-primary">单价：¥<span class="price-value">0.00</span> / cm²</span>
+                </div>
+                <div class="mt-2 border-tip" data-group="${id}" style="display:none;">
+                    <div class="alert alert-warning py-2 mb-0 d-flex align-items-center" style="font-size:13px;">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        <span class="border-tip-text"></span>
                     </div>
                 </div>
             </div>
-        </div>`;
-    }).join('');
 
-    // 绑定单框输入事件
-    filesResultArea.querySelectorAll('.file-length, .file-width, .file-qty').forEach(input => {
-        input.addEventListener('input', () => {
-            const idx = parseInt(input.dataset.index);
-            const card = filesResultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
-            recognizedFiles[idx].length_mm = parseFloat(card.querySelector('.file-length').value) || 0;
-            recognizedFiles[idx].width_mm = parseFloat(card.querySelector('.file-width').value) || 0;
-            recognizedFiles[idx].quantity = parseInt(card.querySelector('.file-qty').value) || 1;
-            calcPrice();
-        });
-    });
+            <!-- 文件上传 -->
+            <div class="spec-subgroup">
+                <label class="form-label">上传文件</label>
+                <div class="upload-zone upload-zone-group" data-group="${id}">
+                    <i class="bi bi-cloud-arrow-up"></i>
+                    <p class="fw-medium text-dark">点击或拖拽上传 PDF 文件</p>
+                    <p>支持一次选择多个文件，选择完成后点击"开始识别"</p>
+                    <input type="file" class="pdf-input-group" accept=".pdf" multiple style="display:none;" data-group="${id}">
+                </div>
+            </div>
 
-    // 绑定多框输入事件
-    filesResultArea.querySelectorAll('.file-length-box, .file-width-box, .file-qty-box').forEach(input => {
-        input.addEventListener('input', () => {
-            const idx = parseInt(input.dataset.index);
-            const boxIdx = parseInt(input.dataset.boxIndex);
-            const card = filesResultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
-            const row = card.querySelector(`.box-row[data-box-index="${boxIdx}"]`);
-            recognizedFiles[idx].boxes[boxIdx].length_mm = parseFloat(row.querySelector('.file-length-box').value) || 0;
-            recognizedFiles[idx].boxes[boxIdx].width_mm = parseFloat(row.querySelector('.file-width-box').value) || 0;
-            recognizedFiles[idx].boxes[boxIdx].quantity = parseInt(row.querySelector('.file-qty-box').value) || 1;
-            // 同步第一个框的值到顶层字段，保持兼容
-            if (boxIdx === 0) {
-                recognizedFiles[idx].length_mm = recognizedFiles[idx].boxes[0].length_mm;
-                recognizedFiles[idx].width_mm = recognizedFiles[idx].boxes[0].width_mm;
-                recognizedFiles[idx].quantity = recognizedFiles[idx].boxes[0].quantity;
-            }
-            calcPrice();
-        });
-    });
+            <!-- 待识别文件列表 -->
+            <div class="pending-files-area mt-2" data-group="${id}" style="display:none;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-medium small">待识别文件 (<span class="pending-count">0</span>)</span>
+                    <button type="button" class="btn btn-sm btn-primary start-recognize-btn" data-group="${id}">
+                        <i class="bi bi-magic"></i> 开始识别
+                    </button>
+                </div>
+                <div class="list-group list-group-flush border rounded pending-files-list"></div>
+            </div>
+
+            <!-- 识别结果区域 -->
+            <div class="files-result-area mt-2" data-group="${id}" style="display:none;"></div>
+        </div>
+    </div>`;
+    container.insertAdjacentHTML('beforeend', html);
+
+    // 绑定规格选择事件
+    bindSpecEvents(id);
+    // 绑定文件上传事件
+    bindUploadEvents(id);
 }
 
-function removeRecognizedFile(idx) {
-    recognizedFiles.splice(idx, 1);
-    renderRecognizedFiles();
-    calcPrice();
-    if (recognizedFiles.length === 0) {
-        uploadArea.style.display = 'block';
+// ===== 规格联动（按组）=====
+function bindSpecEvents(groupId) {
+    const card = document.getElementById(`specGroup-${groupId}`);
+    const categoryGrid = card.querySelector('.category-grid');
+    const productGrid = card.querySelector('.product-grid');
+    const materialGrid = card.querySelector('.material-grid');
+    const thicknessGrid = card.querySelector('.thickness-grid');
+    const priceDisplay = card.querySelector('.price-display');
+    const priceValue = card.querySelector('.price-value');
+    const group = specGroups.find(g => g.id === groupId);
+
+    function renderCategories() {
+        categoryGrid.innerHTML = '';
+        Object.keys(SPEC_DATA).forEach(key => {
+            const item = document.createElement('div');
+            item.className = 'spec-option';
+            item.dataset.value = key;
+            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].label;
+            item.addEventListener('click', () => selectCategory(key));
+            categoryGrid.appendChild(item);
+        });
     }
-}
 
-// ===== 价格计算（多文件累加） =====
-const totalPriceEl = document.getElementById('totalPrice');
-const areaDisplay = document.getElementById('areaDisplay');
-const unitPriceDisplay = document.getElementById('unitPriceDisplay');
-const urgentCheck = document.getElementById('urgentCheck');
-const urgentDisplay = document.getElementById('urgentDisplay');
+    function selectCategory(key) {
+        group.product_name = '';
+        group.material = '';
+        group.thickness = '';
+        group.unit_price = 0;
+        priceDisplay.style.display = 'none';
+        calcTotalPrice();
 
-function calcPrice() {
-    const up = parseFloat(unitPriceInput.value) || 0;
-    const isUrgent = urgentCheck.checked;
-    const productName = productInput.value;
-    const isEtching = productName && (productName.startsWith('etching_'));
-
-    let totalArea = 0;
-    let total = 0;
-
-    if (up > 0) {
-        recognizedFiles.forEach(f => {
-            const l = parseFloat(f.length_mm) || 0;
-            const w = parseFloat(f.width_mm) || 0;
-            const q = parseInt(f.quantity) || 1;
-            let fileArea = 0;
-            if (f.boxes && f.boxes.length > 0 && isEtching) {
-                fileArea = f.boxes.reduce((sum, box) => {
-                    const bl = parseFloat(box.length_mm) || 0;
-                    const bw = parseFloat(box.width_mm) || 0;
-                    const bq = parseInt(box.quantity) || 1;
-                    if (bl > 0 && bw > 0) return sum + ((bl + 5) * (bw + 5) / 100.0 * bq);
-                    return sum;
-                }, 0);
-            } else if (l > 0 && w > 0) {
-                if (isEtching) {
-                    fileArea = ((l + 5) * (w + 5)) / 100.0 * q;
-                } else {
-                    fileArea = ((l + 20) * (w + 20)) / 100.0 * q;
-                }
-            }
-            totalArea += fileArea;
+        categoryGrid.querySelectorAll('.spec-option').forEach(el => {
+            el.classList.toggle('active', el.dataset.value === key);
         });
 
-        if (totalArea > 0) {
-            total = totalArea * up;
-            if (isUrgent) total *= 1.10;
+        if (!key || !SPEC_DATA[key]) {
+            productGrid.innerHTML = '<div class="spec-placeholder">请先选择产品大类</div>';
+            materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
+            thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+            return;
         }
+        productGrid.innerHTML = '';
+        Object.keys(SPEC_DATA[key].products).forEach(prodKey => {
+            const item = document.createElement('div');
+            item.className = 'spec-option';
+            item.dataset.value = prodKey;
+            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].products[prodKey].label;
+            item.addEventListener('click', () => selectProduct(prodKey));
+            productGrid.appendChild(item);
+        });
+        materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
+        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
     }
 
-    areaDisplay.textContent = totalArea.toFixed(2);
-    unitPriceDisplay.textContent = up.toFixed(2);
-    totalPriceEl.textContent = total.toFixed(2);
-    urgentDisplay.style.display = isUrgent ? 'inline' : 'none';
+    function selectProduct(prodKey) {
+        group.product_name = prodKey;
+        group.material = '';
+        group.thickness = '';
+        group.unit_price = 0;
+        priceDisplay.style.display = 'none';
+        calcTotalPrice();
+        updateBorderTip(groupId, prodKey);
+
+        productGrid.querySelectorAll('.spec-option').forEach(el => {
+            el.classList.toggle('active', el.dataset.value === prodKey);
+        });
+
+        const catData = SPEC_DATA[Object.keys(SPEC_DATA).find(k => {
+            return SPEC_DATA[k].products && SPEC_DATA[k].products[prodKey];
+        })];
+        if (!catData || !catData.products[prodKey]) {
+            materialGrid.innerHTML = '<div class="spec-placeholder">请先选择细分产品</div>';
+            thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+            return;
+        }
+        materialGrid.innerHTML = '';
+        Object.keys(catData.products[prodKey].materials).forEach(matKey => {
+            const item = document.createElement('div');
+            item.className = 'spec-option';
+            item.dataset.value = matKey;
+            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + catData.products[prodKey].materials[matKey].label;
+            item.addEventListener('click', () => selectMaterial(matKey));
+            materialGrid.appendChild(item);
+        });
+        thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+    }
+
+    function selectMaterial(matKey) {
+        group.material = matKey;
+        group.thickness = '';
+        group.unit_price = 0;
+        priceDisplay.style.display = 'none';
+        calcTotalPrice();
+
+        materialGrid.querySelectorAll('.spec-option').forEach(el => {
+            el.classList.toggle('active', el.dataset.value === matKey);
+        });
+
+        const catData = SPEC_DATA[Object.keys(SPEC_DATA).find(k => {
+            return SPEC_DATA[k].products && SPEC_DATA[k].products[group.product_name];
+        })];
+        if (!catData) return;
+        const prodData = catData.products[group.product_name];
+        if (!prodData || !prodData.materials[matKey]) {
+            thicknessGrid.innerHTML = '<div class="spec-placeholder">请先选择材质</div>';
+            return;
+        }
+        thicknessGrid.innerHTML = '';
+        prodData.materials[matKey].thicknesses.forEach(t => {
+            const item = document.createElement('div');
+            item.className = 'spec-option';
+            item.dataset.value = t.value;
+            item.dataset.price = t.price;
+            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + t.label + ' <span class="text-muted small">(¥' + t.price + '/cm²)</span>';
+            item.addEventListener('click', () => selectThickness(t.value, t.price));
+            thicknessGrid.appendChild(item);
+        });
+    }
+
+    function selectThickness(value, price) {
+        group.thickness = value;
+        group.unit_price = parseFloat(price);
+        priceValue.textContent = group.unit_price.toFixed(2);
+        priceDisplay.style.display = 'inline-block';
+        calcTotalPrice();
+
+        thicknessGrid.querySelectorAll('.spec-option').forEach(el => {
+            el.classList.toggle('active', el.dataset.value === value);
+        });
+    }
+
+    renderCategories();
 }
 
-function updateBorderTip(prodKey) {
-    const tipBox = document.getElementById('borderTip');
-    const tipText = document.getElementById('borderTipText');
+function updateBorderTip(groupId, prodKey) {
+    const card = document.getElementById(`specGroup-${groupId}`);
+    const tipBox = card.querySelector('.border-tip');
+    const tipText = card.querySelector('.border-tip-text');
     if (!tipBox || !tipText) return;
     if (!prodKey) {
         tipBox.style.display = 'none';
@@ -841,7 +597,341 @@ function updateBorderTip(prodKey) {
     }
 }
 
-urgentCheck.addEventListener('change', calcPrice);
+// ===== 文件上传（按组）=====
+function bindUploadEvents(groupId) {
+    const card = document.getElementById(`specGroup-${groupId}`);
+    const uploadZone = card.querySelector('.upload-zone-group');
+    const pdfInput = card.querySelector('.pdf-input-group');
+    const pendingArea = card.querySelector('.pending-files-area');
+    const pendingList = card.querySelector('.pending-files-list');
+    const pendingCount = card.querySelector('.pending-count');
+    const startBtn = card.querySelector('.start-recognize-btn');
+    const resultArea = card.querySelector('.files-result-area');
+    const group = specGroups.find(g => g.id === groupId);
+
+    uploadZone.addEventListener('click', () => pdfInput.click());
+    uploadZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadZone.classList.add('dragover');
+    });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        handleFiles(Array.from(e.dataTransfer.files));
+    });
+    pdfInput.addEventListener('change', () => {
+        handleFiles(Array.from(pdfInput.files));
+        pdfInput.value = '';
+    });
+
+    function handleFiles(files) {
+        const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+        const invalid = files.length - validFiles.length;
+        if (invalid > 0) {
+            alert(`已过滤 ${invalid} 个非PDF文件，仅支持PDF格式`);
+        }
+        if (validFiles.length === 0) return;
+        group.pendingFiles.push(...validFiles);
+        renderPendingFiles();
+    }
+
+    function renderPendingFiles() {
+        if (group.pendingFiles.length === 0) {
+            pendingArea.style.display = 'none';
+            return;
+        }
+        pendingArea.style.display = 'block';
+        pendingCount.textContent = group.pendingFiles.length;
+        pendingList.innerHTML = group.pendingFiles.map((file, idx) => `
+            <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                <span class="small"><i class="bi bi-file-earmark-pdf text-danger"></i> ${file.name}</span>
+                <button type="button" class="btn btn-sm btn-link text-danger" onclick="removePendingFile(${groupId}, ${idx})">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        `).join('');
+    }
+
+    startBtn.addEventListener('click', () => {
+        if (group.pendingFiles.length === 0) return;
+        document.getElementById('uploadOverlay').style.display = 'flex';
+
+        const formData = new FormData();
+        group.pendingFiles.forEach(file => formData.append('pdf_files', file));
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+        fetch('{% url "batch_upload_files" %}', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(r => {
+            if (!r.ok) {
+                return r.text().then(text => {
+                    throw new Error('服务器错误 [' + r.status + ']：' + text.substring(0, 200));
+                });
+            }
+            const ct = r.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+                return r.text().then(text => {
+                    throw new Error('返回格式错误：' + text.substring(0, 200));
+                });
+            }
+            return r.json();
+        })
+        .then(data => {
+            document.getElementById('uploadOverlay').style.display = 'none';
+            if (!data.success) {
+                alert(data.error || '识别失败');
+                return;
+            }
+            group.pendingFiles = [];
+            pendingArea.style.display = 'none';
+
+            data.files.forEach(f => {
+                if (f.success) {
+                    const long = f.first_length && f.first_width
+                        ? Math.max(f.first_length, f.first_width)
+                        : (f.pdf_width_mm && f.pdf_height_mm ? Math.max(f.pdf_width_mm, f.pdf_height_mm) : 0);
+                    const short = f.first_length && f.first_width
+                        ? Math.min(f.first_length, f.first_width)
+                        : (f.pdf_width_mm && f.pdf_height_mm ? Math.min(f.pdf_width_mm, f.pdf_height_mm) : 0);
+                    group.recognizedFiles.push({
+                        file_path: f.file_path,
+                        file_name: f.file_name,
+                        preview_url: f.preview_url,
+                        length_mm: long,
+                        width_mm: short,
+                        quantity: f.first_quantity || 1,
+                        area: f.area || 0,
+                        boxes: f.boxes || null,
+                        box_count: f.box_count || 0,
+                    });
+                }
+            });
+            renderRecognizedFiles(groupId);
+            calcTotalPrice();
+        })
+        .catch(err => {
+            document.getElementById('uploadOverlay').style.display = 'none';
+            alert('上传出错：' + err);
+        });
+    });
+}
+
+function removePendingFile(groupId, idx) {
+    const group = specGroups.find(g => g.id === groupId);
+    if (group) {
+        group.pendingFiles.splice(idx, 1);
+        const card = document.getElementById(`specGroup-${groupId}`);
+        const pendingCount = card.querySelector('.pending-count');
+        const pendingArea = card.querySelector('.pending-files-area');
+        const pendingList = card.querySelector('.pending-files-list');
+        if (group.pendingFiles.length === 0) {
+            pendingArea.style.display = 'none';
+        } else {
+            pendingCount.textContent = group.pendingFiles.length;
+            pendingList.innerHTML = group.pendingFiles.map((file, i) => `
+                <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                    <span class="small"><i class="bi bi-file-earmark-pdf text-danger"></i> ${file.name}</span>
+                    <button type="button" class="btn btn-sm btn-link text-danger" onclick="removePendingFile(${groupId}, ${i})">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+    }
+}
+
+function renderRecognizedFiles(groupId) {
+    const group = specGroups.find(g => g.id === groupId);
+    const card = document.getElementById(`specGroup-${groupId}`);
+    const resultArea = card.querySelector('.files-result-area');
+    const uploadZone = card.querySelector('.upload-zone-group');
+
+    if (group.recognizedFiles.length === 0) {
+        resultArea.style.display = 'none';
+        uploadZone.style.display = 'block';
+        return;
+    }
+    uploadZone.style.display = 'none';
+    resultArea.style.display = 'block';
+
+    resultArea.innerHTML = group.recognizedFiles.map((f, idx) => {
+        const previewHtml = f.preview_url
+            ? `<img src="${f.preview_url}" class="img-fluid rounded" style="max-height:120px;" alt="预览">`
+            : `<div class="text-muted py-3"><i class="bi bi-file-earmark-pdf" style="font-size:36px;"></i><br>PDF</div>`;
+
+        let dimensionsHtml = '';
+        if (f.boxes && f.boxes.length > 1) {
+            dimensionsHtml = f.boxes.map((box, bidx) => `
+                <div class="row g-2 mt-1 box-row" data-box-index="${bidx}">
+                    <div class="col-1 d-flex align-items-end pb-1">
+                        <span class="badge bg-secondary">框${bidx + 1}</span>
+                    </div>
+                    <div class="col-3">
+                        <label class="form-label small mb-0">长(mm)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm file-length-box" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.length_mm ? box.length_mm.toFixed(1) : ''}">
+                    </div>
+                    <div class="col-3">
+                        <label class="form-label small mb-0">宽(mm)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm file-width-box" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.width_mm ? box.width_mm.toFixed(1) : ''}">
+                    </div>
+                    <div class="col-3">
+                        <label class="form-label small mb-0">数量</label>
+                        <input type="number" min="1" class="form-control form-control-sm file-qty-box" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.quantity || 1}">
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            dimensionsHtml = `
+                <div class="row g-2 mt-1">
+                    <div class="col-4">
+                        <label class="form-label small mb-0">长(mm)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm file-length" data-group="${groupId}" data-index="${idx}" value="${f.length_mm ? f.length_mm.toFixed(1) : ''}">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small mb-0">宽(mm)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm file-width" data-group="${groupId}" data-index="${idx}" value="${f.width_mm ? f.width_mm.toFixed(1) : ''}">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small mb-0">数量</label>
+                        <input type="number" min="1" class="form-control form-control-sm file-qty" data-group="${groupId}" data-index="${idx}" value="${f.quantity}">
+                    </div>
+                </div>`;
+        }
+
+        const boxInfo = f.box_count > 0
+            ? `<div class="small text-info mt-1"><i class="bi bi-bounding-box"></i> 检测到 ${f.box_count} 个内容框</div>`
+            : '';
+
+        return `
+        <div class="card mb-2 file-result-card" data-group="${groupId}" data-index="${idx}">
+            <div class="card-body py-2 px-3">
+                <div class="d-flex gap-3">
+                    <div class="flex-shrink-0 text-center" style="width:100px;">${previewHtml}</div>
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <span class="small fw-medium text-truncate" style="max-width:200px;" title="${f.file_name}">${f.file_name}</span>
+                            <button type="button" class="btn btn-sm btn-link text-danger py-0" onclick="removeRecognizedFile(${groupId}, ${idx})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                        ${dimensionsHtml}
+                        ${boxInfo}
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+
+    // 绑定单框输入事件
+    resultArea.querySelectorAll('.file-length, .file-width, .file-qty').forEach(input => {
+        input.addEventListener('input', () => {
+            const gid = parseInt(input.dataset.group);
+            const idx = parseInt(input.dataset.index);
+            const g = specGroups.find(x => x.id === gid);
+            const card = resultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
+            g.recognizedFiles[idx].length_mm = parseFloat(card.querySelector('.file-length').value) || 0;
+            g.recognizedFiles[idx].width_mm = parseFloat(card.querySelector('.file-width').value) || 0;
+            g.recognizedFiles[idx].quantity = parseInt(card.querySelector('.file-qty').value) || 1;
+            calcTotalPrice();
+        });
+    });
+
+    // 绑定多框输入事件
+    resultArea.querySelectorAll('.file-length-box, .file-width-box, .file-qty-box').forEach(input => {
+        input.addEventListener('input', () => {
+            const gid = parseInt(input.dataset.group);
+            const idx = parseInt(input.dataset.index);
+            const boxIdx = parseInt(input.dataset.boxIndex);
+            const g = specGroups.find(x => x.id === gid);
+            const card = resultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
+            const row = card.querySelector(`.box-row[data-box-index="${boxIdx}"]`);
+            g.recognizedFiles[idx].boxes[boxIdx].length_mm = parseFloat(row.querySelector('.file-length-box').value) || 0;
+            g.recognizedFiles[idx].boxes[boxIdx].width_mm = parseFloat(row.querySelector('.file-width-box').value) || 0;
+            g.recognizedFiles[idx].boxes[boxIdx].quantity = parseInt(row.querySelector('.file-qty-box').value) || 1;
+            if (boxIdx === 0) {
+                g.recognizedFiles[idx].length_mm = g.recognizedFiles[idx].boxes[0].length_mm;
+                g.recognizedFiles[idx].width_mm = g.recognizedFiles[idx].boxes[0].width_mm;
+                g.recognizedFiles[idx].quantity = g.recognizedFiles[idx].boxes[0].quantity;
+            }
+            calcTotalPrice();
+        });
+    });
+}
+
+function removeRecognizedFile(groupId, idx) {
+    const group = specGroups.find(g => g.id === groupId);
+    if (group) {
+        group.recognizedFiles.splice(idx, 1);
+        renderRecognizedFiles(groupId);
+        calcTotalPrice();
+    }
+}
+
+// ===== 价格计算（汇总所有规格组）=====
+function calcTotalPrice() {
+    let total = 0;
+    const isUrgent = document.getElementById('urgentCheck').checked;
+    const detailsEl = document.getElementById('groupPriceDetails');
+    let detailsHtml = '';
+
+    specGroups.forEach((g, gi) => {
+        const up = g.unit_price;
+        const productName = g.product_name;
+        const isEtching = productName && productName.startsWith('etching_');
+        let groupArea = 0;
+        let groupTotal = 0;
+
+        if (up > 0) {
+            g.recognizedFiles.forEach(f => {
+                const l = parseFloat(f.length_mm) || 0;
+                const w = parseFloat(f.width_mm) || 0;
+                const q = parseInt(f.quantity) || 1;
+                let fileArea = 0;
+                if (f.boxes && f.boxes.length > 0 && isEtching) {
+                    fileArea = f.boxes.reduce((sum, box) => {
+                        const bl = parseFloat(box.length_mm) || 0;
+                        const bw = parseFloat(box.width_mm) || 0;
+                        const bq = parseInt(box.quantity) || 1;
+                        if (bl > 0 && bw > 0) return sum + ((bl + 5) * (bw + 5) / 100.0 * bq);
+                        return sum;
+                    }, 0);
+                } else if (l > 0 && w > 0) {
+                    if (isEtching) {
+                        fileArea = ((l + 5) * (w + 5)) / 100.0 * q;
+                    } else {
+                        fileArea = ((l + 20) * (w + 20)) / 100.0 * q;
+                    }
+                }
+                groupArea += fileArea;
+            });
+            if (groupArea > 0) {
+                groupTotal = groupArea * up;
+            }
+        }
+
+        total += groupTotal;
+
+        if (groupTotal > 0) {
+            detailsHtml += `
+                <div class="d-flex justify-content-between small mb-1">
+                    <span class="text-muted">规格组 ${gi + 1}（${g.thickness ? g.thickness + 'mm' : '未选厚度'}）</span>
+                    <span>¥${groupTotal.toFixed(2)}</span>
+                </div>`;
+        }
+    });
+
+    if (isUrgent && total > 0) total *= 1.10;
+
+    detailsEl.innerHTML = detailsHtml;
+    document.getElementById('totalPrice').textContent = total.toFixed(2);
+    document.getElementById('urgentDisplay').style.display = isUrgent ? 'inline' : 'none';
+}
+
+document.getElementById('urgentCheck').addEventListener('change', calcTotalPrice);
 
 // ===== 快捷选项切换 =====
 document.querySelectorAll('.preset-option').forEach(label => {
@@ -852,52 +942,81 @@ document.querySelectorAll('.preset-option').forEach(label => {
     });
 });
 
+// ===== 添加规格组按钮 =====
+document.getElementById('addSpecGroupBtn').addEventListener('click', () => {
+    createSpecGroup();
+});
+
 // ===== 表单验证 =====
 document.getElementById('quickOrderForm').addEventListener('submit', function(e) {
-    if (!productInput.value) {
-        alert('请选择细分产品');
+    if (specGroups.length === 0) {
+        alert('请至少添加一个规格组');
         e.preventDefault();
         return;
     }
-    if (!materialInput.value) {
-        alert('请选择材质');
-        e.preventDefault();
-        return;
-    }
-    if (!thicknessInput.value) {
-        alert('请选择厚度');
-        e.preventDefault();
-        return;
-    }
-    if (recognizedFiles.length === 0) {
-        alert('请上传至少一个PDF文件');
-        e.preventDefault();
-        return;
-    }
-    // 检查每个文件是否填写了尺寸
-    for (let i = 0; i < recognizedFiles.length; i++) {
-        const f = recognizedFiles[i];
-        if (!f.length_mm || !f.width_mm) {
-            alert(`第 ${i+1} 个文件（${f.file_name}）未填写尺寸`);
+
+    const specGroupsData = [];
+
+    for (let gi = 0; gi < specGroups.length; gi++) {
+        const g = specGroups[gi];
+        if (!g.product_name) {
+            alert(`规格组 ${gi + 1}：请选择细分产品`);
             e.preventDefault();
             return;
         }
+        if (!g.material) {
+            alert(`规格组 ${gi + 1}：请选择材质`);
+            e.preventDefault();
+            return;
+        }
+        if (!g.thickness) {
+            alert(`规格组 ${gi + 1}：请选择厚度`);
+            e.preventDefault();
+            return;
+        }
+        if (g.recognizedFiles.length === 0) {
+            alert(`规格组 ${gi + 1}：请上传至少一个PDF文件`);
+            e.preventDefault();
+            return;
+        }
+        // 检查每个文件是否填写了尺寸
+        for (let i = 0; i < g.recognizedFiles.length; i++) {
+            const f = g.recognizedFiles[i];
+            if (!f.length_mm || !f.width_mm) {
+                alert(`规格组 ${gi + 1}：第 ${i + 1} 个文件（${f.file_name}）未填写尺寸`);
+                e.preventDefault();
+                return;
+            }
+        }
+
+        specGroupsData.push({
+            product_name: g.product_name,
+            material: g.material,
+            thickness: g.thickness,
+            unit_price: g.unit_price,
+            files: g.recognizedFiles.map(f => ({
+                file_path: f.file_path,
+                file_name: f.file_name || '',
+                length_mm: f.length_mm,
+                width_mm: f.width_mm,
+                quantity: f.quantity,
+                boxes: f.boxes,
+            })),
+        });
     }
-    // 将文件数据写入隐藏字段（先移除旧的）
-    const oldInput = this.querySelector('input[name="files_data"]');
+
+    // 移除旧的隐藏字段
+    const oldInput = this.querySelector('input[name="spec_groups_data"]');
     if (oldInput) oldInput.remove();
-    const filesDataInput = document.createElement('input');
-    filesDataInput.type = 'hidden';
-    filesDataInput.name = 'files_data';
-    filesDataInput.value = JSON.stringify(recognizedFiles.map(f => ({
-        file_path: f.file_path,
-        file_name: f.file_name || '',
-        length_mm: f.length_mm,
-        width_mm: f.width_mm,
-        quantity: f.quantity,
-        boxes: f.boxes,
-    })));
-    this.appendChild(filesDataInput);
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'spec_groups_data';
+    input.value = JSON.stringify(specGroupsData);
+    this.appendChild(input);
 });
+
+// 初始化：创建一个默认规格组
+createSpecGroup();
 </script>
 {% endblock %}

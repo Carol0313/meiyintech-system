@@ -43,9 +43,9 @@ class AliyunOSSStorage(Storage):
         self.use_internal = kwargs.get('use_internal') or getattr(settings, 'OSS_INTERNAL', False)
         self.custom_domain = kwargs.get('custom_domain') or getattr(settings, 'OSS_CUSTOM_DOMAIN', '')
 
-        # 如果启用内网，将 endpoint 中的 .aliyuncs.com 替换为 .internal.aliyuncs.com
-        if self.use_internal and '.aliyuncs.com' in self.endpoint and '.internal.aliyuncs.com' not in self.endpoint:
-            self.endpoint = self.endpoint.replace('.aliyuncs.com', '.internal.aliyuncs.com')
+        # 如果启用内网，将 endpoint 中的 .aliyuncs.com 替换为 -internal.aliyuncs.com
+        if self.use_internal and '.aliyuncs.com' in self.endpoint and '-internal' not in self.endpoint:
+            self.endpoint = self.endpoint.replace('.aliyuncs.com', '-internal.aliyuncs.com')
 
         self._bucket = None
         super().__init__()
@@ -131,7 +131,8 @@ class AliyunOSSStorage(Storage):
 
 class AliyunOSSMediaStorage(AliyunOSSStorage):
     """
-    专用于 Media 文件的 OSS Storage（带 public-read ACL）
+    专用于 Media 文件的 OSS Storage
+    注意：如需公开访问，请在阿里云 OSS 控制台将 Bucket 设为"公共读"
     """
     def _save(self, name, content):
         object_name = self._get_object_name(name)
@@ -144,7 +145,6 @@ class AliyunOSSMediaStorage(AliyunOSSStorage):
 
         headers = {
             'Content-Type': content_type,
-            'x-oss-object-acl': 'public-read',  # 媒体文件公开可读
         }
         self.bucket.put_object(object_name, content, headers=headers)
         return name
