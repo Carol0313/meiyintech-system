@@ -10,6 +10,12 @@ PDF框识别工具
 4. 修复 CMYK/灰度白色判断的浮点数精度问题
 5. 增加红色框优先权重，优先识别红色标记框
 6. 增加日志输出，便于排查识别问题
+
+2025-06-04 修复记录：
+1. 【关键修复】排除纯填充（fill-only）的小图形，避免转曲文字/装饰被误认为框
+   - 真正的制版框是空心描边（stroke有颜色，fill=None）
+   - 文字转曲后是实心填充（stroke=None，fill有颜色）
+2. 【增强】数量语义理解：支持"烫板 3块"等带制版上下文的数量识别（默认每个框）
 """
 
 import fitz
@@ -29,7 +35,8 @@ def find_colored_rectangles(file_path):
     3. 排除极端细长条（宽高比>20）和路径过于复杂的图形（>25个items）
     4. 排除嵌套在内的大面积内边框（面积>外层60%的内嵌框）
     5. 排除与文字块高度重叠的区域（阈值从75%放宽到90%，避免误删含文字的有效框）
-    6. 最多返回5个框
+    6. 【新增】排除纯填充（fill-only）的小图形（<28pt/10mm），避免文字/装饰被误认为框
+    7. 最多返回5个框
     """
     doc = fitz.open(file_path)
     colored_rects = []
@@ -91,7 +98,18 @@ def find_colored_rectangles(file_path):
                     abs(rect.y1 - page_rect.y1) < 5):
                     continue
                 
-                # 过滤6：排除与文字块高度重叠的区域（客户备注/文字注释）
+                # 【新增】过滤6：排除纯填充的小图形（文字转曲/装饰元素）
+                # 真正的制版框是空心描边（stroke有颜色，fill=None）
+                # 文字转曲后是实心填充（stroke=None，fill有颜色）
+                has_stroke = _is_colored_box(color)
+                has_fill = _is_colored_box(fill)
+                if not has_stroke and has_fill:
+                    # 纯填充图形，如果尺寸较小（<28pt ≈ 10mm），更可能是文字/装饰
+                    if rect.width < 28 or rect.height < 28:
+                        logger.info(f"[红框识别] 过滤纯填充小图形: {rect.width:.1f}x{rect.height:.1f}pt")
+                        continue
+                
+                # 过滤7：排除与文字块高度重叠的区域（客户备注/文字注释）
                 # 【修复】阈值从 75% 放宽到 90%，避免误删含文字的有效制版框
                 # 同时增加面积判断：大于 3000pt²（约10cm×10cm）的框即使含文字也保留
                 is_text_area = False
@@ -177,12 +195,16 @@ def find_colored_rectangles(file_path):
             filtered.append(r)
     colored_rects = filtered
 
-    # 【改进】如果检测到红色框，优先只保留红色框（客户明确用红色标记内容区域）
-    # 过滤掉蓝色/黑色的备注框和文字注释框
+    # 【关键】系统只识别红色框，过滤掉所有非红色框
+    # 包括深灰色内容区域、蓝色/黑色备注框、文字注释框等
     red_rects = [r for r in colored_rects if r.get('is_red', False)]
     if red_rects:
         colored_rects = red_rects
         logger.info(f"[红框识别] 检测到红色标记框，过滤其他颜色，保留 {len(red_rects)} 个红色框")
+    else:
+        # 没有红色框时，返回空（不识别其他颜色的框）
+        logger.info(f"[红框识别] 未检测到红色标记框，其他颜色框不予识别")
+        colored_rects = []
     
     # 最多返回5个框
     result = colored_rects[:5]
@@ -328,6 +350,15 @@ def extract_global_quantity_semantic(text):
     match = re.search(r'共\s*(\d+)\s*[块个只片张]', text)
     if match:
         return int(match.group(1)), 'total'
+    
+    # 【新增】"3块"（无"各"字前缀，但带制版上下文）
+    # 如"2.0烫板 3块 送小彭" → 默认理解为每个框都做3块
+    match = re.search(r'(\d+)\s*[块个只片张]', text)
+    if match:
+        plate_keywords = ['烫板', '烫金版', '腐蚀版', '雕刻版', '版', '板']
+        has_plate_context = any(kw in text for kw in plate_keywords)
+        if has_plate_context:
+            return int(match.group(1)), 'each'
     
     return None, None
 
