@@ -856,25 +856,16 @@ def batch_upload_files(request):
             # 获取页面尺寸
             pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
 
-            # PDF转纯黑处理（制版需要）- 放在红框识别之后
-            try:
-                from utils.pdf_processor import convert_pdf_to_black
-                convert_pdf_to_black(local_path)
-                # 如果原始文件在 OSS，把处理后的文件上传回去
-                if local_path != os.path.join(settings.MEDIA_ROOT, path):
-                    with open(local_path, 'rb') as f:
-                        default_storage.save(path, f)
-            except Exception:
-                pass
-
-            # 生成预览图
+            # 【临时关闭】PDF转纯黑和预览图生成（耗时太长，先测试红框识别）
             preview_url = None
-            try:
-                preview_filename = f"previews/{uuid.uuid4().hex}.png"
-                from utils.pdf_processor import generate_pdf_preview
-                preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
-            except Exception:
-                pass
+            # try:
+            #     from utils.pdf_processor import convert_pdf_to_black
+            #     convert_pdf_to_black(local_path)
+            #     if local_path != os.path.join(settings.MEDIA_ROOT, path):
+            #         with open(local_path, 'rb') as f:
+            #             default_storage.save(path, f)
+            # except Exception:
+            #     pass
 
             # 清理临时文件
             if local_path != os.path.join(settings.MEDIA_ROOT, path):
