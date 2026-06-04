@@ -102,7 +102,7 @@ def _embed_customer_file_vector(page, rect_rect, file_path, rotation=0, clip_rec
         return False
 
 
-def generate_plate_production_pdf(batch, output_filename=None):
+def generate_plate_production_pdf(batch, output_filename=None, use_plate_file=False):
     """
     为 PlateBatch 生成生产用PDF文件
     
@@ -114,6 +114,7 @@ def generate_plate_production_pdf(batch, output_filename=None):
     参数:
         batch: PlateBatch 实例
         output_filename: 输出文件名（不含路径）
+        use_plate_file: 是否优先使用制版文件（plate_file）而非客户源文件（file）
     
     返回:
         (rel_path, url) 或 (None, None)
@@ -179,8 +180,10 @@ def generate_plate_production_pdf(batch, output_filename=None):
         rect_rect = fitz.Rect(x1, y1, x2, y2)
 
         embedded = False
-        if item and item.file:
-            file_path = os.path.join(settings.MEDIA_ROOT, item.file.name)
+        # 选择文件源：优先使用制版文件
+        file_field = item.plate_file if use_plate_file and item and item.plate_file else (item.file if item else None)
+        if file_field:
+            file_path = os.path.join(settings.MEDIA_ROOT, file_field.name)
             if os.path.exists(file_path):
                 # 获取红框裁剪区域
                 clip_rect = _get_red_box_clip_rect(item, box_index)

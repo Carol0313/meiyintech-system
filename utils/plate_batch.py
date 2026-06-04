@@ -353,16 +353,24 @@ def pack_rects_into_plates(rects, plate_specs=None, algorithm='maxrects'):
     return [best_fallback] if best_fallback else []
 
 
-def _load_customer_preview(rect, scale, temp_dir):
+def _load_customer_preview(rect, scale, temp_dir, use_plate_file=False):
     """
     为单个矩形加载客户文件并生成带版类效果的预览图
     返回处理后的 PIL Image 或 None
+    
+    参数:
+        use_plate_file: 是否优先使用制版文件（plate_file）而非客户源文件（file）
     """
     item = rect.get('original_item')
-    if not item or not item.file:
+    if not item:
+        return None
+    
+    # 选择文件源
+    file_field = item.plate_file if use_plate_file and item.plate_file else item.file
+    if not file_field:
         return None
 
-    file_path = os.path.join(settings.MEDIA_ROOT, item.file.name)
+    file_path = os.path.join(settings.MEDIA_ROOT, file_field.name)
     if not os.path.exists(file_path):
         return None
 
@@ -401,7 +409,7 @@ def _load_customer_preview(rect, scale, temp_dir):
         return None
 
 
-def generate_plate_image(plate_result, output_filename=None, dpi=150):
+def generate_plate_image(plate_result, output_filename=None, dpi=150, use_plate_file=False):
     """
     生成拼版效果图（Pillow）
     改进版：每个矩形位置直接嵌入客户文件的实际内容，并根据版类应用视觉效果
@@ -410,6 +418,7 @@ def generate_plate_image(plate_result, output_filename=None, dpi=150):
         plate_result: pack_rects_into_plates 返回的单个 plate dict
         output_filename: 输出文件名（不含路径），如 'plate_xxx.png'
         dpi: 输出分辨率
+        use_plate_file: 是否优先使用制版文件
 
     返回:
         (image_path_relative, image_url) 或 (None, None)
@@ -488,7 +497,7 @@ def generate_plate_image(plate_result, output_filename=None, dpi=150):
         rh = rect['orig_height'] * scale
 
         # 尝试嵌入客户文件的实际内容（带版类效果）
-        preview_img = _load_customer_preview(rect, scale, None)
+        preview_img = _load_customer_preview(rect, scale, None, use_plate_file=use_plate_file)
         if preview_img:
             # 贴入处理后的预览图
             paste_x = int(rx)

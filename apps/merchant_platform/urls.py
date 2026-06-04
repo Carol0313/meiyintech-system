@@ -31,6 +31,9 @@ urlpatterns = [
     path('pending-plate-orders/', views.pending_plate_orders, name='pending_plate_orders'),
     path('upload-plate-file/', views.upload_plate_file, name='upload_plate_file'),
     path('orders/<uuid:order_id>/items/<uuid:item_id>/download-plate/', views.download_plate_file, name='download_plate_file'),
+    # 拼版选择（阶段2新增）
+    path('pending-layout-orders/', views.pending_layout_orders, name='pending_layout_orders'),
+    path('create-plate-batch/', views.create_plate_batch, name='create_plate_batch'),
     path('plate-batches/<uuid:batch_id>/download/<str:field_name>/', views.download_plate_batch_file, name='download_plate_batch_file'),
     # 拼版工具（新版：跨订单拼版批次）
     path('plate-batches/', views.plate_batch_list, name='plate_batch_list'),

@@ -2758,3 +2758,197 @@ def download_plate_file(request, order_id, item_id):
     except Exception:
         messages.error(request, '文件不存在或已被删除')
         return redirect('pending_plate_orders')
+
+
+# ==================== 阶段2：订单选择拼版 ====================
+
+@login_required
+@merchant_required
+def pending_layout_orders(request):
+    """
+    待拼版订单列表
+    显示已上传制版文件、且未拼版确认的订单项
+    按 (product_name, material, thickness) 分组
+    """
+    try:
+        merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
+    except AttributeError:
+        messages.error(request, '无权访问')
+        return redirect('merchant_dashboard')
+    
+    # 获取所有已上传制版文件、且未拼版确认的订单项
+    # 条件：
+    # 1. 订单状态在 design_confirmed / paid（生产前）
+    # 2. 已上传 plate_file
+    # 3. 未关联到已确认的拼版批次
+    items = OrderItem.objects.filter(
+        order__merchant=merchant,
+        order__status__in=['design_confirmed', 'paid'],
+        order__is_submitted=True,
+        plate_file__isnull=False,
+    ).exclude(
+        plate_batch__status='confirmed'
+    ).select_related('order', 'order__customer__customer_profile').order_by('order__created_at')
+    
+    # 按 (product_name, material, thickness) 分组
+    groups = {}
+    for item in items:
+        key = (item.product_name, item.material, item.thickness)
+        group_label = f"{item.get_product_name_display()} | {item.get_material_display()} | {item.thickness}mm"
+        if key not in groups:
+            groups[key] = {
+                'label': group_label,
+                'key': '_'.join(key),
+                'items': [],
+            }
+        groups[key]['items'].append(item)
+    
+    return render(request, 'merchant/pending_layout_orders.html', {
+        'groups': groups,
+        'total_items': items.count(),
+    })
+
+
+@login_required
+@merchant_required
+def create_plate_batch(request):
+    """
+    从勾选的订单项创建拼版批次
+    POST参数：
+        - item_ids[]: 勾选的OrderItem ID列表
+        - algorithm: 拼版算法（默认maxrects）
+    """
+    if request.method != 'POST':
+        return redirect('pending_layout_orders')
+    
+    try:
+        merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
+    except AttributeError:
+        messages.error(request, '无权访问')
+        return redirect('merchant_dashboard')
+    
+    item_ids = request.POST.getlist('item_ids')
+    algorithm = request.POST.get('algorithm', 'maxrects')
+    
+    if not item_ids:
+        messages.error(request, '请至少选择一个订单项进行拼版')
+        return redirect('pending_layout_orders')
+    
+    # 获取并验证订单项
+    items = OrderItem.objects.filter(
+        id__in=item_ids,
+        order__merchant=merchant,
+        plate_file__isnull=False,
+    ).select_related('order')
+    
+    if not items.exists():
+        messages.error(request, '所选订单项无效或没有制版文件')
+        return redirect('pending_layout_orders')
+    
+    # 检查是否属于同一分组（product_name, material, thickness）
+    first_item = items.first()
+    expected_key = (first_item.product_name, first_item.material, first_item.thickness)
+    
+    for item in items:
+        actual_key = (item.product_name, item.material, item.thickness)
+        if actual_key != expected_key:
+            messages.error(request, '请选择相同产品类型、材质和厚度的订单项进行拼版')
+            return redirect('pending_layout_orders')
+    
+    try:
+        # 调用拼版算法
+        from utils.plate_batch import build_rects_from_items, pack_rects_into_plates, get_spacing_mm, generate_plate_image, generate_plate_production_pdf
+        
+        # 计算间距（同组内所有项间距相同）
+        spacing_mm = get_spacing_mm(
+            first_item.thickness, first_item.thickness,
+            first_item.material, first_item.material
+        )
+        
+        # 构建矩形列表
+        rects = build_rects_from_items(items, spacing_mm=spacing_mm)
+        
+        if not rects:
+            messages.error(request, '无法构建拼版矩形，请检查订单项尺寸')
+            return redirect('pending_layout_orders')
+        
+        # 执行拼版
+        plates = pack_rects_into_plates(rects, algorithm=algorithm)
+        
+        if not plates:
+            messages.error(request, '拼版失败，无法放置所有矩形')
+            return redirect('pending_layout_orders')
+        
+        # 创建 PlateBatch
+        from apps.orders.models import PlateBatch, PlateBatchItem
+        
+        batch = PlateBatch.objects.create(
+            merchant=merchant,
+            status='auto_generated',
+            algorithm=algorithm,
+            plate_spec=plates[0]['spec']['name'] if plates else '',
+            usage_rate=plates[0]['usage_rate'] if plates else 0,
+        )
+        
+        # 创建 PlateBatchItem 关联
+        for item in items:
+            PlateBatchItem.objects.create(
+                batch=batch,
+                order=item.order,
+                order_item=item,
+            )
+            # 更新订单项关联的批次
+            item.plate_batch = batch
+            item.save(update_fields=['plate_batch'])
+        
+        # 构建 layout_data
+        layout_data = {
+            'plates': []
+        }
+        for plate in plates:
+            plate_data = {
+                'spec': plate['spec'],
+                'usage_rate': plate['usage_rate'],
+                'items': []
+            }
+            for placed in plate['placed']:
+                plate_data['items'].append({
+                    'item_id': placed.get('original_item', {}).id if placed.get('original_item') else '',
+                    'x': placed['x'],
+                    'y': placed['y'],
+                    'width': placed['orig_width'],
+                    'height': placed['orig_height'],
+                    'rotation': 0,
+                    'order_sn': placed.get('order_sn', ''),
+                })
+            layout_data['plates'].append(plate_data)
+        
+        batch.layout_data = json.dumps(layout_data, ensure_ascii=False)
+        batch.save(update_fields=['layout_data'])
+        
+        # 生成拼版效果图和生产PDF
+        try:
+            # 使用制版文件生成效果图
+            image_path = generate_plate_image(batch, use_plate_file=True)
+            if image_path:
+                batch.layout_image = image_path
+                batch.save(update_fields=['layout_image'])
+        except Exception as e:
+            print(f"[拼版效果图生成失败] {e}")
+        
+        try:
+            pdf_path = generate_plate_production_pdf(batch, use_plate_file=True)
+            if pdf_path:
+                batch.production_pdf = pdf_path
+                batch.save(update_fields=['production_pdf'])
+        except Exception as e:
+            print(f"[生产PDF生成失败] {e}")
+        
+        messages.success(request, f'拼版批次创建成功！共 {len(plates)} 张版，利用率 {plates[0]["usage_rate"]:.1%}')
+        return redirect('plate_batch_detail', batch_id=batch.id)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        messages.error(request, f'拼版失败：{str(e)}')
+        return redirect('pending_layout_orders')
