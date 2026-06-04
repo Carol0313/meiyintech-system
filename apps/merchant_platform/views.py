@@ -2627,3 +2627,134 @@ def download_plate_batch_file(request, batch_id, field_name):
     except Exception:
         messages.error(request, '文件不存在或已被删除')
         return redirect('merchant_dashboard')
+
+
+# ==================== 制版文件上传功能（阶段1）====================
+
+@login_required
+@merchant_required
+def pending_plate_orders(request):
+    """
+    待上传制版文件的订单列表
+    显示状态为 pending_confirm / design_confirmed / paid 的订单项
+    且没有上传过制版文件的
+    """
+    try:
+        merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
+    except AttributeError:
+        messages.error(request, '无权访问')
+        return redirect('merchant_dashboard')
+
+    # 获取筛选条件
+    status_filter = request.GET.get('status', '')
+    
+    # 基础查询：已提交的订单，且状态在生产前
+    orders = merchant.orders.filter(
+        is_submitted=True,
+        status__in=['pending_confirm', 'design_confirmed', 'paid']
+    ).select_related('customer__customer_profile').prefetch_related('items').order_by('-created_at')
+    
+    if status_filter:
+        orders = orders.filter(status=status_filter)
+    
+    # 收集需要显示的数据
+    order_items_data = []
+    for order in orders:
+        for item in order.items.all():
+            # 只显示有客户文件但还没有制版文件的订单项
+            if item.file and not item.plate_file:
+                order_items_data.append({
+                    'order': order,
+                    'item': item,
+                })
+    
+    return render(request, 'merchant/pending_plate_orders.html', {
+        'order_items_data': order_items_data,
+        'status_choices': Order.STATUS_CHOICES,
+        'status_filter': status_filter,
+    })
+
+
+@login_required
+@merchant_required
+def upload_plate_file(request):
+    """
+    AJAX接口：上传制版文件
+    接收 order_item_id + 文件，保存到 OrderItem.plate_file
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': '请使用POST请求'})
+    
+    try:
+        merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
+    except AttributeError:
+        return JsonResponse({'success': False, 'error': '无权访问'})
+    
+    item_id = request.POST.get('item_id')
+    if not item_id:
+        return JsonResponse({'success': False, 'error': '缺少订单项ID'})
+    
+    # 获取订单项并验证权限
+    item = get_object_or_404(OrderItem, id=item_id, order__merchant=merchant)
+    
+    # 检查是否有文件上传
+    if 'plate_file' not in request.FILES:
+        return JsonResponse({'success': False, 'error': '请选择要上传的文件'})
+    
+    uploaded_file = request.FILES['plate_file']
+    ext = os.path.splitext(uploaded_file.name)[1].lower()
+    
+    # 验证文件格式
+    if ext not in ('.pdf', '.ai'):
+        return JsonResponse({'success': False, 'error': '仅支持PDF或AI格式文件'})
+    
+    try:
+        # 保存文件
+        filename = f"plate_files/{item.order.customer.id}/{uuid.uuid4().hex}{ext}"
+        path = default_storage.save(filename, uploaded_file)
+        
+        # 更新订单项
+        item.plate_file = path
+        item.plate_file_uploaded_at = timezone.now()
+        item.plate_file_uploaded_by = request.user
+        item.save(update_fields=['plate_file', 'plate_file_uploaded_at', 'plate_file_uploaded_by'])
+        
+        return JsonResponse({
+            'success': True,
+            'message': '制版文件上传成功',
+            'file_name': uploaded_file.name,
+            'file_url': default_storage.url(path) if hasattr(default_storage, 'url') else path,
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': f'上传失败：{str(e)}'})
+
+
+@login_required
+@merchant_required
+def download_plate_file(request, order_id, item_id):
+    """
+    下载制版文件
+    """
+    try:
+        merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
+    except AttributeError:
+        messages.error(request, '无权访问')
+        return redirect('merchant_dashboard')
+    
+    order = get_object_or_404(Order, id=order_id, merchant=merchant)
+    item = get_object_or_404(OrderItem, id=item_id, order=order)
+    
+    if not item.plate_file:
+        messages.error(request, '该订单项没有上传制版文件')
+        return redirect('pending_plate_orders')
+    
+    try:
+        with item.plate_file.open('rb') as f:
+            response = HttpResponse(f.read(), content_type='application/octet-stream')
+            from urllib.parse import quote
+            filename = os.path.basename(item.plate_file.name)
+            response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
+            return response
+    except Exception:
+        messages.error(request, '文件不存在或已被删除')
+        return redirect('pending_plate_orders')

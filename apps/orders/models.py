@@ -269,6 +269,19 @@ class OrderItem(models.Model):
         'PlateBatch', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='order_items', verbose_name='所属拼版批次'
     )
+    # 制版文件（工作人员上传的处理后文件）
+    plate_file = models.FileField(
+        '制版文件', upload_to='plate_files/%Y%m/',
+        blank=True, null=True,
+        help_text='工作人员上传的处理后制版文件（PDF/AI）'
+    )
+    plate_file_uploaded_at = models.DateTimeField('制版文件上传时间', blank=True, null=True)
+    plate_file_uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='plate_uploads', verbose_name='制版文件上传人',
+        limit_choices_to={'user_type__in': ['merchant_admin', 'merchant_staff']}
+    )
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
 
     class Meta:

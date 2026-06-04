@@ -27,6 +27,10 @@ urlpatterns = [
     path('orders/<uuid:order_id>/upload-photo/', views.upload_production_photo, name='upload_production_photo'),
     path('orders/<uuid:order_id>/remake/', views.remake_order_create, name='remake_order_create'),
     path('orders/<uuid:order_id>/items/<uuid:item_id>/download/', views.download_order_file, name='download_order_file'),
+    # 制版文件上传（阶段1新增）
+    path('pending-plate-orders/', views.pending_plate_orders, name='pending_plate_orders'),
+    path('upload-plate-file/', views.upload_plate_file, name='upload_plate_file'),
+    path('orders/<uuid:order_id>/items/<uuid:item_id>/download-plate/', views.download_plate_file, name='download_plate_file'),
     path('plate-batches/<uuid:batch_id>/download/<str:field_name>/', views.download_plate_batch_file, name='download_plate_batch_file'),
     # 拼版工具（新版：跨订单拼版批次）
     path('plate-batches/', views.plate_batch_list, name='plate_batch_list'),

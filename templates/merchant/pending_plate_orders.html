@@ -1,0 +1,290 @@
+{% extends 'base.html' %}
+{% block title %}待上传制版文件{% endblock %}
+{% block page_title %}待上传制版文件{% endblock %}
+{% block page_subtitle %}下载客户文件，处理后上传制版文件{% endblock %}
+
+{% block content %}
+<style>
+    .status-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .status-tab {
+        padding: 6px 16px;
+        border-radius: 100px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: #64748b;
+        background: #f1f5f9;
+        border: 1px solid transparent;
+        text-decoration: none;
+        transition: all 0.15s;
+    }
+    .status-tab:hover { background: #e2e8f0; color: #334155; }
+    .status-tab.active { background: var(--primary); color: #fff; }
+
+    .product-info-cell { display: flex; flex-direction: column; gap: 4px; }
+    .pi-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .pi-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        background: #f1f5f9;
+        color: #475569;
+    }
+
+    .upload-zone {
+        border: 2px dashed #d1d5db;
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: #fafafa;
+    }
+    .upload-zone:hover {
+        border-color: var(--primary);
+        background: #f0f7ff;
+    }
+    .upload-zone.dragover {
+        border-color: var(--primary);
+        background: #e3f2fd;
+    }
+    .upload-zone.has-file {
+        border-color: #43A047;
+        background: #e8f5e9;
+    }
+
+    .file-preview {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: #e8f5e9;
+        border-radius: 6px;
+        margin-top: 8px;
+    }
+
+    .progress-bar-custom {
+        height: 4px;
+        background: #e5e7eb;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 8px;
+    }
+    .progress-bar-custom .bar {
+        height: 100%;
+        background: var(--primary);
+        transition: width 0.3s;
+        width: 0%;
+    }
+</style>
+
+<!-- 状态筛选 -->
+<div class="status-tabs">
+    <a class="status-tab {% if not status_filter %}active{% endif %}" href="{% url 'pending_plate_orders' %}">全部</a>
+    {% for code, label in status_choices %}
+        {% if code in 'pending_confirm,design_confirmed,paid' %}
+        <a class="status-tab {% if status_filter == code %}active{% endif %}" href="?status={{ code }}">{{ label }}</a>
+        {% endif %}
+    {% endfor %}
+</div>
+
+<!-- 统计信息 -->
+<div class="card mb-3">
+    <div class="card-body d-flex align-items-center gap-3">
+        <div class="flex-grow-1">
+            <div class="text-muted small">待上传制版的订单项</div>
+            <div class="fs-4 fw-bold">{{ order_items_data|length }}</div>
+        </div>
+        <div class="text-end">
+            <div class="text-muted small">提示</div>
+            <div class="small">下载客户源文件 → 设计处理 → 上传制版文件</div>
+        </div>
+    </div>
+</div>
+
+<!-- 订单列表 -->
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th class="ps-4">订单号</th>
+                    <th>客户</th>
+                    <th>产品信息</th>
+                    <th>状态</th>
+                    <th>客户文件</th>
+                    <th>制版文件</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for data in order_items_data %}
+                <tr data-item-id="{{ data.item.id }}" data-order-id="{{ data.order.id }}">
+                    <td class="ps-4">
+                        <a href="{% url 'merchant_order_detail' data.order.id %}" class="fw-semibold" style="color:var(--primary);">{{ data.order.sn }}</a>
+                        <div class="small text-muted">{{ data.order.created_at|date:"m-d H:i" }}</div>
+                    </td>
+                    <td style="color:var(--text-muted);">
+                        {% if data.order.customer.customer_profile.company_name %}
+                            {{ data.order.customer.customer_profile.company_name }}
+                        {% elif data.order.customer.customer_profile.real_name %}
+                            {{ data.order.customer.customer_profile.real_name }}
+                        {% else %}
+                            {{ data.order.customer.phone }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="product-info-cell">
+                            <div class="pi-row">
+                                <span class="pi-badge">{{ data.item.get_product_name_display|truncatechars:12 }}</span>
+                                <span class="pi-badge">{{ data.item.get_material_display }}</span>
+                                <span class="pi-badge">{{ data.item.thickness }}mm</span>
+                            </div>
+                            <div class="pi-row">
+                                <span class="pi-badge">{{ data.item.length_mm }}×{{ data.item.width_mm }}mm</span>
+                                <span class="pi-badge">×{{ data.item.quantity }}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td><span class="badge badge-status status-{{ data.order.status }}">{{ data.order.get_status_display }}</span></td>
+                    <td>
+                        {% if data.item.file %}
+                        <a href="{% url 'download_order_file' data.order.id data.item.id %}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-download"></i> 下载源文件
+                        </a>
+                        <div class="small text-muted mt-1">{{ data.item.original_file_name|truncatechars:20 }}</div>
+                        {% else %}
+                        <span class="text-muted">无文件</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="upload-zone" id="uploadZone_{{ data.item.id }}"
+                             onclick="document.getElementById('fileInput_{{ data.item.id }}').click()"
+                             ondrop="handleDrop(event, '{{ data.item.id }}')"
+                             ondragover="handleDragOver(event, '{{ data.item.id }}')"
+                             ondragleave="handleDragLeave(event, '{{ data.item.id }}')">
+                            <i class="bi bi-cloud-upload fs-3" style="color:#9ca3af;"></i>
+                            <div class="small text-muted mt-1">点击或拖拽上传制版文件</div>
+                            <div class="small text-muted">支持 PDF / AI</div>
+                            <input type="file" id="fileInput_{{ data.item.id }}" style="display:none;"
+                                   accept=".pdf,.ai" onchange="handleFileSelect(event, '{{ data.item.id }}')">
+                        </div>
+                        <div class="progress-bar-custom" id="progress_{{ data.item.id }}" style="display:none;">
+                            <div class="bar" id="progressBar_{{ data.item.id }}"></div>
+                        </div>
+                        <div id="filePreview_{{ data.item.id }}"></div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center text-muted py-5">
+                    <i class="bi bi-check-circle fs-1 d-block mb-2" style="color:var(--green);"></i>
+                    暂无待上传制版文件的订单
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// 拖拽上传
+function handleDragOver(event, itemId) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('uploadZone_' + itemId).classList.add('dragover');
+}
+
+function handleDragLeave(event, itemId) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('uploadZone_' + itemId).classList.remove('dragover');
+}
+
+function handleDrop(event, itemId) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('uploadZone_' + itemId).classList.remove('dragover');
+    
+    const files = event.dataTransfer.files;
+    if (files.length > 0) {
+        uploadFile(files[0], itemId);
+    }
+}
+
+function handleFileSelect(event, itemId) {
+    const files = event.target.files;
+    if (files.length > 0) {
+        uploadFile(files[0], itemId);
+    }
+}
+
+function uploadFile(file, itemId) {
+    // 验证文件格式
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext !== 'pdf' && ext !== 'ai') {
+        alert('仅支持 PDF 或 AI 格式文件');
+        return;
+    }
+    
+    // 显示进度条
+    document.getElementById('progress_' + itemId).style.display = 'block';
+    const progressBar = document.getElementById('progressBar_' + itemId);
+    progressBar.style.width = '30%';
+    
+    // 创建 FormData
+    const formData = new FormData();
+    formData.append('plate_file', file);
+    formData.append('item_id', itemId);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    // 发送请求
+    fetch('{% url "upload_plate_file" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressBar.style.width = '100%';
+        
+        if (data.success) {
+            // 上传成功，更新UI
+            const zone = document.getElementById('uploadZone_' + itemId);
+            zone.classList.add('has-file');
+            zone.innerHTML = `
+                <i class="bi bi-check-circle fs-3" style="color:#43A047;"></i>
+                <div class="small mt-1" style="color:#43A047;font-weight:500;">上传成功</div>
+                <div class="small text-muted">${data.file_name}</div>
+            `;
+            zone.onclick = null;
+            zone.ondrop = null;
+            zone.ondragover = null;
+            zone.ondragleave = null;
+            
+            // 显示文件预览
+            document.getElementById('filePreview_' + itemId).innerHTML = `
+                <div class="file-preview">
+                    <i class="bi bi-file-earmark-check" style="color:#43A047;"></i>
+                    <span class="small">${data.file_name}</span>
+                </div>
+            `;
+            
+            // 3秒后隐藏进度条
+            setTimeout(() => {
+                document.getElementById('progress_' + itemId).style.display = 'none';
+            }, 1000);
+        } else {
+            alert('上传失败：' + data.error);
+            document.getElementById('progress_' + itemId).style.display = 'none';
+        }
+    })
+    .catch(error => {
+        alert('上传失败：' + error);
+        document.getElementById('progress_' + itemId).style.display = 'none';
+    });
+}
+</script>
+{% endblock %}

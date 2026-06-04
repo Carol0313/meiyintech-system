@@ -16,6 +16,7 @@
     <a class="nav-link {% if request.resolver_match.url_name == 'factory_list' %}active{% endif %}" href="{% url 'factory_list' %}"><i class="bi bi-building"></i> 工厂管理</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'spec_list' %}active{% endif %}" href="{% url 'spec_list' %}"><i class="bi bi-box-seam"></i> 商品规格</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'merchant_orders' %}active{% endif %}" href="{% url 'merchant_orders' %}"><i class="bi bi-journal-text"></i> 订单管理</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'pending_plate_orders' %}active{% endif %}" href="{% url 'pending_plate_orders' %}"><i class="bi bi-file-earmark-arrow-up"></i> 待上传制版</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'plate_batch_list' %}active{% endif %}" href="{% url 'plate_batch_list' %}"><i class="bi bi-grid-3x3"></i> 拼版工具</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'factory_production_board' %}active{% endif %}" href="{% url 'factory_production_board' %}"><i class="bi bi-gear-wide-connected"></i> 生产看板</a>
     <div class="nav-section">系统设置</div>
