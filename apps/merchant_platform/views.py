@@ -2274,12 +2274,17 @@ def plate_batch_detail(request, batch_id):
     scaled_plate_height = 0
     scale = 1.0
 
-    # 预加载文件信息用于生成预览图
+    # 预加载文件信息用于生成预览图（优先使用制版文件）
     batch_items_qs = batch.items.select_related('order_item').all()
     item_file_map = {}
     for bi in batch_items_qs:
-        if bi.order_item_id and bi.order_item.file:
-            item_file_map[str(bi.order_item_id)] = bi.order_item.file.name
+        if bi.order_item_id:
+            oi = bi.order_item
+            # 优先使用 plate_file，其次使用客户源文件 file
+            if hasattr(oi, 'plate_file') and oi.plate_file:
+                item_file_map[str(bi.order_item_id)] = oi.plate_file.name
+            elif oi.file:
+                item_file_map[str(bi.order_item_id)] = oi.file.name
 
     display_data = layout_data_parsed or suggestion
     if display_data:
