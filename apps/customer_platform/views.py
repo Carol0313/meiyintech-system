@@ -774,8 +774,11 @@ def quick_order_upload(request):
             os.makedirs(os.path.dirname(preview_path), exist_ok=True)
             from utils.pdf_processor import generate_pdf_preview
             preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
-        except Exception:
-            pass
+            print(f"[预览图生成] 结果: {preview_url}, 文件: {file.name}")
+        except Exception as e:
+            import traceback
+            print(f"[预览图生成] 失败: {e}")
+            traceback.print_exc()
 
         # 清理临时文件
         if local_path != os.path.join(settings.MEDIA_ROOT, path):
@@ -853,8 +856,11 @@ def batch_upload_files(request):
                 preview_filename = f"previews/{uuid.uuid4().hex}.png"
                 from utils.pdf_processor import generate_pdf_preview
                 preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
-            except Exception:
-                pass
+                print(f"[预览图生成-批量] 结果: {preview_url}, 文件: {file.name}")
+            except Exception as e:
+                import traceback
+                print(f"[预览图生成-批量] 失败: {e}")
+                traceback.print_exc()
 
             # 清理临时文件
             if local_path != os.path.join(settings.MEDIA_ROOT, path):
