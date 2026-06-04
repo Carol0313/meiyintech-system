@@ -2577,18 +2577,17 @@ def download_order_file(request, order_id, item_id):
         messages.error(request, '该订单没有上传文件')
         return redirect('merchant_order_detail', order_id=order.id)
 
-    file_path = item.file.path
-    if not os.path.exists(file_path):
+    try:
+        with item.file.open('rb') as f:
+            response = HttpResponse(f.read(), content_type='application/octet-stream')
+            # 支持中文文件名：优先使用原始文件名，没有则使用存储文件名
+            from urllib.parse import quote
+            filename = item.original_file_name or os.path.basename(item.file.name)
+            response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
+            return response
+    except Exception:
         messages.error(request, '文件不存在或已被删除')
         return redirect('merchant_order_detail', order_id=order.id)
-
-    with open(file_path, 'rb') as f:
-        response = HttpResponse(f.read(), content_type='application/octet-stream')
-        # 支持中文文件名：优先使用原始文件名，没有则使用存储文件名
-        from urllib.parse import quote
-        filename = item.original_file_name or os.path.basename(item.file.name)
-        response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
-        return response
 
 
 @login_required
@@ -2615,18 +2614,16 @@ def download_plate_batch_file(request, batch_id, field_name):
         messages.error(request, '文件不存在')
         return redirect('merchant_dashboard')
 
-    file_path = file_field.path
-    if not os.path.exists(file_path):
+    try:
+        with file_field.open('rb') as f:
+            # 根据文件类型设置content_type
+            ext = os.path.splitext(file_field.name)[1].lower()
+            content_type = 'application/pdf' if ext == '.pdf' else 'image/png' if ext in ('.png', '.jpg', '.jpeg') else 'application/octet-stream'
+            response = HttpResponse(f.read(), content_type=content_type)
+            from urllib.parse import quote
+            filename = os.path.basename(file_field.name)
+            response['Content-Disposition'] = f"inline; filename*=UTF-8''{quote(filename)}"
+            return response
+    except Exception:
         messages.error(request, '文件不存在或已被删除')
         return redirect('merchant_dashboard')
-
-    # 根据文件类型设置content_type
-    ext = os.path.splitext(file_path)[1].lower()
-    content_type = 'application/pdf' if ext == '.pdf' else 'image/png' if ext in ('.png', '.jpg', '.jpeg') else 'application/octet-stream'
-
-    with open(file_path, 'rb') as f:
-        response = HttpResponse(f.read(), content_type=content_type)
-        from urllib.parse import quote
-        filename = os.path.basename(file_field.name)
-        response['Content-Disposition'] = f"inline; filename*=UTF-8''{quote(filename)}"
-        return response

@@ -1291,15 +1291,14 @@ def download_customer_file(request, order_id, item_id):
         messages.error(request, '该订单没有上传文件')
         return redirect('order_detail', order_id=order.id)
 
-    file_path = item.file.path
-    if not os.path.exists(file_path):
+    try:
+        with item.file.open('rb') as f:
+            response = HttpResponse(f.read(), content_type='application/octet-stream')
+            from urllib.parse import quote
+            filename = item.original_file_name or os.path.basename(item.file.name)
+            response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
+            return response
+    except Exception:
         messages.error(request, '文件不存在或已被删除')
         return redirect('order_detail', order_id=order.id)
-
-    with open(file_path, 'rb') as f:
-        response = HttpResponse(f.read(), content_type='application/octet-stream')
-        from urllib.parse import quote
-        filename = item.original_file_name or os.path.basename(item.file.name)
-        response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
-        return response
 
