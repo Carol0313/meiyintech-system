@@ -27,6 +27,20 @@
                     <div class="progress-line {% if step.done %}done{% endif %}"></div>
                     {% endif %}
                     {% endfor %}
+                    <!-- 投诉步骤 -->
+                    {% if order.status in 'shipped,received' %}
+                    <div class="progress-line"></div>
+                    <div class="progress-step">
+                        <div class="step-icon"><i class="bi bi-shield-exclamation"></i></div>
+                        <div class="step-label">
+                            {% if order.complaints.exists %}
+                            <a href="{% url 'complaint_detail' order.complaints.first.id %}" class="text-warning">查看投诉</a>
+                            {% else %}
+                            <a href="{% url 'complaint_create' order.id %}" class="text-danger">投诉</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>

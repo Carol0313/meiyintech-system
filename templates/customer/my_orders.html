@@ -51,8 +51,13 @@
         background: #fff;
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
-        margin-bottom: 16px;
+        margin-bottom: 24px;
         overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        transition: box-shadow 0.2s;
+    }
+    .order-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
     }
     .order-card-header {
         display: flex;
@@ -371,6 +376,17 @@
             {% endif %}
             {% if order.status == 'shipped' %}
             <a href="{% url 'confirm_receipt' order.id %}" class="btn btn-sm btn-success" onclick="return confirm('确认已收到该订单的货物吗？')">确认收货</a>
+            {% endif %}
+            {% if order.status in 'shipped,received' %}
+                {% if order.complaints.exists %}
+                <a href="{% url 'complaint_detail' order.complaints.first.id %}" class="btn btn-sm btn-warning">
+                    <i class="bi bi-shield-exclamation"></i> 查看投诉
+                </a>
+                {% else %}
+                <a href="{% url 'complaint_create' order.id %}" class="btn btn-sm btn-outline-warning">
+                    <i class="bi bi-shield-exclamation"></i> 投诉
+                </a>
+                {% endif %}
             {% endif %}
         </div>
     </div>

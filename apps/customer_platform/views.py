@@ -16,7 +16,7 @@ from django.core.files.storage import default_storage
 from django.http import HttpResponse
 from django.utils import timezone
 from apps.accounts.models import User, CustomerProfile, Address
-from apps.orders.models import Order, OrderItem, OrderStatusLog, CommunicationLog, Statement
+from apps.orders.models import Order, OrderItem, OrderStatusLog, CommunicationLog, Statement, OrderComplaint
 from apps.products.models import ProductSpec
 from apps.merchant_platform.models import Factory
 
@@ -1292,4 +1292,86 @@ def download_customer_file(request, order_id, item_id):
     except Exception:
         messages.error(request, '文件不存在或已被删除')
         return redirect('order_detail', order_id=order.id)
+
+
+@login_required
+def complaint_create(request, order_id):
+    """
+    创建投诉
+    订单状态为 shipped 或 received 时可投诉
+    """
+    if request.user.user_type != 'customer':
+        messages.error(request, '无权访问')
+        return redirect('login')
+
+    order = get_object_or_404(Order, id=order_id, customer=request.user)
+
+    # 检查订单状态
+    if order.status not in ['shipped', 'received']:
+        messages.error(request, '当前订单状态不可投诉')
+        return redirect('order_detail', order_id=order.id)
+
+    # 检查是否已投诉
+    if order.complaints.exists():
+        messages.info(request, '您已提交投诉，请查看投诉详情')
+        return redirect('complaint_detail', complaint_id=order.complaints.first().id)
+
+    if request.method == 'POST':
+        description = request.POST.get('description', '').strip()
+        complaint_type = request.POST.get('complaint_type', 'quality')
+
+        if not description:
+            messages.error(request, '请填写投诉描述')
+            return render(request, 'customer/complaint_form.html', {'order': order})
+
+        # 检查图片大小（每个不超过2MB）
+        images = []
+        for i in range(1, 4):
+            img = request.FILES.get(f'image{i}')
+            if img:
+                if img.size > 2 * 1024 * 1024:
+                    messages.error(request, f'图片{i}超过2MB限制')
+                    return render(request, 'customer/complaint_form.html', {'order': order})
+                images.append(img)
+
+        # 创建投诉
+        complaint = OrderComplaint.objects.create(
+            order=order,
+            customer=request.user,
+            complaint_type=complaint_type,
+            description=description,
+        )
+
+        # 保存图片
+        if len(images) >= 1:
+            complaint.image1 = images[0]
+        if len(images) >= 2:
+            complaint.image2 = images[1]
+        if len(images) >= 3:
+            complaint.image3 = images[2]
+        complaint.save()
+
+        messages.success(request, '投诉已提交，商家会尽快处理')
+        return redirect('complaint_detail', complaint_id=complaint.id)
+
+    return render(request, 'customer/complaint_form.html', {'order': order})
+
+
+@login_required
+def complaint_detail(request, complaint_id):
+    """
+    查看投诉详情
+    """
+    if request.user.user_type != 'customer':
+        messages.error(request, '无权访问')
+        return redirect('login')
+
+    complaint = get_object_or_404(
+        OrderComplaint, id=complaint_id, customer=request.user
+    )
+
+    return render(request, 'customer/complaint_detail.html', {
+        'complaint': complaint,
+        'order': complaint.order,
+    })
 

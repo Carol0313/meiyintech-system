@@ -30,4 +30,7 @@ urlpatterns = [
     path('statements/<uuid:statement_id>/', views.customer_statement_detail, name='customer_statement_detail'),
     path('statements/<uuid:statement_id>/confirm/', views.customer_statement_confirm, name='customer_statement_confirm'),
     path('statements/<uuid:statement_id>/export/', views.customer_statement_export, name='customer_statement_export'),
+    # 投诉
+    path('orders/<uuid:order_id>/complaint/', views.complaint_create, name='complaint_create'),
+    path('complaints/<uuid:complaint_id>/', views.complaint_detail, name='complaint_detail'),
 ]

@@ -607,3 +607,52 @@ class Statement(models.Model):
     def update_total(self):
         self.total_amount = self.calculate_total()
         self.save(update_fields=['total_amount', 'updated_at'])
+
+
+class OrderComplaint(models.Model):
+    """
+    订单投诉
+    客户在订单完成后（已派送/已收货）可发起投诉
+    """
+    STATUS_CHOICES = [
+        ('pending', '待处理'),
+        ('processing', '处理中'),
+        ('resolved', '已解决'),
+        ('rejected', '已驳回'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name='complaints',
+        verbose_name='关联订单'
+    )
+    customer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='complaints', verbose_name='投诉客户'
+    )
+    # 投诉内容
+    complaint_type = models.CharField('投诉类型', max_length=50, default='quality')
+    description = models.TextField('投诉描述')
+    # 投诉图片（最多3张）
+    image1 = models.ImageField('投诉图片1', upload_to='complaints/%Y%m/', blank=True, null=True)
+    image2 = models.ImageField('投诉图片2', upload_to='complaints/%Y%m/', blank=True, null=True)
+    image3 = models.ImageField('投诉图片3', upload_to='complaints/%Y%m/', blank=True, null=True)
+    # 处理结果
+    status = models.CharField('处理状态', max_length=20, choices=STATUS_CHOICES, default='pending')
+    merchant_remark = models.TextField('商家处理备注', blank=True)
+    resolved_at = models.DateTimeField('处理时间', blank=True, null=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='resolved_complaints',
+        verbose_name='处理人'
+    )
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '订单投诉'
+        verbose_name_plural = '订单投诉'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"投诉 {self.order.sn} [{self.get_status_display()}]"
