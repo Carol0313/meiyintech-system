@@ -19,6 +19,7 @@
     <a class="nav-link {% if request.resolver_match.url_name == 'pending_plate_orders' %}active{% endif %}" href="{% url 'pending_plate_orders' %}"><i class="bi bi-file-earmark-arrow-up"></i> 待上传制版</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'pending_layout_orders' %}active{% endif %}" href="{% url 'pending_layout_orders' %}"><i class="bi bi-grid-3x3-gap"></i> 待拼版</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'factory_production_board' %}active{% endif %}" href="{% url 'factory_production_board' %}"><i class="bi bi-gear-wide-connected"></i> 生产看板</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_complaint_list' %}active{% endif %}" href="{% url 'merchant_complaint_list' %}"><i class="bi bi-shield-exclamation"></i> 投诉管理</a>
     <div class="nav-section">系统设置</div>
     <a class="nav-link {% if request.resolver_match.url_name == 'role_list' %}active{% endif %}" href="{% url 'role_list' %}"><i class="bi bi-shield-lock"></i> 岗位权限</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'subaccount_list' %}active{% endif %}" href="{% url 'subaccount_list' %}"><i class="bi bi-person-badge"></i> 子账号</a>

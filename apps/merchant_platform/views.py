@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.http import HttpResponse
 from django.core.files.storage import default_storage
 from apps.accounts.models import User, CustomerProfile, Merchant, StaffProfile, Role
-from apps.orders.models import Order, OrderItem, CommunicationLog, OrderStatusLog, PlateLayout, PlateBatch, PlateBatchItem, ProductionPhoto, Statement, DeliveryExtension
+from apps.orders.models import Order, OrderItem, CommunicationLog, OrderStatusLog, PlateLayout, PlateBatch, PlateBatchItem, ProductionPhoto, Statement, DeliveryExtension, OrderComplaint
 from apps.products.models import ProductSpec, CustomSpecRequest
 from .models import Factory, FactoryEquipmentStatus, FactoryInventory
 from utils.plate_layout import calculate_plate_layout, calculate_plate_layout_rectpack, auto_generate_plate_layout_for_order
@@ -3065,3 +3065,72 @@ def create_plate_batch(request):
         traceback.print_exc()
         messages.error(request, f'拼版失败：{str(e)}')
         return redirect('pending_layout_orders')
+
+
+@login_required
+@merchant_required
+def complaint_list(request):
+    """
+    商户投诉列表
+    显示当前商户的所有客户投诉
+    """
+    try:
+        merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
+    except AttributeError:
+        messages.error(request, '无权访问')
+        return redirect('merchant_dashboard')
+
+    # 获取该商户的所有订单的投诉
+    complaints = OrderComplaint.objects.filter(
+        order__merchant=merchant
+    ).select_related('order', 'customer').order_by('-created_at')
+
+    pending_count = complaints.filter(status='pending').count()
+    processing_count = complaints.filter(status='processing').count()
+
+    return render(request, 'merchant/complaint_list.html', {
+        'complaints': complaints,
+        'pending_count': pending_count,
+        'processing_count': processing_count,
+    })
+
+
+@login_required
+@merchant_required
+def complaint_detail(request, complaint_id):
+    """
+    商户投诉详情
+    查看投诉详情并处理
+    """
+    try:
+        merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
+    except AttributeError:
+        messages.error(request, '无权访问')
+        return redirect('merchant_dashboard')
+
+    complaint = get_object_or_404(
+        OrderComplaint, id=complaint_id, order__merchant=merchant
+    )
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'process_complaint':
+            status = request.POST.get('status')
+            merchant_remark = request.POST.get('merchant_remark', '').strip()
+
+            if not merchant_remark:
+                messages.error(request, '请填写处理备注')
+                return redirect('merchant_complaint_detail', complaint_id=complaint.id)
+
+            complaint.status = status
+            complaint.merchant_remark = merchant_remark
+            complaint.resolved_at = timezone.now()
+            complaint.resolved_by = request.user
+            complaint.save()
+
+            messages.success(request, '投诉处理成功')
+            return redirect('merchant_complaint_detail', complaint_id=complaint.id)
+
+    return render(request, 'merchant/complaint_detail.html', {
+        'complaint': complaint,
+    })

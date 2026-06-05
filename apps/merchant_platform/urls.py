@@ -59,4 +59,7 @@ urlpatterns = [
     path('statements/<uuid:statement_id>/mark-paid/', views.statement_mark_paid, name='statement_mark_paid'),
     path('statements/<uuid:statement_id>/settle/', views.statement_settle, name='statement_settle'),
     path('statements/<uuid:statement_id>/export/', views.statement_export, name='statement_export'),
+    # 投诉管理
+    path('complaints/', views.complaint_list, name='merchant_complaint_list'),
+    path('complaints/<uuid:complaint_id>/', views.complaint_detail, name='merchant_complaint_detail'),
 ]

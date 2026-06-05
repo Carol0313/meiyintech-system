@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% block title %}投诉详情 - {{ complaint.order.sn }}{% endblock %}
+{% block page_title %}投诉详情{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <!-- 投诉信息 -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-shield-exclamation"></i> 投诉信息</span>
+                <span class="badge 
+                    {% if complaint.status == 'pending' %}bg-warning text-dark
+                    {% elif complaint.status == 'processing' %}bg-primary
+                    {% elif complaint.status == 'resolved' %}bg-success
+                    {% else %}bg-secondary{% endif %}">
+                    {{ complaint.get_status_display }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="small text-muted">订单号</div>
+                        <div>
+                            <a href="{% url 'merchant_order_detail' complaint.order.id %}">{{ complaint.order.sn }}</a>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted">客户</div>
+                        <div>{{ complaint.customer.phone }}</div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="small text-muted">投诉类型</div>
+                        <div>{{ complaint.get_complaint_type_display|default:"质量问题" }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted">提交时间</div>
+                        <div>{{ complaint.created_at|date:"Y-m-d H:i" }}</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="small text-muted">投诉描述</div>
+                    <div class="p-3 bg-light rounded">{{ complaint.description|linebreaks }}</div>
+                </div>
+
+                {% if complaint.image1 or complaint.image2 or complaint.image3 %}
+                <div class="mb-3">
+                    <div class="small text-muted">投诉图片</div>
+                    <div class="row g-2 mt-1">
+                        {% if complaint.image1 %}
+                        <div class="col-md-4">
+                            <a href="{{ complaint.image1.url }}" target="_blank">
+                                <img src="{{ complaint.image1.url }}" class="img-fluid rounded border">
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if complaint.image2 %}
+                        <div class="col-md-4">
+                            <a href="{{ complaint.image2.url }}" target="_blank">
+                                <img src="{{ complaint.image2.url }}" class="img-fluid rounded border">
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if complaint.image3 %}
+                        <div class="col-md-4">
+                            <a href="{{ complaint.image3.url }}" target="_blank">
+                                <img src="{{ complaint.image3.url }}" class="img-fluid rounded border">
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 处理表单 -->
+        {% if complaint.status != 'resolved' and complaint.status != 'rejected' %}
+        <div class="card">
+            <div class="card-header"><i class="bi bi-reply"></i> 处理投诉</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="process_complaint">
+                    <div class="mb-3">
+                        <label class="form-label">处理结果</label>
+                        <select name="status" class="form-select">
+                            <option value="processing">标记为处理中</option>
+                            <option value="resolved">已解决</option>
+                            <option value="rejected">驳回投诉</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">处理备注</label>
+                        <textarea name="merchant_remark" class="form-control" rows="4" placeholder="请填写处理结果、解决方案等..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> 提交处理结果
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-header"><i class="bi bi-check-circle"></i> 处理结果</div>
+            <div class="card-body">
+                <div class="p-3 bg-light rounded">{{ complaint.merchant_remark|linebreaks|default:"无处理备注" }}</div>
+                {% if complaint.resolved_at %}
+                <div class="small text-muted mt-2">
+                    处理时间：{{ complaint.resolved_at|date:"Y-m-d H:i" }}
+                    {% if complaint.resolved_by %}
+                    | 处理人：{{ complaint.resolved_by.username|default:complaint.resolved_by.phone }}
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-4">
+        <!-- 订单信息 -->
+        <div class="card mb-3">
+            <div class="card-header">关联订单</div>
+            <div class="card-body small">
+                <div class="mb-2"><strong>订单号：</strong>{{ complaint.order.sn }}</div>
+                <div class="mb-2"><strong>状态：</strong><span class="badge badge-status status-{{ complaint.order.status }}">{{ complaint.order.get_status_display }}</span></div>
+                <div class="mb-2"><strong>金额：</strong>¥{{ complaint.order.total_amount }}</div>
+                <div class="mb-2"><strong>下单时间：</strong>{{ complaint.order.created_at|date:"Y-m-d H:i" }}</div>
+                <a href="{% url 'merchant_order_detail' complaint.order.id %}" class="btn btn-sm btn-outline-primary w-100">查看订单详情</a>
+            </div>
+        </div>
+
+        <!-- 客户信息 -->
+        <div class="card">
+            <div class="card-header">客户信息</div>
+            <div class="card-body small">
+                <div class="mb-2"><strong>手机号：</strong>{{ complaint.customer.phone }}</div>
+                <div class="mb-2"><strong>用户名：</strong>{{ complaint.customer.username|default:"未设置" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
