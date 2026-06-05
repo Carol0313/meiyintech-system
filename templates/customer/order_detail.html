@@ -64,8 +64,8 @@
         {% endif %}
 
         <!-- 文件预览 -->
-        {% with item=order.items.first %}
-        {% if item and item.file %}
+        {% with item=order.first_item_with_file %}
+        {% if item %}
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-file-earmark"></i> 文件预览</span>

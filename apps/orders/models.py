@@ -209,6 +209,10 @@ class Order(models.Model):
             self.transition_status('pending_payment', operator=self.customer, remark='信用额度不足')
             return False, '信用额度不足，订单状态变为待支付'
 
+    def first_item_with_file(self):
+        """返回第一个有上传文件的订单项"""
+        return self.items.filter(file__isnull=False).exclude(file='').first()
+
 
 class OrderItem(models.Model):
     """订单明细（每个独立产品）"""

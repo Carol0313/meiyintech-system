@@ -1692,6 +1692,7 @@ def remake_order_create(request, order_id):
                     area=item.area,  # 面积按原尺寸正常计算
                     subtotal=Decimal('0'),
                     file=item.file,
+                    original_file_name=item.original_file_name,
                     file_processed=item.file_processed,
                     file_standard_checked=item.file_standard_checked,
                     is_image_file=item.is_image_file,
@@ -2622,6 +2623,7 @@ def download_order_file(request, order_id, item_id):
     """
     安全下载订单文件
     验证当前用户是订单所属商家的员工后才允许下载
+    支持 OSS 存储和本地存储两种模式
     """
     try:
         merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
@@ -2636,12 +2638,26 @@ def download_order_file(request, order_id, item_id):
         messages.error(request, '该订单没有上传文件')
         return redirect('merchant_order_detail', order_id=order.id)
 
+    from urllib.parse import quote
+    filename = item.original_file_name or os.path.basename(item.file.name) or 'download'
+
+    # 检测是否使用 OSS 存储
+    storage_class_name = item.file.storage.__class__.__name__
+    is_oss = 'OSS' in storage_class_name
+
+    if is_oss:
+        # OSS 存储：直接重定向到文件 URL（带下载参数）
+        file_url = item.file.url
+        # 添加 response-content-disposition 参数让浏览器下载而非预览
+        sep = '&' if '?' in file_url else '?'
+        disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
+        download_url = f"{file_url}{sep}response-content-disposition={quote(disposition)}"
+        return redirect(download_url)
+
+    # 本地存储：读取文件内容返回
     try:
         with item.file.open('rb') as f:
             response = HttpResponse(f.read(), content_type='application/octet-stream')
-            # 支持中文文件名：优先使用原始文件名，没有则使用存储文件名
-            from urllib.parse import quote
-            filename = item.original_file_name or os.path.basename(item.file.name)
             response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
             return response
     except Exception:

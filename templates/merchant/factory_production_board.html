@@ -516,8 +516,8 @@
             </div>
             {% endif %}
             <!-- 文件编号 -->
-            {% with first_item=order.items.first %}
-            {% if first_item and first_item.file %}
+            {% with first_item=order.first_item_with_file %}
+            {% if first_item %}
             <div class="kb-info-row">
                 <span class="kb-info-label">文件编号:</span>
                 <span class="font-monospace">{{ first_item.file.name|cut:"order_files/" }}</span>
@@ -618,8 +618,8 @@
             </div>
             {% endif %}
             <!-- 文件编号 -->
-            {% with first_item=order.items.first %}
-            {% if first_item and first_item.file %}
+            {% with first_item=order.first_item_with_file %}
+            {% if first_item %}
             <div class="kb-info-row">
                 <span class="kb-info-label">文件编号:</span>
                 <span class="font-monospace">{{ first_item.file.name|cut:"order_files/" }}</span>
@@ -765,8 +765,8 @@
                 </div>
                 {% endif %}
                 <!-- 文件编号 -->
-                {% with first_item=order.items.first %}
-                {% if first_item and first_item.file %}
+                {% with first_item=order.first_item_with_file %}
+                {% if first_item %}
                 <div class="kb-info-row">
                     <span class="kb-info-label">文件编号:</span>
                     <span class="font-monospace">{{ first_item.file.name|cut:"order_files/" }}</span>
