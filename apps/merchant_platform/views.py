@@ -2645,22 +2645,35 @@ def download_order_file(request, order_id, item_id):
     storage_class_name = item.file.storage.__class__.__name__
     is_oss = 'OSS' in storage_class_name
 
-    if is_oss:
-        # OSS 存储：直接重定向到文件 URL（带下载参数）
-        file_url = item.file.url
-        # 添加 response-content-disposition 参数让浏览器下载而非预览
-        sep = '&' if '?' in file_url else '?'
-        disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
-        download_url = f"{file_url}{sep}response-content-disposition={quote(disposition)}"
-        return redirect(download_url)
-
-    # 本地存储：读取文件内容返回
+    # OSS 或本地存储：统一通过服务器读取文件内容返回
+    # 避免浏览器直接访问 OSS 内网 URL
     try:
         with item.file.open('rb') as f:
-            response = HttpResponse(f.read(), content_type='application/octet-stream')
-            response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
+            # 根据文件扩展名设置正确的 Content-Type
+            ext = os.path.splitext(filename)[1].lower()
+            content_type_map = {
+                '.pdf': 'application/pdf',
+                '.ai': 'application/postscript',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.zip': 'application/zip',
+            }
+            content_type = content_type_map.get(ext, 'application/octet-stream')
+            
+            response = HttpResponse(f.read(), content_type=content_type)
+            # 使用安全的文件名编码
+            safe_filename = quote(filename)
+            response['Content-Disposition'] = f"attachment; filename*=UTF-8''{safe_filename}"
+            # 添加安全头，避免浏览器拦截
+            response['X-Content-Type-Options'] = 'nosniff'
+            response['Cache-Control'] = 'private, max-age=0'
             return response
-    except Exception:
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"下载文件失败: {e}", exc_info=True)
         messages.error(request, '文件不存在或已被删除')
         return redirect('merchant_order_detail', order_id=order.id)
 

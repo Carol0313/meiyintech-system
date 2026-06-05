@@ -1,9 +1,10 @@
 {% extends 'base.html' %}
+{% load common_extras %}
 {% block title %}订单详情 {{ order.sn }}{% endblock %}
 {% block page_title %}订单详情 {{ order.sn }}{% endblock %}
 {% block content %}
 <div class="row">
-    <div class="col-md-8">
+    <div class="col-md-9">
         <!-- 物流轨迹 -->
         {% if tracking_data %}
         <div class="card mb-3">
@@ -48,15 +49,22 @@
             </div>
             <div class="card-body">
                 {% if item.file.name|lower|slice:"-4:" == '.pdf' %}
-                <div class="text-center py-5">
+                <div class="text-center py-3">
+                    <!-- PDF 预览图 -->
+                    {% if item.preview_image %}
+                    <img src="{{ item.preview_image.url }}" class="img-fluid rounded border mb-2" style="max-height:200px;" alt="PDF预览">
+                    {% else %}
                     <i class="bi bi-file-earmark-pdf" style="font-size:48px; color:var(--primary);"></i>
-                    <div class="mt-2 text-muted small">PDF 文件请下载后查看</div>
-                    <a href="{% url 'download_order_file' order.id item.id %}" class="btn btn-sm btn-primary mt-2">
-                        <i class="bi bi-download"></i> 下载源文件
-                    </a>
+                    <div class="mt-2 text-muted small">PDF 文件</div>
+                    {% endif %}
+                    <div class="mt-2">
+                        <a href="{% url 'download_order_file' order.id item.id %}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-download"></i> 下载源文件
+                        </a>
+                    </div>
                 </div>
                 {% else %}
-                <div class="text-center py-5">
+                <div class="text-center py-3">
                     <i class="bi bi-file-earmark-image" style="font-size:48px; color:var(--primary);"></i>
                     <div class="mt-2 text-muted small">{{ item.file.name|cut:"order_files/" }}</div>
                     <div class="mt-1 text-muted small">AI文件请在设计软件中打开预览</div>
@@ -79,6 +87,18 @@
                     {% endif %}
                 </span>
                 <span class="badge badge-status status-{{ order.status }}">{{ order.get_status_display }}</span>
+                {% if order.status == 'paid' or order.status == 'received' or order.status == 'shipped' or order.status == 'in_production' %}
+                    {% if not order.is_settled %}
+                        {% if not order.statement or order.statement.status == 'settled' %}
+                        <form method="post" class="d-inline" onsubmit="return confirm('确认已收到客户付款？此操作将释放该订单占用的信用额度。')">
+                            {% csrf_token %}<input type="hidden" name="action" value="confirm_payment">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-cash-stack"></i> 确认收款
+                            </button>
+                        </form>
+                        {% endif %}
+                    {% endif %}
+                {% endif %}
             </div>
             <div class="card-body">
                 <div class="row mb-3">
@@ -103,26 +123,51 @@
                 </div>
                 {% endif %}
 
-                <h6>产品明细</h6>
+                <h6 class="d-flex justify-content-between align-items-center">
+                    产品明细
+                    <span class="small text-muted">共 {{ order.items.count }} 项</span>
+                </h6>
                 <table class="table table-sm table-bordered">
-                    <thead class="table-light"><tr><th>产品</th><th>材料</th><th>厚度</th><th>尺寸</th><th>数量</th><th>小计</th><th>文件</th></tr></thead>
+                    <thead class="table-light">
+                        <tr>
+                            <th>产品</th><th>材料</th><th>厚度</th><th>尺寸</th><th>数量</th><th>小计</th><th>文件</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {% for item in order.items.all %}
                         <tr>
-                            <td>{{ item.get_product_name_display }}</td><td>{{ item.get_material_display }}</td>
-                            <td>{{ item.thickness }}mm</td><td>{{ item.length_mm }}×{{ item.width_mm }}mm</td>
-                            <td>{{ item.quantity }}</td><td>¥{{ item.subtotal }}</td>
+                            <td>{{ item.get_product_name_display }}</td>
+                            <td>{{ item.get_material_display }}</td>
+                            <td>{{ item.thickness }}mm</td>
+                            <td>
+                                {{ item.length_mm }}×{{ item.width_mm }}mm
+                                {% if item.red_box_data %}
+                                <span class="badge bg-info ms-1" title="包含红框识别数据"><i class="bi bi-bounding-box"></i></span>
+                                {% endif %}
+                            </td>
+                            <td>{{ item.quantity }}</td>
+                            <td>¥{{ item.subtotal }}</td>
                             <td>
                                 {% if item.file %}
-                                <a href="{% url 'download_order_file' order.id item.id %}" class="small">查看文件</a>
+                                <a href="{% url 'download_order_file' order.id item.id %}" class="small">下载</a>
                                 {% else %}<span class="text-muted">无</span>{% endif %}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-                <div class="text-end fw-bold">总金额：¥{{ order.total_amount }}</div>
-                {% if order.special_requests %}<div class="mt-2"><strong>特殊要求：</strong>{{ order.special_requests }}</div>{% endif %}
+                <div class="row text-end">
+                    <div class="col-12">
+                        <div class="small text-muted">面积合计：{{ order.total_area|floatformat:2 }} cm²</div>
+                        <div class="fw-bold fs-5">总金额：¥{{ order.total_amount }}</div>
+                    </div>
+                </div>
+                {% if order.special_requests %}
+                <div class="mt-3 alert alert-light border">
+                    <strong><i class="bi bi-chat-left-text"></i> 特殊要求：</strong>
+                    <span class="text-muted">{{ order.special_requests }}</span>
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -176,144 +221,72 @@
             </div>
         </div>
         {% endif %}
+        <!-- 源文件详情 -->
+        {% with item=order.first_item_with_file %}
+        {% if item %}
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-file-earmark-text"></i> 源文件详情</div>
+            <div class="card-body small">
+                <div class="mb-2"><strong>文件名：</strong>{{ item.original_file_name|default:item.file.name|cut:"order_files/" }}</div>
+                <div class="mb-2"><strong>文件类型：</strong>{% if item.is_image_file %}图片{% else %}PDF/AI{% endif %}</div>
+                <div class="mb-2"><strong>文件处理：</strong>{% if item.file_processed %}<span class="text-success">已处理</span>{% else %}<span class="text-warning">待处理</span>{% endif %}</div>
+                <div class="mb-2"><strong>标准检查：</strong>{% if item.file_standard_checked %}<span class="text-success">通过</span>{% else %}<span class="text-muted">未检查</span>{% endif %}</div>
+                {% if item.red_box_data %}
+                <div class="mt-3">
+                    <strong><i class="bi bi-bounding-box"></i> 红框识别数据：</strong>
+                    <div class="mt-2">
+                        {% with boxes=item.red_box_data|load_json %}
+                        {% if boxes %}
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light"><tr><th>框</th><th>长×宽(mm)</th><th>数量</th></tr></thead>
+                            <tbody>
+                                {% for box in boxes %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ box.length_mm }}×{{ box.width_mm }}</td>
+                                    <td>{{ box.quantity|default:1 }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% endif %}
+                        {% endwith %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+
         <!-- 拍照对比 -->
         <div class="card mb-3">
-            <div class="card-header">拍照对比（成品 vs 源文件）</div>
+            <div class="card-header"><i class="bi bi-camera"></i> 拍照对比（成品 vs 源文件）</div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-6 text-center border-end">
                         <div class="text-muted small mb-2">源文件预览</div>
                         {% with item=order.first_item_with_file %}
                         {% if item %}
-                        <p class="small"><a href="{% url 'download_order_file' order.id item.id %}">查看PDF</a></p>
+                            {% if item.preview_image %}
+                            <img src="{{ item.preview_image.url }}" style="max-height:150px;" class="img-fluid rounded border">
+                            {% else %}
+                            <p class="small"><a href="{% url 'download_order_file' order.id item.id %}">查看PDF</a></p>
+                            {% endif %}
                         {% else %}<span class="text-muted">无源文件</span>{% endif %}
                         {% endwith %}
                     </div>
                     <div class="col-6 text-center">
                         <div class="text-muted small mb-2">成品照片</div>
                         {% with photo=order.production_photos.first %}
-                        {% if photo %}<img src="{{ photo.image.url }}" style="max-height:150px;" class="img-fluid">{% else %}<span class="text-muted">尚未上传</span>{% endif %}
+                        {% if photo %}<img src="{{ photo.image.url }}" style="max-height:150px;" class="img-fluid rounded border">{% else %}<span class="text-muted">尚未上传</span>{% endif %}
                         {% endwith %}
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <!-- 操作面板 -->
-        <div class="card mb-3">
-            <div class="card-header">订单操作</div>
-            <div class="card-body">
-                {% if order.status == 'pending_confirm' %}
-                <form method="post" class="mb-2">
-                    {% csrf_token %}<input type="hidden" name="action" value="audit">
-                    <button type="submit" class="btn btn-success w-100">审核通过</button>
-                </form>
-                <form method="post" class="mb-2">
-                    {% csrf_token %}<input type="hidden" name="action" value="reject">
-                    <input type="text" name="rejection_reason" class="form-control form-control-sm mb-1" placeholder="驳回原因">
-                    <button type="submit" class="btn btn-outline-danger w-100 btn-sm">驳回</button>
-                </form>
-                {% endif %}
-                {% if order.status == 'design_confirmed' or order.status == 'paid' %}
-                <form method="post" class="mb-2">
-                    {% csrf_token %}<input type="hidden" name="action" value="assign_design">
-                    <select name="designer_id" class="form-select form-select-sm mb-1">
-                        <option value="">选择设计人员</option>
-                        {% for d in designers %}<option value="{{ d.user.id }}">{{ d.user.username|default:d.user.phone }}</option>{% endfor %}
-                    </select>
-                    <button type="submit" class="btn btn-primary w-100 btn-sm">分配设计岗</button>
-                </form>
-                {% endif %}
-                {% if order.status == 'paid' or order.status == 'design_confirmed' %}
-                <form method="post" class="mb-2">
-                    {% csrf_token %}<input type="hidden" name="action" value="arrange_production">
-                    <select name="factory_id" class="form-select form-select-sm mb-1">
-                        <option value="">选择工厂</option>
-                        {% for f in factories %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
-                    </select>
-                    <select name="production_cycle" class="form-select form-select-sm mb-1">
-                        <option value="">选择发货时效</option>
-                        <option value="6">6点前寄出</option>
-                        <option value="9">9点前寄出</option>
-                        <option value="24">次日寄出</option>
-                        <option value="18">下班后送货</option>
-                    </select>
-                    <button type="submit" class="btn btn-primary w-100 btn-sm">安排生产</button>
-                </form>
-                {% endif %}
-                {% if order.status == 'in_production' %}
-                <form method="post" action="{% url 'upload_production_photo' order.id %}" enctype="multipart/form-data" class="mb-2">
-                    {% csrf_token %}
-                    <select name="photo_type" class="form-select form-select-sm mb-1">
-                        <option value="front">成品正面</option><option value="inspection">检测结果</option>
-                    </select>
-                    <input type="file" name="photo" class="form-control form-control-sm mb-1" accept="image/*">
-                    <button type="submit" class="btn btn-outline-primary w-100 btn-sm">上传照片</button>
-                </form>
-                <form method="post" class="mb-2">
-                    {% csrf_token %}<input type="hidden" name="action" value="ship">
-                    <select name="tracking_company" class="form-select form-select-sm mb-1" required>
-                        <option value="">选择快递公司</option>
-                        <option value="shunfeng">顺丰速运</option>
-                        <option value="yuantong">圆通速递</option>
-                        <option value="zhongtong">中通快递</option>
-                        <option value="shentong">申通快递</option>
-                        <option value="yunda">韵达快递</option>
-                        <option value="ems">EMS</option>
-                        <option value="jd">京东物流</option>
-                        <option value="debangkuaidi">德邦快递</option>
-                        <option value="jtexpress">极兔速递</option>
-                        <option value="cainiao">菜鸟/丹鸟</option>
-                        <option value="huitongkuaidi">百世快递</option>
-                        <option value="tiantian">天天快递</option>
-                        <option value="youshuwuliu">优速快递</option>
-                        <option value="zhaijisong">宅急送</option>
-                        <option value="kuayue">跨越速运</option>
-                        <option value="suer">速尔快递</option>
-                        <option value="annengwuliu">安能物流</option>
-                        <option value="other">其他</option>
-                    </select>
-                    <input type="text" name="tracking_number" class="form-control form-control-sm mb-1" placeholder="物流/快递单号" required>
-                    <button type="submit" class="btn btn-success w-100">确认发货</button>
-                </form>
-                {% endif %}
-                {% if order.status == 'pending_payment' %}
-                <form method="post" class="mb-2">
-                    {% csrf_token %}<input type="hidden" name="action" value="mark_paid">
-                    <button type="submit" class="btn btn-warning w-100">标记线下支付（开始生产）</button>
-                </form>
-                {% endif %}
-                {% if order.status == 'paid' or order.status == 'received' or order.status == 'shipped' or order.status == 'in_production' %}
-                    {% if not order.is_settled %}
-                        {% if order.statement and order.statement.status != 'settled' %}
-                        <div class="alert alert-warning py-2 mb-2 small">
-                            <i class="bi bi-info-circle"></i> 该订单已关联对账单
-                            <a href="{% url 'statement_detail' order.statement.id %}">{{ order.statement.sn }}</a>，请通过对账单结清
-                        </div>
-                        {% else %}
-                        <form method="post" class="mb-2" onsubmit="return confirm('确认已收到客户付款？此操作将释放该订单占用的信用额度。')">
-                            {% csrf_token %}<input type="hidden" name="action" value="confirm_payment">
-                            <button type="submit" class="btn btn-success w-100">
-                                <i class="bi bi-cash-stack"></i> 确认收款并释放额度
-                            </button>
-                        </form>
-                        {% endif %}
-                    {% else %}
-                    <div class="alert alert-success py-2 mb-2 small">
-                        <i class="bi bi-check-circle"></i> 该订单已结清，额度已释放
-                    </div>
-                    {% endif %}
-                {% endif %}
-                {% if order.order_type == 'normal' %}
-                    {% if order.status == 'shipped' or order.status == 'received' or order.status == 'in_production' %}
-                    <a href="{% url 'remake_order_create' order.id %}" class="btn btn-outline-warning w-100 mb-2">
-                        <i class="bi bi-arrow-repeat"></i> 发起补版
-                    </a>
-                    {% endif %}
-                {% endif %}
-            </div>
-        </div>
+    <div class="col-md-3">
         <!-- 拼版信息 -->
         {% if order.plate_batch_items.all %}
         <div class="card mb-3">
