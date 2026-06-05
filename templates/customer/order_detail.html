@@ -150,12 +150,26 @@
                             <td>{{ item.area }}cm²</td>
                             <td>¥{{ item.subtotal }}</td>
                         </tr>
+                        {% if item.scale_ratio != 100 %}
+                        <tr class="table-light">
+                            <td colspan="8" class="py-1">
+                                <small class="text-muted"><i class="bi bi-arrows-angle-contract text-warning"></i> <strong>缩放比例：</strong>{{ item.scale_ratio }}%</small>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% if item.special_requests %}
+                        <tr class="table-light">
+                            <td colspan="8" class="py-1">
+                                <small class="text-muted"><i class="bi bi-chat-left-text text-primary"></i> <strong>特殊要求：</strong>{{ item.special_requests }}</small>
+                            </td>
+                        </tr>
+                        {% endif %}
                         {% endfor %}
                     </tbody>
                 </table>
                 <div class="text-end fw-medium fs-5">订单总金额：¥{{ order.total_amount }}</div>
                 {% if order.special_requests %}
-                <div class="mt-3"><strong>特殊要求：</strong>{{ order.special_requests }}</div>
+                <div class="mt-3"><strong>订单特殊要求：</strong>{{ order.special_requests }}</div>
                 {% endif %}
             </div>
         </div>

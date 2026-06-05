@@ -194,6 +194,52 @@
     .spec-subgroup:last-child {
         margin-bottom: 0;
     }
+    /* 缩放选项样式 */
+    .scale-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        border: 1.5px solid #dee2e6;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        background: #fff;
+        transition: all 0.15s;
+        user-select: none;
+    }
+    .scale-option:hover {
+        border-color: var(--primary);
+        background: #f8fbff;
+    }
+    .scale-option.active {
+        border-color: var(--primary);
+        background: var(--primary-light);
+        color: var(--primary);
+        font-weight: 500;
+    }
+    .scale-option input {
+        display: none;
+    }
+    .scale-custom-input {
+        display: none;
+        margin-top: 10px;
+        padding: 12px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+    }
+    .scale-custom-input.show {
+        display: block;
+    }
+    .scale-info-text {
+        font-size: 12px;
+        color: #856404;
+        background: #fff3cd;
+        padding: 8px 12px;
+        border-radius: 6px;
+        margin-bottom: 10px;
+    }
 </style>
 {% endblock %}
 
@@ -212,7 +258,7 @@
                 <i class="bi bi-plus-lg"></i> 添加规格组
             </button>
 
-            <!-- 特殊要求（全局） -->
+            <!-- 全局特殊要求（快捷选项保留） -->
             <div class="card">
                 <div class="card-body">
                     <div class="section-title"><i class="bi bi-chat-left-text"></i> 其他要求</div>
@@ -231,8 +277,8 @@
                         </div>
                     </div>
                     <div>
-                        <label class="form-label">特殊要求备注</label>
-                        <textarea name="special_requests" class="form-control" rows="2" placeholder="如有其他要求请在此填写">{{ last_note|default:'' }}</textarea>
+                        <label class="form-label">订单特殊要求备注</label>
+                        <textarea name="special_requests" class="form-control" rows="2" placeholder="整个订单的特殊要求">{{ last_note|default:'' }}</textarea>
                     </div>
                 </div>
             </div>
@@ -426,6 +472,39 @@ function renderSpecGroup(id) {
 
             <!-- 识别结果区域 -->
             <div class="files-result-area mt-2" data-group="${id}" style="display:none;"></div>
+
+            <!-- 缩放比例选项 -->
+            <div class="spec-subgroup mt-3 pt-3 border-top">
+                <label class="form-label fw-bold"><i class="bi bi-arrows-angle-contract text-primary"></i> 缩放设置</label>
+                <div class="scale-info-text">
+                    <i class="bi bi-info-circle"></i> 金属材料上机加热会有一定膨胀，建议提前缩放补偿
+                </div>
+                <div class="d-flex flex-wrap gap-2 mb-2">
+                    <label class="scale-option active" data-group="${id}" data-value="100">
+                        <input type="radio" name="scale_ratio_${id}" value="100" checked> 不缩放 (100%)
+                    </label>
+                    <label class="scale-option" data-group="${id}" data-value="99.75">
+                        <input type="radio" name="scale_ratio_${id}" value="99.75"> 系统推荐 (99.75%)
+                    </label>
+                    <label class="scale-option" data-group="${id}" data-value="custom">
+                        <input type="radio" name="scale_ratio_${id}" value="custom"> 自定义比例
+                    </label>
+                </div>
+                <div class="scale-custom-input" id="scaleCustomInput-${id}">
+                    <label class="form-label small">请输入缩放比例 (%)</label>
+                    <div class="input-group" style="max-width:200px;">
+                        <input type="number" class="form-control" id="scaleCustomValue-${id}" value="99.75" min="50" max="150" step="0.01">
+                        <span class="input-group-text">%</span>
+                    </div>
+                    <div class="form-text small text-muted">范围：50% - 150%，支持两位小数</div>
+                </div>
+            </div>
+
+            <!-- 规格组特殊要求备注 -->
+            <div class="spec-subgroup mt-3 pt-3 border-top">
+                <label class="form-label text-danger fw-bold"><i class="bi bi-chat-left-text"></i> 特殊要求备注</label>
+                <textarea name="group_special_requests_${id}" class="form-control group-special-requests border-danger" rows="2" placeholder="该规格组的特殊要求（如：加急、不需要裁切、特殊包装等）" data-group="${id}"></textarea>
+            </div>
         </div>
     </div>`;
     container.insertAdjacentHTML('beforeend', html);
@@ -989,11 +1068,29 @@ document.getElementById('quickOrderForm').addEventListener('submit', function(e)
             }
         }
 
+        // 获取该规格组的特殊要求备注
+        const groupNoteEl = document.querySelector(`textarea[name="group_special_requests_${g.id}"]`);
+        const groupSpecialRequests = groupNoteEl ? groupNoteEl.value.trim() : '';
+
+        // 获取缩放比例
+        let scaleRatio = 100;
+        const scaleRadio = document.querySelector(`input[name="scale_ratio_${g.id}"]:checked`);
+        if (scaleRadio) {
+            if (scaleRadio.value === 'custom') {
+                const customInput = document.getElementById(`scaleCustomValue-${g.id}`);
+                scaleRatio = customInput ? parseFloat(customInput.value) || 100 : 100;
+            } else {
+                scaleRatio = parseFloat(scaleRadio.value);
+            }
+        }
+
         specGroupsData.push({
             product_name: g.product_name,
             material: g.material,
             thickness: g.thickness,
             unit_price: g.unit_price,
+            special_requests: groupSpecialRequests,
+            scale_ratio: scaleRatio,
             files: g.recognizedFiles.map(f => ({
                 file_path: f.file_path,
                 file_name: f.file_name || '',
@@ -1018,5 +1115,27 @@ document.getElementById('quickOrderForm').addEventListener('submit', function(e)
 
 // 初始化：创建一个默认规格组
 createSpecGroup();
+
+// ===== 缩放选项事件绑定（动态元素委托）=====
+document.getElementById('specGroupsContainer').addEventListener('click', function(e) {
+    const option = e.target.closest('.scale-option');
+    if (!option) return;
+    const groupId = option.dataset.group;
+    const value = option.dataset.value;
+    
+    // 切换active状态
+    const container = option.parentElement;
+    container.querySelectorAll('.scale-option').forEach(el => el.classList.remove('active'));
+    option.classList.add('active');
+    option.querySelector('input').checked = true;
+    
+    // 显示/隐藏自定义输入框
+    const customInput = document.getElementById(`scaleCustomInput-${groupId}`);
+    if (value === 'custom') {
+        customInput.classList.add('show');
+    } else {
+        customInput.classList.remove('show');
+    }
+});
 </script>
 {% endblock %}

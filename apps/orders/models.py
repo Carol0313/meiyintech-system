@@ -286,6 +286,13 @@ class OrderItem(models.Model):
         related_name='plate_uploads', verbose_name='制版文件上传人',
         limit_choices_to={'user_type__in': ['merchant_admin', 'merchant_staff']}
     )
+    # 规格组特殊要求备注（每个规格组独立）
+    special_requests = models.TextField('特殊要求备注', blank=True, help_text='该规格组的特殊要求')
+    # 缩放比例（金属材料上机加热会膨胀，提前缩放补偿）
+    scale_ratio = models.DecimalField(
+        '缩放比例(%)', max_digits=6, decimal_places=3, default=Decimal('100.000'),
+        help_text='默认100%不缩放，建议99.75%补偿金属加热膨胀'
+    )
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
 
     class Meta:

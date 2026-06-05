@@ -1013,6 +1013,8 @@ def _handle_quick_order_post(request, profile, tier):
                 unit_price = Decimal('0')
 
         files = sg.get('files', [])
+        group_special_requests = sg.get('special_requests', '')
+        scale_ratio = Decimal(str(sg.get('scale_ratio', 100) or 100))
         for fd in files:
             item_length = Decimal(str(fd.get('length_mm', 0) or 0))
             item_width = Decimal(str(fd.get('width_mm', 0) or 0))
@@ -1032,6 +1034,8 @@ def _handle_quick_order_post(request, profile, tier):
                 file_standard_checked=file_standard_checked,
                 is_image_file=is_image_file,
                 red_box_data=json.dumps(fd.get('boxes', [])),
+                special_requests=group_special_requests,
+                scale_ratio=scale_ratio,
             )
             all_items.append(item)
 
