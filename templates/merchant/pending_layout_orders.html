@@ -301,7 +301,255 @@
     }
 </style>
 
-<!-- ===== 上半部分：已有拼版批次 ===== -->
+<!-- ===== 第一部分：创建新拼版 ===== -->
+<div class="section-title">
+    <i class="fa-solid fa-circle-plus"></i> 创建新拼版
+    <span class="badge bg-secondary">{{ total_items }}</span>
+</div>
+
+{% if not groups %}
+<div class="card">
+    <div class="empty-state">
+        <i class="fa-solid fa-circle-check"></i>
+        <h5>暂无待拼版订单</h5>
+        <p class="text-muted">请先上传制版文件，订单项会出现在这里</p>
+        <a href="{% url 'pending_plate_orders' %}" class="btn btn-primary">
+            <i class="fa-solid fa-file-arrow-up"></i> 去上传制版文件
+        </a>
+    </div>
+</div>
+{% else %}
+
+<!-- 分组标签栏 -->
+<div class="group-tabs">
+    <div class="group-tab active" onclick="filterGroup('all')">
+        <i class="fa-solid fa-layer-group"></i> 全部
+        <span class="tab-count">{{ total_items }}</span>
+    </div>
+    {% for key, group in groups.items %}
+    <div class="group-tab" onclick="filterGroup('{{ group.key }}')">
+        {{ group.label }}
+        <span class="tab-count">{{ group.items|length }}</span>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 拼版表单 -->
+<form method="post" action="{% url 'create_plate_batch' %}" id="plateBatchForm">
+    {% csrf_token %}
+    <input type="hidden" name="algorithm" id="algorithmInput" value="maxrects">
+
+    <!-- 按分组显示卡片 -->
+    {% for key, group in groups.items %}
+    <div class="group-section" data-group="{{ group.key }}">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0 fw-bold" style="color:var(--text-main);">
+                <i class="fa-solid fa-table-cells" style="color:var(--primary);"></i>
+                {{ group.label }}
+                <span class="badge bg-secondary">{{ group.items|length }} 个</span>
+            </h6>
+            <div class="d-flex gap-2 align-items-center">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="selectAll_{{ group.key }}" 
+                           onchange="toggleGroup('{{ group.key }}', this.checked)">
+                    <label class="form-check-label small" for="selectAll_{{ group.key }}">全选</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            {% for item in group.items %}
+            <div class="col-12 col-md-6 col-xl-4 col-xxl-3">
+                <div class="plate-item-card" id="card_{{ item.id }}">
+                    <input type="checkbox" name="item_ids" value="{{ item.id }}" 
+                           class="plate-item-checkbox group_{{ group.key }}"
+                           id="item_{{ item.id }}"
+                           onchange="onItemSelect(this, '{{ item.id }}')">
+                    
+                    <div class="plate-item-header" title="{{ item.get_product_name_display }}">
+                        {{ item.get_product_name_display }}
+                    </div>
+                    
+                    <div class="plate-item-preview" onclick="openPreviewModal('{{ item.preview_url|default:'' }}', '{{ item.original_file_name }}')">
+                        {% if item.preview_url %}
+                        <img src="{{ item.preview_url }}" alt="预览图">
+                        {% else %}
+                        <div class="preview-placeholder">
+                            <i class="fa-solid fa-file-pdf" style="color:var(--primary);"></i>
+                            <div>暂无预览</div>
+                        </div>
+                        {% endif %}
+                        <div class="preview-filename">{{ item.original_file_name }}</div>
+                    </div>
+                    
+                    <div class="plate-item-info">
+                        <div class="info-row">
+                            <span class="info-label"><i class="fa-solid fa-ruler-combined"></i> 尺寸</span>
+                            <span class="info-value">{{ item.length_mm }}×{{ item.width_mm }}mm</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fa-solid fa-hashtag"></i> 数量</span>
+                            <span class="info-badge">×{{ item.quantity }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fa-solid fa-user"></i> 客户</span>
+                            <span class="customer-name">
+                                {% if item.order.customer.customer_profile.company_name %}
+                                    {{ item.order.customer.customer_profile.company_name }}
+                                {% else %}
+                                    {{ item.order.customer.phone }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fa-solid fa-file-lines"></i> 订单</span>
+                            <a href="{% url 'merchant_order_detail' item.order.id %}" class="info-value" style="color:var(--primary);">
+                                {{ item.order.sn }}
+                            </a>
+                        </div>
+                        {% if item.special_requests %}
+                        <div class="special-requests">
+                            <i class="fa-solid fa-triangle-exclamation"></i> {{ item.special_requests }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="plate-item-actions">
+                        <a href="{% url 'download_plate_file' item.order.id item.id %}" 
+                           class="btn btn-sm btn-outline-primary" title="下载制版文件">
+                            <i class="fa-solid fa-download"></i> 下载
+                        </a>
+                        <a href="{% url 'merchant_order_detail' item.order.id %}" 
+                           class="btn btn-sm btn-outline-secondary" title="查看订单详情">
+                            <i class="fa-solid fa-eye"></i> 详情
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</form>
+
+<!-- 底部固定操作栏 -->
+<div class="bottom-action-bar" id="bottomBar" style="display:none;">
+    <div class="selected-info">
+        已选 <strong id="selectedCount">0</strong> 个文件
+    </div>
+    <div class="algorithm-select">
+        <label>算法：</label>
+        <select class="form-select form-select-sm" style="width:160px;" onchange="document.getElementById('algorithmInput').value=this.value">
+            <option value="maxrects">MaxRects（推荐）</option>
+            <option value="guillotine">Guillotine（平衡）</option>
+            <option value="skyline">Skyline（快速）</option>
+        </select>
+    </div>
+    <button type="button" class="btn btn-primary btn-lg" onclick="submitPlateBatch()">
+        <i class="fa-solid fa-border-all"></i> 自动拼版
+    </button>
+</div>
+
+<!-- 预览图放大Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">文件预览</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="previewModalImg" src="" class="preview-modal-img" alt="预览">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 分组筛选
+function filterGroup(groupKey) {
+    document.querySelectorAll('.group-tab').forEach(tab => tab.classList.remove('active'));
+    event.target.closest('.group-tab').classList.add('active');
+    
+    if (groupKey === 'all') {
+        document.querySelectorAll('.group-section').forEach(s => s.style.display = '');
+    } else {
+        document.querySelectorAll('.group-section').forEach(s => s.style.display = 'none');
+        document.querySelectorAll('.group-section[data-group="' + groupKey + '"]').forEach(s => s.style.display = '');
+    }
+}
+
+// 全选/取消全选
+function toggleGroup(groupKey, checked) {
+    document.querySelectorAll('.group_' + groupKey).forEach(function(cb) {
+        cb.checked = checked;
+        updateCardStyle(cb);
+    });
+    updateBottomBar();
+}
+
+// 单个选择
+function onItemSelect(checkbox, itemId) {
+    updateCardStyle(checkbox);
+    updateBottomBar();
+}
+
+// 更新卡片样式
+function updateCardStyle(checkbox) {
+    var card = checkbox.closest('.plate-item-card');
+    if (checkbox.checked) {
+        card.classList.add('selected');
+    } else {
+        card.classList.remove('selected');
+    }
+}
+
+// 更新底部栏
+function updateBottomBar() {
+    var checked = document.querySelectorAll('input[name="item_ids"]:checked');
+    var count = checked.length;
+    document.getElementById('selectedCount').textContent = count;
+    
+    var bar = document.getElementById('bottomBar');
+    if (count > 0) {
+        bar.style.display = 'flex';
+        document.body.style.paddingBottom = '70px';
+    } else {
+        bar.style.display = 'none';
+        document.body.style.paddingBottom = '0';
+    }
+}
+
+// 提交拼版
+function submitPlateBatch() {
+    var checked = document.querySelectorAll('input[name="item_ids"]:checked');
+    if (checked.length === 0) {
+        alert('请至少选择一个订单项');
+        return;
+    }
+    if (checked.length < 2) {
+        if (!confirm('只选择一个订单项进行拼版，确认吗？')) {
+            return;
+        }
+    }
+    document.getElementById('plateBatchForm').submit();
+}
+
+// 打开预览图Modal
+function openPreviewModal(url, filename) {
+    if (!url) {
+        alert('暂无预览图');
+        return;
+    }
+    document.getElementById('previewModalImg').src = url;
+    var modal = new bootstrap.Modal(document.getElementById('previewModal'));
+    modal.show();
+}
+</script>
+
+{% endif %}
+
+<!-- ===== 第二部分：已有拼版批次 ===== -->
 <div class="section-title">
     <i class="fa-solid fa-border-all"></i> 拼版批次
     <span class="badge bg-secondary">{{ stats.total }}</span>
@@ -420,12 +668,6 @@
     </div>
 </div>
 {% endif %}
-
-<!-- ===== 下半部分：创建新拼版 ===== -->
-<div class="section-title">
-    <i class="fa-solid fa-circle-plus"></i> 创建新拼版
-    <span class="badge bg-secondary">{{ total_items }}</span>
-</div>
 
 {% if not groups %}
 <div class="card">
