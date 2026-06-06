@@ -124,11 +124,13 @@ def place_order(request):
             'price': price,
         })
 
-    # 排序：腐蚀版放第一
-    if '腐蚀版' in spec_data:
-        ordered = {'腐蚀版': spec_data.pop('腐蚀版')}
-        ordered.update(spec_data)
-        spec_data = ordered
+    # 排序：腐蚀版 → 雕刻版 → 树脂版 → 菲林
+    ordered = {}
+    for key in ['腐蚀版', '雕刻版', '树脂版', '菲林']:
+        if key in spec_data:
+            ordered[key] = spec_data.pop(key)
+    ordered.update(spec_data)
+    spec_data = ordered
 
     addresses = request.user.addresses.all()
     default_address = addresses.filter(is_default=True).first()
@@ -187,11 +189,13 @@ def order_step1(request):
             'label': s.get_thickness_display(),
             'price': price,
         })
-    # 排序：腐蚀版放第一
-    if '腐蚀版' in spec_data:
-        ordered = {'腐蚀版': spec_data.pop('腐蚀版')}
-        ordered.update(spec_data)
-        spec_data = ordered
+    # 排序：腐蚀版 → 雕刻版 → 树脂版 → 菲林
+    ordered = {}
+    for key in ['腐蚀版', '雕刻版', '树脂版', '菲林']:
+        if key in spec_data:
+            ordered[key] = spec_data.pop(key)
+    ordered.update(spec_data)
+    spec_data = ordered
     import json
     return render(request, 'customer/order_step1.html', {'spec_data_json': json.dumps(spec_data)})
 

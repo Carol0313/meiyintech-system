@@ -22,6 +22,12 @@
 
 ## 2026-06-06
 
+### 7. 修复产品大类排序 [fix]
+- **排序**：腐蚀版 → 雕刻版 → 树脂版 → 菲林
+- **改动**：修改 `apps/customer_platform/views.py` 中 `spec_data` 排序逻辑
+- **影响文件**：`apps/customer_platform/views.py`
+- **数据库**：否
+
 ### 1. UI全面改版 [feat][style]
 - **侧边栏**：深蓝底 → 白色底 + 蓝色active指示条
 - **图标库**：Bootstrap Icons → Font Awesome 6.4（CDN引入）
