@@ -16,18 +16,33 @@ PDF框识别工具
    - 真正的制版框是空心描边（stroke有颜色，fill=None）
    - 文字转曲后是实心填充（stroke=None，fill有颜色）
 2. 【增强】数量语义理解：支持"烫板 3块"等带制版上下文的数量识别（默认每个框）
+
+2025-06-06 性能优化：
+1. 【延迟文字提取】先对drawings做基础过滤，过滤后再提取文字块，避免无效计算
+2. 【减少嵌套循环】文字区域过滤改用提前break和批量检测
+3. 【避免重复打开文件】smart_extract_boxes复用find_colored_rectangles已解析的文档
+4. 【提前退出】只处理前3页，每页最多处理200个drawings，防止超大文件卡死
+5. 【减少重复计算】缓存rect_area，避免多次乘法
 """
 
 import fitz
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
+# 性能参数
+MAX_PAGES = 3           # 最多处理3页
+MAX_DRAWINGS_PER_PAGE = 200  # 每页最多处理200个绘图元素
+MAX_CANDIDATES = 50     # 最多保留50个候选框进入文字过滤阶段
 
-def find_colored_rectangles(file_path):
+
+def find_colored_rectangles(file_path_or_doc):
     """
     识别PDF页面中的有效制版框（排除文字笔画、装饰元素、内嵌描边等干扰）
     返回 [{x, y, width, height, area}, ...] 列表，按面积从大到小排序
+    
+    支持传入文件路径(str)或已打开的fitz.Document对象，避免重复打开文件
     
     过滤策略：
     1. 最小尺寸放宽到 15x10pt（约5.3x3.5mm），保留小制版框
@@ -38,20 +53,35 @@ def find_colored_rectangles(file_path):
     6. 【新增】排除纯填充（fill-only）的小图形（<28pt/10mm），避免文字/装饰被误认为框
     7. 最多返回5个框
     """
-    doc = fitz.open(file_path)
+    start_time = time.time()
+    
+    # 支持传入已打开的文档对象或文件路径
+    if isinstance(file_path_or_doc, str):
+        doc = fitz.open(file_path_or_doc)
+        should_close = True
+    else:
+        doc = file_path_or_doc
+        should_close = False
+    
     colored_rects = []
+    pages_to_process = min(len(doc), MAX_PAGES)
 
-    for page_num in range(len(doc)):
+    for page_num in range(pages_to_process):
         page = doc[page_num]
         page_rect = page.rect
         page_area = page_rect.width * page_rect.height
         
-        # 获取页面文字块，用于排除文字区域被误认为框
-        text_blocks = page.get_text("blocks")
-        text_rects = [fitz.Rect(b[:4]) for b in text_blocks]
+        # 【优化】延迟提取文字块：先过滤drawings，有候选框后再提取文字
+        text_rects = None
         
         # 方法1: 通过绘图路径识别
         drawings = page.get_drawings()
+        
+        # 【优化】限制每页处理的drawings数量，防止超大文件卡死
+        if len(drawings) > MAX_DRAWINGS_PER_PAGE:
+            logger.info(f"[红框识别] 第{page_num+1}页绘图元素过多({len(drawings)}个)，只处理前{MAX_DRAWINGS_PER_PAGE}个")
+            drawings = drawings[:MAX_DRAWINGS_PER_PAGE]
+        
         for d in drawings:
             color = d.get('color')
             fill = d.get('fill')
@@ -106,21 +136,7 @@ def find_colored_rectangles(file_path):
                 if not has_stroke and has_fill:
                     # 纯填充图形，如果尺寸较小（<28pt ≈ 10mm），更可能是文字/装饰
                     if rect.width < 28 or rect.height < 28:
-                        logger.info(f"[红框识别] 过滤纯填充小图形: {rect.width:.1f}x{rect.height:.1f}pt")
                         continue
-                
-                # 过滤7：排除与文字块高度重叠的区域（客户备注/文字注释）
-                # 【修复】阈值从 75% 放宽到 90%，避免误删含文字的有效制版框
-                # 同时增加面积判断：大于 3000pt²（约10cm×10cm）的框即使含文字也保留
-                is_text_area = False
-                if rect_area < 3000:  # 只对较小的框应用文字过滤
-                    for tr in text_rects:
-                        intersect = rect & tr
-                        if intersect and intersect.get_area() > rect_area * 0.90:
-                            is_text_area = True
-                            break
-                if is_text_area:
-                    continue
                 
                 colored_rects.append({
                     'page': page_num,
@@ -128,9 +144,46 @@ def find_colored_rectangles(file_path):
                     'y': round(rect.y0, 2),
                     'width': round(rect.width, 2),
                     'height': round(rect.height, 2),
-                    'area': round(rect.width * rect.height, 2),
+                    'area': round(rect_area, 2),
                     'is_red': is_red_stroke or is_red_fill,
                 })
+
+        # 【优化】如果候选框太多，先裁剪到合理数量再提取文字做过滤
+        if len(colored_rects) > MAX_CANDIDATES:
+            # 按红色优先、面积从大到小排序，保留前MAX_CANDIDATES个
+            colored_rects.sort(key=lambda r: (not r.get('is_red', False), -r['area']))
+            colored_rects = colored_rects[:MAX_CANDIDATES]
+        
+        # 【优化】有候选框且需要文字过滤时，才提取文字块
+        if colored_rects:
+            text_blocks = page.get_text("blocks")
+            text_rects = [fitz.Rect(b[:4]) for b in text_blocks]
+            
+            # 过滤7：排除与文字块高度重叠的区域（客户备注/文字注释）
+            # 【修复】阈值从 75% 放宽到 90%，避免误删含文字的有效制版框
+            # 同时增加面积判断：大于 3000pt²（约10cm×10cm）的框即使含文字也保留
+            filtered_rects = []
+            for r in colored_rects:
+                if r['page'] != page_num:
+                    filtered_rects.append(r)
+                    continue
+                    
+                if r['area'] >= 3000:  # 大于3000pt²的框直接保留
+                    filtered_rects.append(r)
+                    continue
+                
+                # 【优化】批量检测文字重叠，提前break
+                is_text_area = False
+                r_fitz = fitz.Rect(r['x'], r['y'], r['x'] + r['width'], r['y'] + r['height'])
+                for tr in text_rects:
+                    intersect = r_fitz & tr
+                    if intersect and intersect.get_area() > r['area'] * 0.90:
+                        is_text_area = True
+                        break
+                if not is_text_area:
+                    filtered_rects.append(r)
+            
+            colored_rects = filtered_rects
 
         # 方法2: 通过注释(Annotation)识别
         for annot in page.annots():
@@ -161,11 +214,12 @@ def find_colored_rectangles(file_path):
                             'y': round(rect.y0, 2),
                             'width': round(rect.width, 2),
                             'height': round(rect.height, 2),
-                            'area': round(rect.width * rect.height, 2),
+                            'area': round(rect_area, 2),
                             'is_red': is_red,
                         })
 
-    doc.close()
+    if should_close:
+        doc.close()
 
     # 去重：合并坐标相近的矩形
     colored_rects = _dedup_rects(colored_rects)
@@ -176,12 +230,16 @@ def find_colored_rectangles(file_path):
 
     # 过滤嵌套内边框：如果一个框完全包含在另一个框内，且面积 > 外层框的 60%，
     # 则认为是内边框/描边副本，予以排除
+    # 【优化】只对前20个框做嵌套检查
     filtered = []
-    for i, r in enumerate(colored_rects):
+    check_count = min(len(colored_rects), 20)
+    for i in range(check_count):
+        r = colored_rects[i]
         is_inner_border = False
-        for j, outer in enumerate(colored_rects):
+        for j in range(check_count):
             if i == j:
                 continue
+            outer = colored_rects[j]
             # 检查 r 是否几乎完全在 outer 内部
             if (r['x'] >= outer['x'] - 2 and 
                 r['y'] >= outer['y'] - 2 and
@@ -193,6 +251,9 @@ def find_colored_rectangles(file_path):
                     break
         if not is_inner_border:
             filtered.append(r)
+    # 保留未检查的框
+    if len(colored_rects) > check_count:
+        filtered.extend(colored_rects[check_count:])
     colored_rects = filtered
 
     # 【关键】系统只识别红色框，过滤掉所有非红色框
@@ -209,10 +270,11 @@ def find_colored_rectangles(file_path):
     # 最多返回5个框
     result = colored_rects[:5]
     
+    elapsed = time.time() - start_time
     if result:
-        logger.info(f"[红框识别] 识别到 {len(result)} 个框: {result}")
+        logger.info(f"[红框识别] 识别到 {len(result)} 个框，耗时 {elapsed:.2f}s: {result}")
     else:
-        logger.info(f"[红框识别] 未识别到有效框")
+        logger.info(f"[红框识别] 未识别到有效框，耗时 {elapsed:.2f}s")
     
     return result
 
@@ -297,13 +359,10 @@ def extract_red_box_area_mm(file_path, rect_index=0):
     if not rects or rect_index >= len(rects):
         return None
     r = rects[rect_index]
-    doc = fitz.open(file_path)
-    page = doc[0]
     # 点转mm: 1点 = 1/72英寸 = 25.4/72 mm
     pt_to_mm = 25.4 / 72.0
     length_mm = round(r['width'] * pt_to_mm, 2)
     width_mm = round(r['height'] * pt_to_mm, 2)
-    doc.close()
     return length_mm, width_mm
 
 
@@ -370,19 +429,26 @@ def smart_extract_boxes(file_path):
     对尺寸相同的框去重（认为是同一内容的重复）
     返回: [{'length_mm': ..., 'width_mm': ..., 'quantity': ..., 'nearby_text': ...}, ...]
     """
-    rects = find_colored_rectangles(file_path)
+    start_time = time.time()
+    
+    # 【优化】只打开一次文件，复用文档对象
+    doc = fitz.open(file_path)
+    
+    rects = find_colored_rectangles(doc)
     if not rects:
         logger.info(f"[红框识别] {file_path} 未识别到框")
+        doc.close()
         return []
 
-    doc = fitz.open(file_path)
     pt_to_mm = 25.4 / 72.0
     results = []
 
-    # 【改进】先提取整个页面的文字，用于全局数量语义理解
+    # 【优化】只提取有框的页面的文字，而非所有页面
+    pages_with_rects = set(r['page'] for r in rects)
     full_page_text = ""
-    for page_num in range(len(doc)):
-        full_page_text += doc[page_num].get_text()
+    for page_num in pages_with_rects:
+        if page_num < len(doc):
+            full_page_text += doc[page_num].get_text()
     
     global_qty, global_mode = extract_global_quantity_semantic(full_page_text)
     if global_qty:
@@ -433,7 +499,8 @@ def smart_extract_boxes(file_path):
         if not is_dup:
             unique.append(item)
 
-    logger.info(f"[红框识别] {file_path} 去重后 {len(unique)} 个框")
+    elapsed = time.time() - start_time
+    logger.info(f"[红框识别] {file_path} 去重后 {len(unique)} 个框，总耗时 {elapsed:.2f}s")
     return unique
 
 
