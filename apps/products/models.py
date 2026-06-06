@@ -12,22 +12,22 @@ class ProductSpec(models.Model):
     """商品规格（产品名称-材质-厚度-单价）"""
     PRODUCT_NAME_CHOICES = [
         # 腐蚀版
-        ('etching_concave', '腐蚀版 - 凹版'),
-        ('etching_convex', '腐蚀版 - 凸版'),
-        ('etching_magnesium_concave_resin_convex', '腐蚀版 - 镁凹树凸'),
-        ('etching_double_sided_magnesium_bump', '腐蚀版 - 双面镁激凸'),
+        ('etching_concave', '腐蚀版-凹版'),
+        ('etching_convex', '腐蚀版-凸版'),
+        ('etching_magnesium_concave_resin_convex', '腐蚀版-镁凹树凸'),
+        ('etching_double_sided_magnesium_bump', '腐蚀版-双面镁激凸'),
         # 雕刻版
-        ('carving_flat_convex', '雕刻版 - 平雕（凸版）'),
-        ('carving_flat_concave', '雕刻版 - 平雕（凹版）'),
-        ('carving_relief_bump_gold', '雕刻版 - 浮雕（激凸/烫凸一体）'),
-        ('carving_relief_multi_bump_gold', '雕刻版 - 浮雕（多层次激凸/烫凸一体）'),
-        ('carving_relief_complex', '雕刻版 - 多层复杂浮雕'),
+        ('carving_flat_convex', '雕刻版-平雕（凸版）'),
+        ('carving_flat_concave', '雕刻版-平雕（凹版）'),
+        ('carving_relief_bump_gold', '雕刻版-浮雕（激凸/烫凸一体）'),
+        ('carving_relief_multi_bump_gold', '雕刻版-浮雕（多层次激凸/烫凸一体）'),
+        ('carving_relief_complex', '雕刻版-多层次浮雕'),
         # 树脂版
-        ('resin_mold', '树脂版 - 倒模树脂版'),
-        ('resin_water', '树脂版 - 水洗树脂版'),
+        ('resin_mold', '树脂版-倒模树脂版'),
+        ('resin_water', '树脂版-水洗树脂版'),
         # 菲林
-        ('film_alignment', '菲林 - 对位菲林'),
-        ('film_uv', '菲林 - UV菲林'),
+        ('film_alignment', '菲林-对位菲林'),
+        ('film_uv', '菲林-UV菲林'),
     ]
     MATERIAL_CHOICES = [
         ('magnesium', '镁'),

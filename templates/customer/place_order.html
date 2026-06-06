@@ -838,10 +838,12 @@ function renderRecognizedFiles(groupId) {
     resultArea.style.display = 'block';
 
     resultArea.innerHTML = group.recognizedFiles.map((f, idx) => {
+        // 第一行：预览图 + 文件名 + 删除按钮
         const previewHtml = f.preview_url
             ? `<img src="${f.preview_url}" class="img-fluid rounded" style="max-height:120px;" alt="预览">`
             : `<div class="text-muted py-3"><i class="fa-solid fa-file-pdf" style="font-size:36px;"></i><br>PDF</div>`;
 
+        // 第二行：尺寸和数量输入
         let dimensionsHtml = '';
         if (f.boxes && f.boxes.length > 1) {
             dimensionsHtml = f.boxes.map((box, bidx) => `
@@ -888,18 +890,22 @@ function renderRecognizedFiles(groupId) {
         return `
         <div class="card mb-2 file-result-card" data-group="${groupId}" data-index="${idx}">
             <div class="card-body py-2 px-3">
-                <div class="d-flex gap-3">
-                    <div class="flex-shrink-0 text-center" style="width:100px;">${previewHtml}</div>
+                <!-- 第一行：预览图 + 文件名 + 删除按钮 -->
+                <div class="d-flex gap-3 align-items-start">
+                    <div class="flex-shrink-0 text-center" style="width:120px;">${previewHtml}</div>
                     <div class="flex-grow-1">
                         <div class="d-flex justify-content-between align-items-start">
-                            <span class="small fw-medium text-truncate" style="max-width:200px;" title="${f.file_name}">${f.file_name}</span>
+                            <span class="fw-medium" title="${f.file_name}">${f.file_name}</span>
                             <button type="button" class="btn btn-sm btn-link text-danger py-0" onclick="removeRecognizedFile(${groupId}, ${idx})">
                                 <i class="fa-solid fa-trash-can"></i>
                             </button>
                         </div>
-                        ${dimensionsHtml}
                         ${boxInfo}
                     </div>
+                </div>
+                <!-- 第二行：尺寸和数量 -->
+                <div class="mt-2 pt-2 border-top">
+                    ${dimensionsHtml}
                 </div>
             </div>
         </div>`;
