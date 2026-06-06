@@ -271,6 +271,7 @@ class OrderItem(models.Model):
     file_processed = models.BooleanField('是否处理文件', default=False)
     file_standard_checked = models.BooleanField('文件符合标准（转曲/矢量）', default=False)
     is_image_file = models.BooleanField('文件是图片文件', default=False)
+    preview_image = models.FileField('预览图', upload_to='previews/%Y%m/', blank=True, null=True)
     # 版类识别 + 红框数据
     plate_type = models.CharField('版类', max_length=50, blank=True, help_text='如:烫金版/压纹版/激凸版/平雕版等')
     red_box_data = models.TextField('红框识别数据', blank=True, help_text='JSON格式: [{x,y,width,height,area}]')

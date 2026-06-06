@@ -460,6 +460,7 @@ def submit_orders(request):
             file_processed=draft.get('file_processed', False),
             file_standard_checked=draft.get('file_standard_checked', False),
             is_image_file=draft.get('is_image_file', False),
+            preview_image=draft.get('preview_url', ''),
             red_box_data=draft.get('boxes_json', ''),
         )
         order.update_total()
@@ -1037,6 +1038,7 @@ def _handle_quick_order_post(request, profile, tier):
                 file_processed=file_processed,
                 file_standard_checked=file_standard_checked,
                 is_image_file=is_image_file,
+                preview_image=fd.get('preview_url', ''),
                 red_box_data=json.dumps(fd.get('boxes', [])),
                 special_requests=group_special_requests,
                 scale_ratio=scale_ratio,

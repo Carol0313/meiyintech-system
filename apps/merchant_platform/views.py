@@ -871,6 +871,21 @@ def merchant_order_detail(request, order_id):
             except Exception:
                 pass
 
+    # 【新增】为没有预览图的旧订单生成预览图
+    for item in order.items.all():
+        if item.file and not item.preview_image:
+            try:
+                from utils.pdf_processor import generate_pdf_preview
+                preview_filename = f"previews/{item.id}.png"
+                preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
+                if not os.path.exists(preview_path):
+                    generate_pdf_preview(item.file.name, preview_filename, dpi=150)
+                if os.path.exists(preview_path):
+                    item.preview_image = preview_filename
+                    item.save(update_fields=['preview_image'])
+            except Exception:
+                pass
+
     # 查询快递100物流轨迹
     tracking_data = None
     if order.tracking_number:
