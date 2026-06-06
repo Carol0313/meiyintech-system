@@ -255,13 +255,13 @@
 
             <!-- 添加规格组按钮 -->
             <button type="button" class="btn btn-outline-primary w-100 mb-3" id="addSpecGroupBtn">
-                <i class="bi bi-plus-lg"></i> 添加规格组
+                <i class="fa-solid fa-plus"></i> 添加规格组
             </button>
 
             <!-- 全局特殊要求（快捷选项保留） -->
             <div class="card">
                 <div class="card-body">
-                    <div class="section-title"><i class="bi bi-chat-left-text"></i> 其他要求</div>
+                    <div class="section-title"><i class="fa-solid fa-comment-dots"></i> 其他要求</div>
                     <div class="mb-3">
                         <label class="form-label">快捷选项</label>
                         <div class="d-flex flex-wrap gap-2">
@@ -288,7 +288,7 @@
         <div class="col-lg-4">
             <div class="card sticky-top" style="top:20px;z-index:100;">
                 <div class="card-body">
-                    <div class="section-title"><i class="bi bi-cart-check"></i> 订单确认</div>
+                    <div class="section-title"><i class="fa-solid fa-cart-check"></i> 订单确认</div>
 
                     <div class="form-section">
                         <label class="form-label">配送方式 <span class="text-danger">*</span></label>
@@ -310,7 +310,7 @@
                         </select>
                         {% if not addresses %}
                         <div class="small text-danger mt-1">
-                            <i class="bi bi-exclamation-triangle"></i> 您还没有收货地址，<a href="{% url 'my_addresses' %}">去添加</a>
+                            <i class="fa-solid fa-triangle-exclamation"></i> 您还没有收货地址，<a href="{% url 'my_addresses' %}">去添加</a>
                         </div>
                         {% endif %}
                     </div>
@@ -338,7 +338,7 @@
 
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" {% if not addresses %}disabled{% endif %}>
-                            <i class="bi bi-check-lg"></i> 确认下单
+                            <i class="fa-solid fa-check"></i> 确认下单
                         </button>
                     </div>
                 </div>
@@ -411,7 +411,7 @@ function renderSpecGroup(id) {
         <div class="card-header">
             <span class="group-title">规格组 ${specGroups.length}</span>
             <button type="button" class="btn btn-sm btn-link text-danger" onclick="removeSpecGroup(${id})">
-                <i class="bi bi-trash"></i> 删除
+                <i class="fa-solid fa-trash-can"></i> 删除
             </button>
         </div>
         <div class="card-body">
@@ -442,7 +442,7 @@ function renderSpecGroup(id) {
                 </div>
                 <div class="mt-2 border-tip" data-group="${id}" style="display:none;">
                     <div class="alert alert-warning py-2 mb-0 d-flex align-items-center" style="font-size:13px;">
-                        <i class="bi bi-info-circle-fill me-2"></i>
+                        <i class="fa-solid fa-circle-info me-2"></i>
                         <span class="border-tip-text"></span>
                     </div>
                 </div>
@@ -452,7 +452,7 @@ function renderSpecGroup(id) {
             <div class="spec-subgroup">
                 <label class="form-label">上传文件</label>
                 <div class="upload-zone upload-zone-group" data-group="${id}">
-                    <i class="bi bi-cloud-arrow-up"></i>
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
                     <p class="fw-medium text-dark">点击或拖拽上传 PDF 文件</p>
                     <p>支持一次选择多个文件，选择完成后点击"开始识别"</p>
                     <input type="file" class="pdf-input-group" accept=".pdf" multiple style="display:none;" data-group="${id}">
@@ -464,7 +464,7 @@ function renderSpecGroup(id) {
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <span class="fw-medium small">待识别文件 (<span class="pending-count">0</span>)</span>
                     <button type="button" class="btn btn-sm btn-primary start-recognize-btn" data-group="${id}">
-                        <i class="bi bi-magic"></i> 开始识别
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> 开始识别
                     </button>
                 </div>
                 <div class="list-group list-group-flush border rounded pending-files-list"></div>
@@ -475,9 +475,9 @@ function renderSpecGroup(id) {
 
             <!-- 缩放比例选项 -->
             <div class="spec-subgroup mt-3 pt-3 border-top">
-                <label class="form-label fw-bold"><i class="bi bi-arrows-angle-contract text-primary"></i> 缩放设置</label>
+                <label class="form-label fw-bold"><i class="fa-solid fa-compress text-primary"></i> 缩放设置</label>
                 <div class="scale-info-text">
-                    <i class="bi bi-info-circle"></i> 金属材料上机加热会有一定膨胀，建议提前缩放补偿
+                    <i class="fa-solid fa-circle-info"></i> 金属材料上机加热会有一定膨胀，建议提前缩放补偿
                 </div>
                 <div class="d-flex flex-wrap gap-2 mb-2">
                     <label class="scale-option active" data-group="${id}" data-value="100">
@@ -502,7 +502,7 @@ function renderSpecGroup(id) {
 
             <!-- 规格组特殊要求备注 -->
             <div class="spec-subgroup mt-3 pt-3 border-top">
-                <label class="form-label text-danger fw-bold"><i class="bi bi-chat-left-text"></i> 特殊要求备注</label>
+                <label class="form-label text-danger fw-bold"><i class="fa-solid fa-comment-dots"></i> 特殊要求备注</label>
                 <textarea name="group_special_requests_${id}" class="form-control group-special-requests border-danger" rows="2" placeholder="该规格组的特殊要求（如：加急、不需要裁切、特殊包装等）" data-group="${id}"></textarea>
             </div>
         </div>
@@ -532,7 +532,7 @@ function bindSpecEvents(groupId) {
             const item = document.createElement('div');
             item.className = 'spec-option';
             item.dataset.value = key;
-            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].label;
+            item.innerHTML = '<i class="fa-solid fa-circle-check check-icon"></i> ' + SPEC_DATA[key].label;
             item.addEventListener('click', () => selectCategory(key));
             categoryGrid.appendChild(item);
         });
@@ -561,7 +561,7 @@ function bindSpecEvents(groupId) {
             const item = document.createElement('div');
             item.className = 'spec-option';
             item.dataset.value = prodKey;
-            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + SPEC_DATA[key].products[prodKey].label;
+            item.innerHTML = '<i class="fa-solid fa-circle-check check-icon"></i> ' + SPEC_DATA[key].products[prodKey].label;
             item.addEventListener('click', () => selectProduct(prodKey));
             productGrid.appendChild(item);
         });
@@ -595,7 +595,7 @@ function bindSpecEvents(groupId) {
             const item = document.createElement('div');
             item.className = 'spec-option';
             item.dataset.value = matKey;
-            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + catData.products[prodKey].materials[matKey].label;
+            item.innerHTML = '<i class="fa-solid fa-circle-check check-icon"></i> ' + catData.products[prodKey].materials[matKey].label;
             item.addEventListener('click', () => selectMaterial(matKey));
             materialGrid.appendChild(item);
         });
@@ -628,7 +628,7 @@ function bindSpecEvents(groupId) {
             item.className = 'spec-option';
             item.dataset.value = t.value;
             item.dataset.price = t.price;
-            item.innerHTML = '<i class="bi bi-check-circle-fill check-icon"></i> ' + t.label + ' <span class="text-muted small">(¥' + t.price + '/cm²)</span>';
+            item.innerHTML = '<i class="fa-solid fa-circle-check check-icon"></i> ' + t.label + ' <span class="text-muted small">(¥' + t.price + '/cm²)</span>';
             item.addEventListener('click', () => selectThickness(t.value, t.price));
             thicknessGrid.appendChild(item);
         });
@@ -724,9 +724,9 @@ function bindUploadEvents(groupId) {
         pendingCount.textContent = group.pendingFiles.length;
         pendingList.innerHTML = group.pendingFiles.map((file, idx) => `
             <div class="list-group-item d-flex justify-content-between align-items-center py-2">
-                <span class="small"><i class="bi bi-file-earmark-pdf text-danger"></i> ${file.name}</span>
+                <span class="small"><i class="fa-solid fa-file-pdf text-danger"></i> ${file.name}</span>
                 <button type="button" class="btn btn-sm btn-link text-danger" onclick="removePendingFile(${groupId}, ${idx})">
-                    <i class="bi bi-x-lg"></i>
+                    <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
         `).join('');
@@ -813,9 +813,9 @@ function removePendingFile(groupId, idx) {
             pendingCount.textContent = group.pendingFiles.length;
             pendingList.innerHTML = group.pendingFiles.map((file, i) => `
                 <div class="list-group-item d-flex justify-content-between align-items-center py-2">
-                    <span class="small"><i class="bi bi-file-earmark-pdf text-danger"></i> ${file.name}</span>
+                    <span class="small"><i class="fa-solid fa-file-pdf text-danger"></i> ${file.name}</span>
                     <button type="button" class="btn btn-sm btn-link text-danger" onclick="removePendingFile(${groupId}, ${i})">
-                        <i class="bi bi-x-lg"></i>
+                        <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
             `).join('');
@@ -840,7 +840,7 @@ function renderRecognizedFiles(groupId) {
     resultArea.innerHTML = group.recognizedFiles.map((f, idx) => {
         const previewHtml = f.preview_url
             ? `<img src="${f.preview_url}" class="img-fluid rounded" style="max-height:120px;" alt="预览">`
-            : `<div class="text-muted py-3"><i class="bi bi-file-earmark-pdf" style="font-size:36px;"></i><br>PDF</div>`;
+            : `<div class="text-muted py-3"><i class="fa-solid fa-file-pdf" style="font-size:36px;"></i><br>PDF</div>`;
 
         let dimensionsHtml = '';
         if (f.boxes && f.boxes.length > 1) {
@@ -882,7 +882,7 @@ function renderRecognizedFiles(groupId) {
         }
 
         const boxInfo = f.box_count > 0
-            ? `<div class="small text-info mt-1"><i class="bi bi-bounding-box"></i> 检测到 ${f.box_count} 个内容框</div>`
+            ? `<div class="small text-info mt-1"><i class="fa-solid fa-vector-square"></i> 检测到 ${f.box_count} 个内容框</div>`
             : '';
 
         return `
@@ -894,7 +894,7 @@ function renderRecognizedFiles(groupId) {
                         <div class="d-flex justify-content-between align-items-start">
                             <span class="small fw-medium text-truncate" style="max-width:200px;" title="${f.file_name}">${f.file_name}</span>
                             <button type="button" class="btn btn-sm btn-link text-danger py-0" onclick="removeRecognizedFile(${groupId}, ${idx})">
-                                <i class="bi bi-trash"></i>
+                                <i class="fa-solid fa-trash-can"></i>
                             </button>
                         </div>
                         ${dimensionsHtml}

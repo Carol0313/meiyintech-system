@@ -68,7 +68,7 @@
 
 {% if order.plate_status == 'auto_generated' %}
 <div class="plate-alert auto">
-    <i class="bi bi-magic"></i>
+    <i class="fa-solid fa-wand-magic-sparkles"></i>
     <div>
         <strong>系统自动拼版已完成</strong>
         <div class="small">系统已根据产品尺寸自动生成拼版建议，请设计师确认或进行微调。确认后订单将自动下发到工厂生产。</div>
@@ -212,7 +212,7 @@
                     </div>
                     {% else %}
                     <div class="text-center text-muted">
-                        <i class="bi bi-grid-3x3-gap" style="font-size:48px; opacity:0.3;"></i>
+                        <i class="fa-solid fa-table-cells" style="font-size:48px; opacity:0.3;"></i>
                         <p class="mt-2 mb-0">暂无拼版数据</p>
                         <p class="small">请先生成拼版建议</p>
                     </div>
@@ -229,16 +229,16 @@
 
                     <div class="action-bar">
                         <button type="submit" name="action" value="save" class="btn-save-plate">
-                            <i class="bi bi-save"></i> 保存拼版
+                            <i class="fa-solid fa-floppy-disk"></i> 保存拼版
                         </button>
 
                         {% if order.plate_status == 'auto_generated' %}
                         <button type="submit" name="action" value="confirm_plate" class="btn-confirm-plate" onclick="return confirm('确认后订单将自动下发到工厂生产，是否继续？')">
-                            <i class="bi bi-check-lg"></i> 确认拼版并下发工厂
+                            <i class="fa-solid fa-check"></i> 确认拼版并下发工厂
                         </button>
 
                         <button type="button" class="btn-reject-plate" data-bs-toggle="modal" data-bs-target="#rejectModal">
-                            <i class="bi bi-x-lg"></i> 驳回拼版
+                            <i class="fa-solid fa-xmark"></i> 驳回拼版
                         </button>
                         {% endif %}
                     </div>

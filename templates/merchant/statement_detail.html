@@ -9,14 +9,14 @@
         <div class="card stat-card">
             <div class="stat-label">账单总金额</div>
             <div class="stat-value" style="color:var(--primary);">¥{{ statement.total_amount }}</div>
-            <div class="stat-icon primary"><i class="bi bi-currency-yen"></i></div>
+            <div class="stat-icon primary"><i class="fa-solid fa-yen-sign"></i></div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card stat-card">
             <div class="stat-label">订单数量</div>
             <div class="stat-value">{{ orders|length }}</div>
-            <div class="stat-icon info"><i class="bi bi-box-seam"></i></div>
+            <div class="stat-icon info"><i class="fa-solid fa-box-open"></i></div>
         </div>
     </div>
     <div class="col-md-3">
@@ -29,14 +29,14 @@
                 {% elif statement.status == 'settled' %}<span class="badge badge-status status-received">已结清</span>
                 {% endif %}
             </div>
-            <div class="stat-icon success"><i class="bi bi-check-circle"></i></div>
+            <div class="stat-icon success"><i class="fa-solid fa-circle-check"></i></div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card stat-card">
             <div class="stat-label">客户已用额度</div>
             <div class="stat-value" style="font-size:20px;">¥{{ statement.customer.customer_profile.credit_used }} / ¥{{ statement.customer.customer_profile.credit_limit }}</div>
-            <div class="stat-icon warning"><i class="bi bi-credit-card"></i></div>
+            <div class="stat-icon warning"><i class="fa-solid fa-credit-card"></i></div>
         </div>
     </div>
 </div>
@@ -45,16 +45,16 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>账单信息</span>
         <div>
-            <a href="{% url 'statement_export' statement.id %}" class="btn btn-outline-primary"><i class="bi bi-file-earmark-excel"></i> 导出对账单</a>
+            <a href="{% url 'statement_export' statement.id %}" class="btn btn-outline-primary"><i class="fa-solid fa-file-excel"></i> 导出对账单</a>
             {% if statement.status == 'confirmed' %}
             <form method="post" action="{% url 'statement_mark_paid' statement.id %}" class="d-inline ms-2" onsubmit="return confirm('确认客户已付款？标记后客户将看到已付款状态。')">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-warning"><i class="bi bi-cash"></i> 标记已付款</button>
+                <button type="submit" class="btn btn-warning"><i class="fa-solid fa-money-bill"></i> 标记已付款</button>
             </form>
             {% elif statement.status == 'paid' %}
             <form method="post" action="{% url 'statement_settle' statement.id %}" class="d-inline ms-2" onsubmit="return confirm('确认已收到客户付款？结清后将释放该账单占用的信用额度。')">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> 确认收款并结清</button>
+                <button type="submit" class="btn btn-success"><i class="fa-solid fa-check"></i> 确认收款并结清</button>
             </form>
             {% endif %}
         </div>

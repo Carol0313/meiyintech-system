@@ -6,7 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>当前子账号：{{ current_count }} / {{ max_count }}</div>
     {% if current_count < max_count %}
-    <a href="{% url 'customer_subaccount_add' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> 新增子账号</a>
+    <a href="{% url 'customer_subaccount_add' %}" class="btn btn-primary btn-sm"><i class="fa-solid fa-plus"></i> 新增子账号</a>
     {% endif %}
 </div>
 <div class="card">

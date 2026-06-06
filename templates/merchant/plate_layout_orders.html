@@ -23,7 +23,7 @@
 <!-- 待确认拼版（系统自动生成） -->
 <div class="mb-4">
     <div class="section-title">
-        <i class="bi bi-magic" style="color: var(--primary);"></i>
+        <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--primary);"></i>
         待确认拼版
         <span class="badge badge-auto">{{ pending_confirm.count }}</span>
         <span class="small text-muted ms-2">系统已自动拼版，请设计师确认或微调</span>
@@ -48,13 +48,13 @@
                         <td><span class="badge badge-auto">已自动拼版</span></td>
                         <td>
                             <a href="{% url 'plate_layout_work' o.id %}" class="btn btn-sm btn-primary">
-                                <i class="bi bi-check2-square"></i> 确认拼版
+                                <i class="fa-solid fa-square-check"></i> 确认拼版
                             </a>
                         </td>
                     </tr>
                     {% empty %}
                     <tr><td colspan="6" class="text-center text-muted py-4">
-                        <i class="bi bi-inbox fs-3 d-block mb-2" style="opacity:0.3;"></i>
+                        <i class="fa-solid fa-box-open fs-3 d-block mb-2" style="opacity:0.3;"></i>
                         暂无待确认拼版的订单
                     </td></tr>
                     {% endfor %}
@@ -67,7 +67,7 @@
 <!-- 待拼版（还未生成） -->
 <div class="mb-4">
     <div class="section-title">
-        <i class="bi bi-pencil-square" style="color: var(--orange);"></i>
+        <i class="fa-solid fa-pen-to-square" style="color: var(--orange);"></i>
         待手动拼版
         <span class="badge badge-manual">{{ pending_work.count }}</span>
         <span class="small text-muted ms-2">需要设计师从零开始拼版</span>
@@ -93,7 +93,7 @@
                     </tr>
                     {% empty %}
                     <tr><td colspan="5" class="text-center text-muted py-4">
-                        <i class="bi bi-inbox fs-3 d-block mb-2" style="opacity:0.3;"></i>
+                        <i class="fa-solid fa-box-open fs-3 d-block mb-2" style="opacity:0.3;"></i>
                         暂无待拼版订单
                     </td></tr>
                     {% endfor %}

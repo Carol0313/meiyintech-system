@@ -15,10 +15,10 @@
 <!-- 顶部导航 -->
 <div class="mb-3">
     <a href="{% url 'factory_list' %}" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-arrow-left"></i> 返回工厂列表
+        <i class="fa-solid fa-arrow-left"></i> 返回工厂列表
     </a>
     <a href="{% url 'factory_edit' factory.id %}" class="btn btn-outline-primary btn-sm ms-2">
-        <i class="bi bi-pencil"></i> 编辑工厂信息
+        <i class="fa-solid fa-pencil"></i> 编辑工厂信息
     </a>
 </div>
 
@@ -43,7 +43,7 @@
     <div class="col-md-8">
         <div class="card status-card {% if '正常' in equipment_status.status_text %}status-card{% elif '故障' in equipment_status.status_text or '异常' in equipment_status.status_text %}danger{% else %}warning{% endif %}">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-cpu"></i> 设备运行状态</span>
+                <span><i class="fa-solid fa-microchip"></i> 设备运行状态</span>
                 <span class="text-muted small">更新于 {{ equipment_status.updated_at|date:"m-d H:i" }}</span>
             </div>
             <div class="card-body">
@@ -61,7 +61,7 @@
                         </div>
                         <div class="col-md-2 d-flex align-items-end">
                             <button type="submit" class="btn btn-success w-100">
-                                <i class="bi bi-check-lg"></i> 保存
+                                <i class="fa-solid fa-check"></i> 保存
                             </button>
                         </div>
                     </div>
@@ -74,11 +74,11 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-box-seam"></i> 库存 / 物料管理</span>
+                <span><i class="fa-solid fa-box-open"></i> 库存 / 物料管理</span>
                 <div>
                     {% if inventories %}
                     <a href="{% url 'export_inventory' factory.id %}" class="btn btn-outline-success btn-sm me-2">
-                        <i class="bi bi-file-earmark-excel"></i> 导出盘点表
+                        <i class="fa-solid fa-file-excel"></i> 导出盘点表
                     </a>
                     {% endif %}
                     <span class="badge bg-primary">{{ inventories.count }} 项</span>
@@ -115,14 +115,14 @@
                                 <td class="text-muted small">{{ inv.updated_at|date:"m-d H:i" }}</td>
                                 <td>
                                     <button type="submit" form="inv-form-{{ inv.id }}" class="btn btn-sm btn-outline-success" title="保存">
-                                        <i class="bi bi-check-lg"></i>
+                                        <i class="fa-solid fa-check"></i>
                                     </button>
                                     <form method="post" class="d-inline">
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="delete_inventory">
                                         <input type="hidden" name="inventory_id" value="{{ inv.id }}">
                                         <button type="submit" class="btn btn-sm btn-outline-danger" title="删除" onclick="return confirm('确认删除该库存项吗？');">
-                                            <i class="bi bi-trash"></i>
+                                            <i class="fa-solid fa-trash-can"></i>
                                         </button>
                                     </form>
                                 </td>
@@ -133,7 +133,7 @@
                 </div>
                 {% else %}
                 <div class="text-center text-muted py-4">
-                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                    <i class="fa-solid fa-box-open fs-2 d-block mb-2"></i>
                     暂无库存记录
                 </div>
                 {% endif %}
@@ -167,7 +167,7 @@
                             </div>
                             <div class="col-md-2">
                                 <button type="submit" class="btn btn-primary btn-sm w-100">
-                                    <i class="bi bi-plus-lg"></i> 添加
+                                    <i class="fa-solid fa-plus"></i> 添加
                                 </button>
                             </div>
                         </div>

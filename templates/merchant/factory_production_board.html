@@ -435,49 +435,49 @@
 <!-- 顶部统计 -->
 <div class="kpi-bar">
     <div class="kpi-card pending">
-        <div class="kpi-icon pending"><i class="bi bi-hourglass-split"></i></div>
+        <div class="kpi-icon pending"><i class="fa-solid fa-hourglass-half"></i></div>
         <div>
             <div class="kpi-number">{{ stats.pending }}</div>
             <div class="kpi-label">待生产</div>
         </div>
         <span class="refresh-badge ms-auto">
-            <i class="bi bi-arrow-repeat"></i>
+            <i class="fa-solid fa-arrows-rotate"></i>
             <span id="countdown">--:--</span>后刷新
         </span>
     </div>
     <div class="kpi-card active">
-        <div class="kpi-icon active"><i class="bi bi-gear-wide-connected"></i></div>
+        <div class="kpi-icon active"><i class="fa-solid fa-gears"></i></div>
         <div>
             <div class="kpi-number">{{ stats.active }}</div>
             <div class="kpi-label">生产中</div>
         </div>
         <span class="refresh-badge ms-auto">
-            <i class="bi bi-clock"></i>
+            <i class="fa-solid fa-clock"></i>
             <span id="current-time">--:--:--</span>
         </span>
     </div>
     <div class="kpi-card completed">
-        <div class="kpi-icon completed"><i class="bi bi-check-circle"></i></div>
+        <div class="kpi-icon completed"><i class="fa-solid fa-circle-check"></i></div>
         <div>
             <div class="kpi-number">{{ stats.completed }}</div>
             <div class="kpi-label">已完成待发货</div>
         </div>
         <span class="refresh-badge ms-auto">
-            <i class="bi bi-truck"></i>
+            <i class="fa-solid fa-truck-fast"></i>
             批量发货
         </span>
     </div>
     <div class="kpi-card overdue">
-        <div class="kpi-icon overdue"><i class="bi bi-exclamation-triangle-fill"></i></div>
+        <div class="kpi-icon overdue"><i class="fa-solid fa-triangle-exclamation"></i></div>
         <div>
             <div class="kpi-number">{{ stats.overdue }}</div>
             <div class="kpi-label">即将逾期</div>
         </div>
     </div>
     <div class="kpi-card extend clickable" data-bs-toggle="modal" data-bs-target="#extendDeliveryModal">
-        <div class="kpi-icon extend"><i class="bi bi-calendar-plus"></i></div>
+        <div class="kpi-icon extend"><i class="fa-solid fa-calendar-plus"></i></div>
         <div>
-            <div class="kpi-number"><i class="bi bi-plus-lg" style="font-size:1.2rem;"></i></div>
+            <div class="kpi-number"><i class="fa-solid fa-plus" style="font-size:1.2rem;"></i></div>
             <div class="kpi-label">延长交货</div>
         </div>
     </div>
@@ -490,7 +490,7 @@
     <div class="kanban-col pending">
         <div class="col-header">
             <div class="col-title pending">
-                <i class="bi bi-hourglass-split"></i>
+                <i class="fa-solid fa-hourglass-half"></i>
                 待生产
             </div>
             <span class="col-count pending">{{ stats.pending }} 单</span>
@@ -500,7 +500,7 @@
             <div class="kb-card-header">
                 <div>
                     <div class="kb-sn">{{ order.sn }}</div>
-                    <div class="kb-customer"><i class="bi bi-person"></i> {{ order.customer.phone }}</div>
+                    <div class="kb-customer"><i class="fa-solid fa-user"></i> {{ order.customer.phone }}</div>
                 </div>
             </div>
             <div class="kb-timeline">
@@ -509,7 +509,7 @@
             </div>
             {% if order.delivery_date %}
             <div class="kb-countdown normal" data-countdown="{{ order.delivery_date|date:'c' }}">
-                <i class="bi bi-clock"></i> <span class="cd-text">计算中...</span>
+                <i class="fa-solid fa-clock"></i> <span class="cd-text">计算中...</span>
             </div>
             <div class="kb-info-row">
                 <span class="kb-info-label">交货时间:</span>{{ order.delivery_date|date:"m-d H:i" }}
@@ -544,7 +544,7 @@
             {% endif %}
             {% if order.special_requests %}
             <div class="kb-remark">
-                <i class="bi bi-exclamation-circle"></i> {{ order.special_requests }}
+                <i class="fa-solid fa-circle-exclamation"></i> {{ order.special_requests }}
             </div>
             {% endif %}
             <div class="kb-products">
@@ -555,18 +555,18 @@
             <div class="kb-files">
                 {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.layout_image %}
                 <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}">
-                    <i class="bi bi-image"></i> 拼版效果图
+                    <i class="fa-solid fa-image"></i> 拼版效果图
                 </a>
                 {% endif %}
                 {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.production_pdf %}
                 <a class="kb-file-link pdf" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'production_pdf' %}">
-                    <i class="bi bi-file-earmark-pdf"></i> 下载生产PDF
+                    <i class="fa-solid fa-file-pdf"></i> 下载生产PDF
                 </a>
                 {% endif %}
                 {% for item in order.items.all %}
                     {% if item.file %}
                     <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" title="{{ item.file.name }}">
-                        <i class="bi bi-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
+                        <i class="fa-solid fa-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
                     </a>
                     {% endif %}
                 {% endfor %}
@@ -576,13 +576,13 @@
                 <input type="hidden" name="order_id" value="{{ order.id }}">
                 <input type="hidden" name="action" value="start">
                 <button type="submit" class="kb-btn kb-btn-start">
-                    <i class="bi bi-play-fill"></i> 开始生产
+                    <i class="fa-solid fa-circle-play"></i> 开始生产
                 </button>
             </form>
         </div>
         {% empty %}
         <div class="kb-empty">
-            <i class="bi bi-inbox"></i>
+            <i class="fa-solid fa-box-open"></i>
             <p>暂无待生产订单</p>
         </div>
         {% endfor %}
@@ -592,7 +592,7 @@
     <div class="kanban-col active">
         <div class="col-header">
             <div class="col-title active">
-                <i class="bi bi-gear-wide-connected"></i>
+                <i class="fa-solid fa-gears"></i>
                 生产中
             </div>
             <span class="col-count active">{{ stats.active }} 单</span>
@@ -602,7 +602,7 @@
             <div class="kb-card-header">
                 <div>
                     <div class="kb-sn">{{ order.sn }}</div>
-                    <div class="kb-customer"><i class="bi bi-person"></i> {{ order.customer.phone }}</div>
+                    <div class="kb-customer"><i class="fa-solid fa-user"></i> {{ order.customer.phone }}</div>
                 </div>
             </div>
             <div class="kb-timeline">
@@ -611,7 +611,7 @@
             </div>
             {% if order.delivery_date %}
             <div class="kb-countdown normal" data-countdown="{{ order.delivery_date|date:'c' }}">
-                <i class="bi bi-clock"></i> <span class="cd-text">计算中...</span>
+                <i class="fa-solid fa-clock"></i> <span class="cd-text">计算中...</span>
             </div>
             <div class="kb-info-row">
                 <span class="kb-info-label">交货时间:</span>{{ order.delivery_date|date:"m-d H:i" }}
@@ -646,7 +646,7 @@
             {% endif %}
             {% if order.special_requests %}
             <div class="kb-remark">
-                <i class="bi bi-exclamation-circle"></i> {{ order.special_requests }}
+                <i class="fa-solid fa-circle-exclamation"></i> {{ order.special_requests }}
             </div>
             {% endif %}
             <div class="kb-products">
@@ -657,18 +657,18 @@
             <div class="kb-files">
                 {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.layout_image %}
                 <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}">
-                    <i class="bi bi-image"></i> 拼版效果图
+                    <i class="fa-solid fa-image"></i> 拼版效果图
                 </a>
                 {% endif %}
                 {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.production_pdf %}
                 <a class="kb-file-link pdf" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'production_pdf' %}">
-                    <i class="bi bi-file-earmark-pdf"></i> 下载生产PDF
+                    <i class="fa-solid fa-file-pdf"></i> 下载生产PDF
                 </a>
                 {% endif %}
                 {% for item in order.items.all %}
                     {% if item.file %}
                     <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" title="{{ item.file.name }}">
-                        <i class="bi bi-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
+                        <i class="fa-solid fa-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
                     </a>
                     {% endif %}
                 {% endfor %}
@@ -690,14 +690,14 @@
                     <input type="hidden" name="order_id" value="{{ order.id }}">
                     <input type="hidden" name="action" value="upload_production_photo">
                     <label class="kb-btn" style="background:#f1f5f9;color:#475569;cursor:pointer;padding:7px 14px;font-size:0.75rem;border-radius:8px;">
-                        <i class="bi bi-camera"></i> 拍照识别
+                        <i class="fa-solid fa-camera"></i> 拍照识别
                         <input type="file" name="photo" accept="image/*" style="display:none;" onchange="this.form.submit()">
                     </label>
                 </form>
                 <button type="button" class="kb-btn" style="background:var(--c-extend-light);color:var(--c-extend);"
                         data-bs-toggle="modal" data-bs-target="#extendDeliveryModal"
                         onclick="preselectOrderForExtend('{{ order.id }}', '{{ order.delivery_date|date:'Y-m-d H:i'|default:'' }}')">
-                    <i class="bi bi-calendar-plus"></i> 延长交货
+                    <i class="fa-solid fa-calendar-plus"></i> 延长交货
                 </button>
                 <form method="post" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                     {% csrf_token %}
@@ -705,14 +705,14 @@
                     <input type="hidden" name="action" value="complete">
                     <input type="file" name="photo" accept="image/*" class="kb-upload" title="上传成品照片">
                     <button type="submit" class="kb-btn kb-btn-complete">
-                        <i class="bi bi-check-lg"></i> 完成生产
+                        <i class="fa-solid fa-check"></i> 完成生产
                     </button>
                 </form>
             </div>
         </div>
         {% empty %}
         <div class="kb-empty">
-            <i class="bi bi-inbox"></i>
+            <i class="fa-solid fa-box-open"></i>
             <p>暂无生产中订单</p>
         </div>
         {% endfor %}
@@ -722,7 +722,7 @@
     <div class="kanban-col completed">
         <div class="col-header">
             <div class="col-title completed">
-                <i class="bi bi-check-circle"></i>
+                <i class="fa-solid fa-circle-check"></i>
                 已完成待发货
             </div>
             <span class="col-count completed">{{ stats.completed }} 单</span>
@@ -737,7 +737,7 @@
                     <label class="form-check-label" for="selectAllShip" style="font-size:0.8125rem;font-weight:500;">全选</label>
                 </div>
                 <button type="submit" class="kb-btn kb-btn-ship ms-auto" onclick="return confirm('确认批量发货选中的订单吗？');">
-                    <i class="bi bi-truck"></i> 批量发货
+                    <i class="fa-solid fa-truck-fast"></i> 批量发货
                 </button>
             </div>
             {% endif %}
@@ -748,7 +748,7 @@
                         <input class="form-check-input ship-check" type="checkbox" name="ship_order_{{ order.id }}" value="1" style="margin-top:0;">
                         <div>
                             <div class="kb-sn">{{ order.sn }}</div>
-                            <div class="kb-customer"><i class="bi bi-person"></i> {{ order.customer.phone }}</div>
+                            <div class="kb-customer"><i class="fa-solid fa-user"></i> {{ order.customer.phone }}</div>
                         </div>
                     </div>
                 </div>
@@ -758,7 +758,7 @@
                 </div>
                 {% if order.delivery_date %}
                 <div class="kb-countdown normal" data-countdown="{{ order.delivery_date|date:'c' }}">
-                    <i class="bi bi-clock"></i> <span class="cd-text">计算中...</span>
+                    <i class="fa-solid fa-clock"></i> <span class="cd-text">计算中...</span>
                 </div>
                 <div class="kb-info-row">
                     <span class="kb-info-label">交货时间:</span>{{ order.delivery_date|date:"m-d H:i" }}
@@ -793,7 +793,7 @@
                 {% endif %}
                 {% if order.special_requests %}
                 <div class="kb-remark">
-                    <i class="bi bi-exclamation-circle"></i> {{ order.special_requests }}
+                    <i class="fa-solid fa-circle-exclamation"></i> {{ order.special_requests }}
                 </div>
                 {% endif %}
                 <div class="kb-products">
@@ -804,13 +804,13 @@
                 <div class="kb-files">
                     {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.layout_image %}
                     <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}">
-                        <i class="bi bi-image"></i> 拼版效果图
+                        <i class="fa-solid fa-image"></i> 拼版效果图
                     </a>
                     {% endif %}
                     {% for item in order.items.all %}
                         {% if item.file %}
                         <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" title="{{ item.file.name }}">
-                            <i class="bi bi-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
+                            <i class="fa-solid fa-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
                         </a>
                         {% endif %}
                     {% endfor %}
@@ -837,7 +837,7 @@
             </div>
             {% empty %}
             <div class="kb-empty">
-                <i class="bi bi-inbox"></i>
+                <i class="fa-solid fa-box-open"></i>
                 <p>暂无待发货订单</p>
             </div>
             {% endfor %}
@@ -849,14 +849,14 @@
 <!-- ========== 今日生产概览 ========== -->
 <div class="card mb-4 mt-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-bar-chart-line"></i> 今日生产概览</span>
+        <span><i class="fa-solid fa-chart-line"></i> 今日生产概览</span>
         <span class="text-muted small">{{ now|date:"Y-m-d" }}</span>
     </div>
     <div class="card-body">
         <div class="row g-3">
             <div class="col-md-4">
                 <div class="d-flex align-items-center gap-3 p-3 rounded" style="background:#ecfdf5;border:1px solid #a7f3d0;">
-                    <div class="fs-1" style="color:#059669;"><i class="bi bi-check-circle-fill"></i></div>
+                    <div class="fs-1" style="color:#059669;"><i class="fa-solid fa-circle-check"></i></div>
                     <div>
                         <div class="fs-4 fw-bold" style="color:#059669;">{{ today_stats.completed_count }}</div>
                         <div class="small text-muted">今日已完成（{{ today_stats.completed_area|floatformat:0 }}cm²）</div>
@@ -865,7 +865,7 @@
             </div>
             <div class="col-md-4">
                 <div class="d-flex align-items-center gap-3 p-3 rounded" style="background:#eff6ff;border:1px solid #bfdbfe;">
-                    <div class="fs-1" style="color:#2563eb;"><i class="bi bi-gear-wide-connected"></i></div>
+                    <div class="fs-1" style="color:#2563eb;"><i class="fa-solid fa-gears"></i></div>
                     <div>
                         <div class="fs-4 fw-bold" style="color:#2563eb;">{{ today_stats.started_count }}</div>
                         <div class="small text-muted">今日开始生产（{{ today_stats.started_area|floatformat:0 }}cm²）</div>
@@ -874,7 +874,7 @@
             </div>
             <div class="col-md-4">
                 <div class="d-flex align-items-center gap-3 p-3 rounded" style="background:#fff7ed;border:1px solid #fed7aa;">
-                    <div class="fs-1" style="color:#d97706;"><i class="bi bi-truck"></i></div>
+                    <div class="fs-1" style="color:#d97706;"><i class="fa-solid fa-truck-fast"></i></div>
                     <div>
                         <div class="fs-4 fw-bold" style="color:#d97706;">{{ today_stats.shipped_count }}</div>
                         <div class="small text-muted">今日已发货（{{ today_stats.shipped_area|floatformat:0 }}cm²）</div>
@@ -888,7 +888,7 @@
 <!-- ========== 工厂产能排行 ========== -->
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-trophy"></i> 工厂产能排行（今日做版面积）</span>
+        <span><i class="fa-solid fa-trophy"></i> 工厂产能排行（今日做版面积）</span>
         <span class="text-muted small">按材料分类统计</span>
     </div>
     <div class="card-body">
@@ -922,7 +922,7 @@
         </div>
         {% else %}
         <div class="text-center text-muted py-4">
-            <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+            <i class="fa-solid fa-box-open fs-2 d-block mb-2"></i>
             今日暂无生产完成数据
         </div>
         {% endif %}
@@ -934,7 +934,7 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header overdue">
-        <h5 class="modal-title"><i class="bi bi-calendar-plus"></i> 申请延长交货时间</h5>
+        <h5 class="modal-title"><i class="fa-solid fa-calendar-plus"></i> 申请延长交货时间</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form method="post" action="{% url 'factory_production_board' %}">

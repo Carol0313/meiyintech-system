@@ -216,7 +216,7 @@
 <div class="row g-3 mb-4">
     <div class="col-md-3 col-sm-6">
         <div class="stat-card">
-            <div class="stat-icon blue"><i class="bi bi-journal-text"></i></div>
+            <div class="stat-icon blue"><i class="fa-solid fa-clipboard-list"></i></div>
             <div>
                 <div class="stat-value">{{ total_orders }}</div>
                 <div class="stat-label">总订单数</div>
@@ -225,7 +225,7 @@
     </div>
     <div class="col-md-3 col-sm-6">
         <div class="stat-card">
-            <div class="stat-icon green"><i class="bi bi-layers"></i></div>
+            <div class="stat-icon green"><i class="fa-solid fa-layer-group"></i></div>
             <div>
                 <div class="stat-value">{{ total_plates }}</div>
                 <div class="stat-label">总版数（块）</div>
@@ -234,7 +234,7 @@
     </div>
     <div class="col-md-3 col-sm-6">
         <div class="stat-card">
-            <div class="stat-icon orange"><i class="bi bi-currency-yen"></i></div>
+            <div class="stat-icon orange"><i class="fa-solid fa-yen-sign"></i></div>
             <div>
                 <div class="stat-value">¥{{ total_amount|floatformat:0 }}</div>
                 <div class="stat-label">累计金额</div>
@@ -243,7 +243,7 @@
     </div>
     <div class="col-md-3 col-sm-6">
         <div class="stat-card">
-            <div class="stat-icon purple"><i class="bi bi-hourglass-split"></i></div>
+            <div class="stat-icon purple"><i class="fa-solid fa-hourglass-half"></i></div>
             <div>
                 <div class="stat-value">{{ status_stats.pending }}</div>
                 <div class="stat-label">待处理</div>
@@ -257,7 +257,7 @@
     <div class="col-md-6">
         <div class="card h-100">
             <div class="card-body">
-                <div class="section-title mb-3"><i class="bi bi-kanban"></i> 订单状态分布</div>
+                <div class="section-title mb-3"><i class="fa-solid fa-chart-bar"></i> 订单状态分布</div>
                 <div class="d-flex flex-wrap gap-2">
                     <div class="status-pill pending">
                         <span class="dot"></span>
@@ -282,7 +282,7 @@
     <div class="col-md-6">
         <div class="card h-100">
             <div class="card-body">
-                <div class="section-title mb-3"><i class="bi bi-bar-chart"></i> 产品类型分布</div>
+                <div class="section-title mb-3"><i class="fa-solid fa-chart-column"></i> 产品类型分布</div>
                 <div id="productTypeChart" style="width:100%;height:220px;"></div>
             </div>
         </div>
@@ -341,9 +341,9 @@
             <div class="item-preview" style="cursor:pointer;" onclick="openFilePreview('{{ item.id }}', '{{ item.original_file_name|default:item.file.name|cut:"order_files/"|escapejs }}', '{{ item.get_product_name_display|escapejs }}', '{{ item.length_mm }}', '{{ item.width_mm }}', '{% if item.preview_url %}{{ item.preview_url }}{% endif %}', '{% url 'download_customer_file' order.id item.id %}')">
                 {% if item.preview_url %}
                 <img src="{{ item.preview_url }}" alt="预览" onerror="this.style.display='none'; this.parentElement.querySelector('.no-preview').style.display='flex';">
-                <div class="no-preview" style="display:none;"><i class="bi bi-file-earmark"></i></div>
+                <div class="no-preview" style="display:none;"><i class="fa-solid fa-file"></i></div>
                 {% else %}
-                <div class="no-preview"><i class="bi bi-file-earmark"></i></div>
+                <div class="no-preview"><i class="fa-solid fa-file"></i></div>
                 {% endif %}
             </div>
             <div class="item-info">
@@ -351,7 +351,7 @@
                 <div class="item-spec">{{ item.get_material_display }} {{ item.thickness }}mm</div>
                 <div class="item-size">尺寸：{{ item.length_mm }}×{{ item.width_mm }}mm | 面积：{{ item.area }}cm²</div>
                 <div class="item-file">
-                    <i class="bi bi-paperclip"></i> {{ item.file.name|default:"未上传文件"|cut:"order_files/" }}
+                    <i class="fa-solid fa-paperclip"></i> {{ item.file.name|default:"未上传文件"|cut:"order_files/" }}
                 </div>
             </div>
             <div class="item-meta">
@@ -380,11 +380,11 @@
             {% if order.status in 'shipped,received' %}
                 {% if order.complaints.exists %}
                 <a href="{% url 'complaint_detail' order.complaints.first.id %}" class="btn btn-sm btn-warning">
-                    <i class="bi bi-shield-exclamation"></i> 查看投诉
+                    <i class="fa-solid fa-triangle-exclamation"></i> 查看投诉
                 </a>
                 {% else %}
                 <a href="{% url 'complaint_create' order.id %}" class="btn btn-sm btn-outline-warning">
-                    <i class="bi bi-shield-exclamation"></i> 投诉
+                    <i class="fa-solid fa-triangle-exclamation"></i> 投诉
                 </a>
                 {% endif %}
             {% endif %}
@@ -394,7 +394,7 @@
 {% endwith %}
 {% empty %}
 <div class="text-center text-muted py-5">
-    <i class="bi bi-inbox fs-1 d-block mb-2" style="color:var(--border-light);"></i>
+    <i class="fa-solid fa-box-open fs-1 d-block mb-2" style="color:var(--border-light);"></i>
     暂无订单
 </div>
 {% endfor %}
@@ -412,12 +412,12 @@
                     <img id="previewImage" src="" alt="预览" style="max-width:100%; max-height:500px; border-radius:8px; border:1px solid #e0e0e0;">
                 </div>
                 <div id="previewFileInfo" class="py-4">
-                    <i class="bi bi-file-earmark-pdf" style="font-size:64px; color:var(--primary);"></i>
+                    <i class="fa-solid fa-file-pdf" style="font-size:64px; color:var(--primary);"></i>
                     <div class="mt-3 fw-medium" id="previewFileName"></div>
                     <div class="text-muted small mt-1" id="previewFileSpec"></div>
                 </div>
                 <a id="previewDownloadBtn" href="#" class="btn btn-primary mt-3">
-                    <i class="bi bi-download"></i> 下载文件
+                    <i class="fa-solid fa-download"></i> 下载文件
                 </a>
             </div>
         </div>

@@ -8,7 +8,7 @@
         <!-- 投诉信息 -->
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-shield-exclamation"></i> 投诉信息</span>
+                <span><i class="fa-solid fa-triangle-exclamation"></i> 投诉信息</span>
                 <span class="badge 
                     {% if complaint.status == 'pending' %}bg-warning text-dark
                     {% elif complaint.status == 'processing' %}bg-primary
@@ -79,7 +79,7 @@
         <!-- 处理表单 -->
         {% if complaint.status != 'resolved' and complaint.status != 'rejected' %}
         <div class="card">
-            <div class="card-header"><i class="bi bi-reply"></i> 处理投诉</div>
+            <div class="card-header"><i class="fa-solid fa-reply"></i> 处理投诉</div>
             <div class="card-body">
                 <form method="post">
                     {% csrf_token %}
@@ -97,14 +97,14 @@
                         <textarea name="merchant_remark" class="form-control" rows="4" placeholder="请填写处理结果、解决方案等..."></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-lg"></i> 提交处理结果
+                        <i class="fa-solid fa-check"></i> 提交处理结果
                     </button>
                 </form>
             </div>
         </div>
         {% else %}
         <div class="card">
-            <div class="card-header"><i class="bi bi-check-circle"></i> 处理结果</div>
+            <div class="card-header"><i class="fa-solid fa-circle-check"></i> 处理结果</div>
             <div class="card-body">
                 <div class="p-3 bg-light rounded">{{ complaint.merchant_remark|linebreaks|default:"无处理备注" }}</div>
                 {% if complaint.resolved_at %}

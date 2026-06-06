@@ -151,7 +151,7 @@
                     <td>
                         {% if data.item.file %}
                         <a href="{% url 'download_order_file' data.order.id data.item.id %}" class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-download"></i> 下载源文件
+                            <i class="fa-solid fa-download"></i> 下载源文件
                         </a>
                         <div class="small text-muted mt-1">{{ data.item.original_file_name|truncatechars:20 }}</div>
                         {% else %}
@@ -164,7 +164,7 @@
                              ondrop="handleDrop(event, '{{ data.item.id }}')"
                              ondragover="handleDragOver(event, '{{ data.item.id }}')"
                              ondragleave="handleDragLeave(event, '{{ data.item.id }}')">
-                            <i class="bi bi-cloud-upload fs-3" style="color:#9ca3af;"></i>
+                            <i class="fa-solid fa-cloud-arrow-up fs-3" style="color:#9ca3af;"></i>
                             <div class="small text-muted mt-1">点击或拖拽上传制版文件</div>
                             <div class="small text-muted">支持 PDF / AI</div>
                             <input type="file" id="fileInput_{{ data.item.id }}" style="display:none;"
@@ -178,7 +178,7 @@
                 </tr>
                 {% empty %}
                 <tr><td colspan="6" class="text-center text-muted py-5">
-                    <i class="bi bi-check-circle fs-1 d-block mb-2" style="color:var(--green);"></i>
+                    <i class="fa-solid fa-circle-check fs-1 d-block mb-2" style="color:var(--green);"></i>
                     暂无待上传制版文件的订单
                 </td></tr>
                 {% endfor %}
@@ -255,7 +255,7 @@ function uploadFile(file, itemId) {
             const zone = document.getElementById('uploadZone_' + itemId);
             zone.classList.add('has-file');
             zone.innerHTML = `
-                <i class="bi bi-check-circle fs-3" style="color:#43A047;"></i>
+                <i class="fa-solid fa-circle-check fs-3" style="color:#43A047;"></i>
                 <div class="small mt-1" style="color:#43A047;font-weight:500;">上传成功</div>
                 <div class="small text-muted">${data.file_name}</div>
             `;
@@ -267,7 +267,7 @@ function uploadFile(file, itemId) {
             // 显示文件预览
             document.getElementById('filePreview_' + itemId).innerHTML = `
                 <div class="file-preview">
-                    <i class="bi bi-file-earmark-check" style="color:#43A047;"></i>
+                    <i class="fa-solid fa-file-circle-check" style="color:#43A047;"></i>
                     <span class="small">${data.file_name}</span>
                 </div>
             `;

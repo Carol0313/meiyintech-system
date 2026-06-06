@@ -7,29 +7,35 @@
 <div class="row g-3 mb-4">
     <div class="col-md-4">
         <div class="card stat-card">
-            <div class="stat-label">账单总金额</div>
-            <div class="stat-value" style="color:var(--primary);">¥{{ statement.total_amount }}</div>
-            <div class="stat-icon primary"><i class="bi bi-currency-yen"></i></div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card stat-card">
-            <div class="stat-label">订单数量</div>
-            <div class="stat-value">{{ orders|length }}</div>
-            <div class="stat-icon info"><i class="bi bi-box-seam"></i></div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card stat-card">
-            <div class="stat-label">当前状态</div>
-            <div class="stat-value" style="font-size:20px;">
-                {% if statement.status == 'pending' %}<span class="badge badge-status status-pending_payment">待对账</span>
-                {% elif statement.status == 'confirmed' %}<span class="badge badge-status status-design_confirmed">已确认</span>
-                {% elif statement.status == 'paid' %}<span class="badge badge-status status-paid">已付款</span>
-                {% elif statement.status == 'settled' %}<span class="badge badge-status status-received">已结清</span>
-                {% endif %}
+            <div class="stat-icon primary"><i class="fa-solid fa-yen-sign"></i></div>
+            <div class="stat-content">
+                <div class="stat-label">账单总金额</div>
+                <div class="stat-value" style="color:var(--primary);">¥{{ statement.total_amount }}</div>
             </div>
-            <div class="stat-icon success"><i class="bi bi-check-circle"></i></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="stat-icon info"><i class="fa-solid fa-box-open"></i></div>
+            <div class="stat-content">
+                <div class="stat-label">订单数量</div>
+                <div class="stat-value">{{ orders|length }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="stat-icon success"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="stat-content">
+                <div class="stat-label">当前状态</div>
+                <div class="stat-value" style="font-size:20px;">
+                    {% if statement.status == 'pending' %}<span class="badge badge-status status-pending_payment">待对账</span>
+                    {% elif statement.status == 'confirmed' %}<span class="badge badge-status status-design_confirmed">已确认</span>
+                    {% elif statement.status == 'paid' %}<span class="badge badge-status status-paid">已付款</span>
+                    {% elif statement.status == 'settled' %}<span class="badge badge-status status-received">已结清</span>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -38,11 +44,11 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>账单信息</span>
         <div>
-            <a href="{% url 'customer_statement_export' statement.id %}" class="btn btn-outline-primary"><i class="bi bi-file-earmark-excel"></i> 导出对账单</a>
+            <a href="{% url 'customer_statement_export' statement.id %}" class="btn btn-outline-primary"><i class="fa-solid fa-file-excel"></i> 导出对账单</a>
             {% if statement.status == 'pending' %}
             <form method="post" action="{% url 'customer_statement_confirm' statement.id %}" class="d-inline ms-2" onsubmit="return confirm('确认该对账单无误？确认后请尽快安排付款。')">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> 确认对账单</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> 确认对账单</button>
             </form>
             {% endif %}
         </div>

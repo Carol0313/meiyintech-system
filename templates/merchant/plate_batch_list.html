@@ -110,7 +110,7 @@
     <form method="post" action="{% url 'plate_batch_generate' %}">
         {% csrf_token %}
         <button type="submit" class="btn btn-primary btn-sm">
-            <i class="bi bi-magic"></i> 自动跨订单拼版
+            <i class="fa-solid fa-wand-magic-sparkles"></i> 自动跨订单拼版
         </button>
     </form>
 </div>
@@ -136,7 +136,7 @@
                 <div class="d-flex gap-1">
                     {% if batch.production_pdf %}
                     <a href="{% url 'download_plate_batch_file' batch.id 'production_pdf' %}" class="btn btn-sm btn-outline-danger" title="下载生产PDF">
-                        <i class="bi bi-file-earmark-pdf"></i> PDF
+                        <i class="fa-solid fa-file-pdf"></i> PDF
                     </a>
                     {% endif %}
                     <a href="{% url 'plate_batch_detail' batch.id %}" class="btn btn-sm btn-outline-primary">查看</a>
@@ -149,7 +149,7 @@
                 </a>
                 {% else %}
                 <div style="height:180px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;color:#999;">
-                    <i class="bi bi-image" style="font-size:32px;"></i>
+                    <i class="fa-solid fa-image" style="font-size:32px;"></i>
                 </div>
                 {% endif %}
             </div>
@@ -164,9 +164,9 @@
                     </div>
                 </div>
                 <div class="batch-meta">
-                    <span><i class="bi bi-layers"></i> {{ batch.items.count }} 件</span>
-                    <span><i class="bi bi-clock"></i> {{ batch.created_at|date:"m-d H:i" }}</span>
-                    <span><i class="bi bi-telephone"></i> {{ batch.customer_count }} 位客户</span>
+                    <span><i class="fa-solid fa-layer-group"></i> {{ batch.items.count }} 件</span>
+                    <span><i class="fa-solid fa-clock"></i> {{ batch.created_at|date:"m-d H:i" }}</span>
+                    <span><i class="fa-solid fa-phone"></i> {{ batch.customer_count }} 位客户</span>
                 </div>
             </div>
         </div>
@@ -175,12 +175,12 @@
 </div>
 {% else %}
 <div class="text-center py-5">
-    <i class="bi bi-grid-3x3-gap" style="font-size:48px;color:#ddd;"></i>
+    <i class="fa-solid fa-table-cells" style="font-size:48px;color:#ddd;"></i>
     <p class="mt-3 text-muted">暂无拼版批次</p>
     <form method="post" action="{% url 'plate_batch_generate' %}">
         {% csrf_token %}
         <button type="submit" class="btn btn-primary btn-sm mt-2">
-            <i class="bi bi-magic"></i> 点击自动生成
+            <i class="fa-solid fa-wand-magic-sparkles"></i> 点击自动生成
         </button>
     </form>
 </div>

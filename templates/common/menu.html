@@ -1,49 +1,49 @@
 {% if user.user_type == 'customer' %}
     <div class="nav-section">终端用户</div>
-    <a class="nav-link {% if request.resolver_match.url_name == 'customer_dashboard' %}active{% endif %}" href="{% url 'customer_dashboard' %}"><i class="bi bi-speedometer2"></i> 首页</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'place_order' %}active{% endif %}" href="{% url 'place_order' %}"><i class="bi bi-plus-circle"></i> 下单</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'my_orders' %}active{% endif %}" href="{% url 'my_orders' %}"><i class="bi bi-journal-text"></i> 我的订单</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'my_addresses' %}active{% endif %}" href="{% url 'my_addresses' %}"><i class="bi bi-geo-alt"></i> 地址管理</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'profile' %}active{% endif %}" href="{% url 'profile' %}"><i class="bi bi-person"></i> 个人中心</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'customer_dashboard' %}active{% endif %}" href="{% url 'customer_dashboard' %}"><i class="fa-solid fa-chart-line"></i> 首页</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'place_order' %}active{% endif %}" href="{% url 'place_order' %}"><i class="fa-solid fa-circle-plus"></i> 下单</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'my_orders' %}active{% endif %}" href="{% url 'my_orders' %}"><i class="fa-solid fa-clipboard-list"></i> 我的订单</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'my_addresses' %}active{% endif %}" href="{% url 'my_addresses' %}"><i class="fa-solid fa-location-dot"></i> 地址管理</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'profile' %}active{% endif %}" href="{% url 'profile' %}"><i class="fa-solid fa-user"></i> 个人中心</a>
     {% if user.customer_profile.is_main_account %}
-    <a class="nav-link {% if request.resolver_match.url_name == 'customer_subaccount_list' %}active{% endif %}" href="{% url 'customer_subaccount_list' %}"><i class="bi bi-person-badge"></i> 子账号管理</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'customer_subaccount_list' %}active{% endif %}" href="{% url 'customer_subaccount_list' %}"><i class="fa-solid fa-users-gear"></i> 子账号管理</a>
     {% endif %}
 
 {% elif user.user_type == 'merchant_admin' %}
     <div class="nav-section">管理中心</div>
-    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_dashboard' %}active{% endif %}" href="{% url 'merchant_dashboard' %}"><i class="bi bi-speedometer2"></i> 管理中心</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'member_list' %}active{% endif %}" href="{% url 'member_list' %}"><i class="bi bi-people"></i> 会员管理</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'factory_list' %}active{% endif %}" href="{% url 'factory_list' %}"><i class="bi bi-building"></i> 工厂管理</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'spec_list' %}active{% endif %}" href="{% url 'spec_list' %}"><i class="bi bi-box-seam"></i> 商品规格</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_orders' %}active{% endif %}" href="{% url 'merchant_orders' %}"><i class="bi bi-journal-text"></i> 订单管理</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'pending_plate_orders' %}active{% endif %}" href="{% url 'pending_plate_orders' %}"><i class="bi bi-file-earmark-arrow-up"></i> 待上传制版</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'pending_layout_orders' %}active{% endif %}" href="{% url 'pending_layout_orders' %}"><i class="bi bi-grid-3x3-gap"></i> 待拼版</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'factory_production_board' %}active{% endif %}" href="{% url 'factory_production_board' %}"><i class="bi bi-gear-wide-connected"></i> 生产看板</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_complaint_list' %}active{% endif %}" href="{% url 'merchant_complaint_list' %}"><i class="bi bi-shield-exclamation"></i> 投诉管理</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_dashboard' %}active{% endif %}" href="{% url 'merchant_dashboard' %}"><i class="fa-solid fa-chart-line"></i> 管理中心</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'member_list' %}active{% endif %}" href="{% url 'member_list' %}"><i class="fa-solid fa-users"></i> 会员管理</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'factory_list' %}active{% endif %}" href="{% url 'factory_list' %}"><i class="fa-solid fa-industry"></i> 工厂管理</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'spec_list' %}active{% endif %}" href="{% url 'spec_list' %}"><i class="fa-solid fa-box-open"></i> 商品规格</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_orders' %}active{% endif %}" href="{% url 'merchant_orders' %}"><i class="fa-solid fa-clipboard-list"></i> 订单管理</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'pending_plate_orders' %}active{% endif %}" href="{% url 'pending_plate_orders' %}"><i class="fa-solid fa-file-arrow-up"></i> 待上传制版</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'pending_layout_orders' %}active{% endif %}" href="{% url 'pending_layout_orders' %}"><i class="fa-solid fa-table-cells"></i> 待拼版</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'factory_production_board' %}active{% endif %}" href="{% url 'factory_production_board' %}"><i class="fa-solid fa-gears"></i> 生产看板</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_complaint_list' %}active{% endif %}" href="{% url 'merchant_complaint_list' %}"><i class="fa-solid fa-shield-halved"></i> 投诉管理</a>
     <div class="nav-section">系统设置</div>
-    <a class="nav-link {% if request.resolver_match.url_name == 'role_list' %}active{% endif %}" href="{% url 'role_list' %}"><i class="bi bi-shield-lock"></i> 岗位权限</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'subaccount_list' %}active{% endif %}" href="{% url 'subaccount_list' %}"><i class="bi bi-person-badge"></i> 子账号</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_settings' %}active{% endif %}" href="{% url 'merchant_settings' %}"><i class="bi bi-gear"></i> 账号设置</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'role_list' %}active{% endif %}" href="{% url 'role_list' %}"><i class="fa-solid fa-user-shield"></i> 岗位权限</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'subaccount_list' %}active{% endif %}" href="{% url 'subaccount_list' %}"><i class="fa-solid fa-id-card"></i> 子账号</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_settings' %}active{% endif %}" href="{% url 'merchant_settings' %}"><i class="fa-solid fa-gear"></i> 账号设置</a>
 
 {% elif user.user_type == 'merchant_staff' %}
     <div class="nav-section">员工工作台</div>
-    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_dashboard' %}active{% endif %}" href="{% url 'merchant_dashboard' %}"><i class="bi bi-speedometer2"></i> 首页</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_dashboard' %}active{% endif %}" href="{% url 'merchant_dashboard' %}"><i class="fa-solid fa-chart-line"></i> 首页</a>
     {% with role_name=user.staff_profile.role.name %}
         {% if role_name == 'designer' or role_name == 'admin' %}
-            <a class="nav-link {% if request.resolver_match.url_name == 'pending_layout_orders' %}active{% endif %}" href="{% url 'pending_layout_orders' %}"><i class="bi bi-grid-3x3-gap"></i> 待拼版</a>
+            <a class="nav-link {% if request.resolver_match.url_name == 'pending_layout_orders' %}active{% endif %}" href="{% url 'pending_layout_orders' %}"><i class="fa-solid fa-table-cells"></i> 待拼版</a>
         {% endif %}
         {% if role_name == 'customer_service' or role_name == 'admin' %}
-            <a class="nav-link {% if request.resolver_match.url_name == 'merchant_orders' %}active{% endif %}" href="{% url 'merchant_orders' %}"><i class="bi bi-journal-text"></i> 订单管理</a>
+            <a class="nav-link {% if request.resolver_match.url_name == 'merchant_orders' %}active{% endif %}" href="{% url 'merchant_orders' %}"><i class="fa-solid fa-clipboard-list"></i> 订单管理</a>
         {% endif %}
         {% if role_name == 'production' or role_name == 'admin' %}
-            <a class="nav-link {% if request.resolver_match.url_name == 'factory_production_board' %}active{% endif %}" href="{% url 'factory_production_board' %}"><i class="bi bi-gear-wide-connected"></i> 生产看板</a>
+            <a class="nav-link {% if request.resolver_match.url_name == 'factory_production_board' %}active{% endif %}" href="{% url 'factory_production_board' %}"><i class="fa-solid fa-gears"></i> 生产看板</a>
         {% endif %}
     {% endwith %}
 
 {% elif user.user_type == 'platform_admin' %}
     <div class="nav-section">平台运营</div>
-    <a class="nav-link {% if request.resolver_match.url_name == 'admin_dashboard' %}active{% endif %}" href="{% url 'admin_dashboard' %}"><i class="bi bi-speedometer2"></i> 首页</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'admin_merchants' %}active{% endif %}" href="{% url 'admin_merchants' %}"><i class="bi bi-shop"></i> 商家管理</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'admin_roles' %}active{% endif %}" href="{% url 'admin_roles' %}"><i class="bi bi-shield-lock"></i> 权限预设</a>
-    <a class="nav-link {% if request.resolver_match.url_name == 'admin_spec_requests' %}active{% endif %}" href="{% url 'admin_spec_requests' %}"><i class="bi bi-box-seam"></i> 非标申请</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'admin_dashboard' %}active{% endif %}" href="{% url 'admin_dashboard' %}"><i class="fa-solid fa-chart-line"></i> 首页</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'admin_merchants' %}active{% endif %}" href="{% url 'admin_merchants' %}"><i class="fa-solid fa-store"></i> 商家管理</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'admin_roles' %}active{% endif %}" href="{% url 'admin_roles' %}"><i class="fa-solid fa-user-shield"></i> 权限预设</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'admin_spec_requests' %}active{% endif %}" href="{% url 'admin_spec_requests' %}"><i class="fa-solid fa-box-open"></i> 非标申请</a>
 {% endif %}

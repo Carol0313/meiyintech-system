@@ -9,7 +9,7 @@
         {% if tracking_data %}
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-truck"></i> 物流信息</span>
+                <span><i class="fa-solid fa-truck-fast"></i> 物流信息</span>
                 <span class="badge {% if tracking_data.is_signed %}bg-success{% else %}bg-primary{% endif %}">
                     {{ tracking_data.state_label }}
                 </span>
@@ -30,7 +30,7 @@
         </div>
         {% elif order.tracking_number %}
         <div class="card mb-3">
-            <div class="card-header"><i class="bi bi-truck"></i> 物流信息</div>
+            <div class="card-header"><i class="fa-solid fa-truck-fast"></i> 物流信息</div>
             <div class="card-body text-muted small">
                 物流单号：{{ order.tracking_number }}（正在查询中，请稍后再试）
             </div>
@@ -42,9 +42,9 @@
         {% if item %}
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-file-earmark"></i> 文件预览</span>
+                <span><i class="fa-solid fa-file"></i> 文件预览</span>
                 <a href="{% url 'download_order_file' order.id item.id %}" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-download"></i> 下载源文件
+                    <i class="fa-solid fa-download"></i> 下载源文件
                 </a>
             </div>
             <div class="card-body">
@@ -54,22 +54,22 @@
                     {% if item.preview_image %}
                     <img src="{{ item.preview_image.url }}" class="img-fluid rounded border mb-2" style="max-height:200px;" alt="PDF预览">
                     {% else %}
-                    <i class="bi bi-file-earmark-pdf" style="font-size:48px; color:var(--primary);"></i>
+                    <i class="fa-solid fa-file-pdf" style="font-size:48px; color:var(--primary);"></i>
                     <div class="mt-2 text-muted small">PDF 文件</div>
                     {% endif %}
                     <div class="mt-2">
                         <a href="{% url 'download_order_file' order.id item.id %}" class="btn btn-sm btn-primary">
-                            <i class="bi bi-download"></i> 下载源文件
+                            <i class="fa-solid fa-download"></i> 下载源文件
                         </a>
                     </div>
                 </div>
                 {% else %}
                 <div class="text-center py-3">
-                    <i class="bi bi-file-earmark-image" style="font-size:48px; color:var(--primary);"></i>
+                    <i class="fa-solid fa-file-image" style="font-size:48px; color:var(--primary);"></i>
                     <div class="mt-2 text-muted small">{{ item.file.name|cut:"order_files/" }}</div>
                     <div class="mt-1 text-muted small">AI文件请在设计软件中打开预览</div>
                     <a href="{% url 'download_order_file' order.id item.id %}" class="btn btn-sm btn-primary mt-2">
-                        <i class="bi bi-download"></i> 下载源文件
+                        <i class="fa-solid fa-download"></i> 下载源文件
                     </a>
                 </div>
                 {% endif %}
@@ -93,7 +93,7 @@
                         <form method="post" class="d-inline" onsubmit="return confirm('确认已收到客户付款？此操作将释放该订单占用的信用额度。')">
                             {% csrf_token %}<input type="hidden" name="action" value="confirm_payment">
                             <button type="submit" class="btn btn-success btn-sm">
-                                <i class="bi bi-cash-stack"></i> 确认收款
+                                <i class="fa-solid fa-coins"></i> 确认收款
                             </button>
                         </form>
                         {% endif %}
@@ -115,7 +115,7 @@
 
                 {% if has_file_issues %}
                 <div class="alert alert-warning d-flex align-items-center mb-3">
-                    <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+                    <i class="fa-solid fa-triangle-exclamation fs-4 me-3"></i>
                     <div>
                         <div class="fw-bold">文件需处理</div>
                         <div class="small">该订单包含的PDF/AI文件预检未通过（单黑检测或线条粗细不符合标准），请设计师处理后重新上传。</div>
@@ -142,7 +142,7 @@
                             <td>
                                 {{ item.length_mm }}×{{ item.width_mm }}mm
                                 {% if item.red_box_data %}
-                                <span class="badge bg-info ms-1" title="包含红框识别数据"><i class="bi bi-bounding-box"></i></span>
+                                <span class="badge bg-info ms-1" title="包含红框识别数据"><i class="fa-solid fa-vector-square"></i></span>
                                 {% endif %}
                             </td>
                             <td>{{ item.quantity }}</td>
@@ -156,14 +156,14 @@
                         {% if item.scale_ratio != 100 %}
                         <tr class="table-light">
                             <td colspan="7" class="py-1">
-                                <small class="text-muted"><i class="bi bi-arrows-angle-contract text-warning"></i> <strong>缩放比例：</strong>{{ item.scale_ratio }}%</small>
+                                <small class="text-muted"><i class="fa-solid fa-compress text-warning"></i> <strong>缩放比例：</strong>{{ item.scale_ratio }}%</small>
                             </td>
                         </tr>
                         {% endif %}
                         {% if item.special_requests %}
                         <tr class="table-light">
                             <td colspan="7" class="py-1">
-                                <small class="text-muted"><i class="bi bi-chat-left-text text-primary"></i> <strong>特殊要求：</strong>{{ item.special_requests }}</small>
+                                <small class="text-muted"><i class="fa-solid fa-comment-dots text-primary"></i> <strong>特殊要求：</strong>{{ item.special_requests }}</small>
                             </td>
                         </tr>
                         {% endif %}
@@ -178,7 +178,7 @@
                 </div>
                 {% if order.special_requests %}
                 <div class="mt-3 alert alert-light border">
-                    <strong><i class="bi bi-chat-left-text"></i> 订单特殊要求：</strong>
+                    <strong><i class="fa-solid fa-comment-dots"></i> 订单特殊要求：</strong>
                     <span class="text-muted">{{ order.special_requests }}</span>
                 </div>
                 {% endif %}
@@ -189,7 +189,7 @@
         {% if preflight_reports %}
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-clipboard-check"></i> PDF预检报告</span>
+                <span><i class="fa-solid fa-clipboard-check"></i> PDF预检报告</span>
                 <span class="badge bg-primary">{{ preflight_reports|length }}</span>
             </div>
             <div class="card-body">
@@ -239,7 +239,7 @@
         {% with item=order.first_item_with_file %}
         {% if item %}
         <div class="card mb-3">
-            <div class="card-header"><i class="bi bi-file-earmark-text"></i> 源文件详情</div>
+            <div class="card-header"><i class="fa-solid fa-file-lines"></i> 源文件详情</div>
             <div class="card-body small">
                 <div class="mb-2"><strong>文件名：</strong>{{ item.original_file_name|default:item.file.name|cut:"order_files/" }}</div>
                 <div class="mb-2"><strong>文件类型：</strong>{% if item.is_image_file %}图片{% else %}PDF/AI{% endif %}</div>
@@ -247,8 +247,14 @@
                 <div class="mb-2"><strong>标准检查：</strong>{% if item.file_standard_checked %}<span class="text-success">通过</span>{% else %}<span class="text-muted">未检查</span>{% endif %}</div>
                 {% if item.red_box_data %}
                 <div class="mt-3">
-                    <strong><i class="bi bi-bounding-box"></i> 红框识别数据：</strong>
-                    <div class="mt-2">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong><i class="fa-solid fa-vector-square"></i> 红框识别数据：</strong>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRedBoxEdit('{{ item.id }}')">
+                            <i class="fa-solid fa-pen-to-square"></i> 修改红框
+                        </button>
+                    </div>
+                    <!-- 红框显示 -->
+                    <div id="redBoxDisplay-{{ item.id }}">
                         {% with boxes=item.red_box_data|load_json %}
                         {% if boxes %}
                         <table class="table table-sm table-bordered mb-0">
@@ -266,6 +272,52 @@
                         {% endif %}
                         {% endwith %}
                     </div>
+                    <!-- 红框编辑表单 -->
+                    <div id="redBoxEdit-{{ item.id }}" style="display:none;">
+                        <form method="post" action="{% url 'merchant_order_detail' order.id %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update_red_box">
+                            <input type="hidden" name="item_id" value="{{ item.id }}">
+                            <div id="redBoxFields-{{ item.id }}">
+                                {% with boxes=item.red_box_data|load_json %}
+                                {% if boxes %}
+                                    {% for box in boxes %}
+                                    <div class="row g-2 mb-2 red-box-row" data-index="{{ forloop.counter0 }}">
+                                        <div class="col-1 d-flex align-items-center">
+                                            <span class="badge bg-secondary box-num">{{ forloop.counter }}</span>
+                                        </div>
+                                        <div class="col-3">
+                                            <input type="number" step="0.01" class="form-control form-control-sm" name="box_length_{{ forloop.counter0 }}" value="{{ box.length_mm }}" placeholder="长(mm)" required>
+                                        </div>
+                                        <div class="col-3">
+                                            <input type="number" step="0.01" class="form-control form-control-sm" name="box_width_{{ forloop.counter0 }}" value="{{ box.width_mm }}" placeholder="宽(mm)" required>
+                                        </div>
+                                        <div class="col-3">
+                                            <input type="number" min="1" class="form-control form-control-sm" name="box_qty_{{ forloop.counter0 }}" value="{{ box.quantity|default:1 }}" placeholder="数量" required>
+                                        </div>
+                                        <div class="col-2">
+                                            <button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="removeRedBoxRow(this)">
+                                                <i class="fa-solid fa-trash-can"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% endif %}
+                                {% endwith %}
+                            </div>
+                            <div class="d-flex gap-2 mt-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addRedBoxRow('{{ item.id }}')">
+                                    <i class="fa-solid fa-plus"></i> 添加框
+                                </button>
+                                <button type="submit" class="btn btn-sm btn-primary">
+                                    <i class="fa-solid fa-check"></i> 保存修改
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleRedBoxEdit('{{ item.id }}')">
+                                    取消
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
                 {% endif %}
             </div>
@@ -275,7 +327,7 @@
 
         <!-- 拍照对比 -->
         <div class="card mb-3">
-            <div class="card-header"><i class="bi bi-camera"></i> 拍照对比（成品 vs 源文件）</div>
+            <div class="card-header"><i class="fa-solid fa-camera"></i> 拍照对比（成品 vs 源文件）</div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-6 text-center border-end">
@@ -305,7 +357,7 @@
         {% if order.plate_batch_items.all %}
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-grid-3x3"></i> 拼版信息</span>
+                <span><i class="fa-solid fa-border-all"></i> 拼版信息</span>
                 <span class="badge bg-info">已拼版</span>
             </div>
             <div class="card-body small">
@@ -339,7 +391,7 @@
 
         <!-- 对账信息卡片 -->
         <div class="card mb-3">
-            <div class="card-header"><i class="bi bi-receipt"></i> 对账信息</div>
+            <div class="card-header"><i class="fa-solid fa-receipt"></i> 对账信息</div>
             <div class="card-body small">
                 {% if order.is_settled %}
                     <div class="d-flex align-items-center mb-2">
@@ -367,7 +419,7 @@
                     <div class="mb-1"><strong>账单周期：</strong>{{ order.statement.period_start|date:"m.d" }} ~ {{ order.statement.period_end|date:"m.d" }}</div>
                     <div class="mt-2">
                         <a href="{% url 'statement_export' order.statement.id %}" class="btn btn-sm btn-outline-primary w-100">
-                            <i class="bi bi-file-earmark-excel"></i> 导出对账单
+                            <i class="fa-solid fa-file-excel"></i> 导出对账单
                         </a>
                     </div>
                 {% elif order.status == 'received' %}
@@ -435,4 +487,74 @@
     line-height: 1.4;
 }
 </style>
+
+<script>
+// 红框编辑功能
+function toggleRedBoxEdit(itemId) {
+    const displayEl = document.getElementById('redBoxDisplay-' + itemId);
+    const editEl = document.getElementById('redBoxEdit-' + itemId);
+    if (displayEl && editEl) {
+        if (editEl.style.display === 'none') {
+            displayEl.style.display = 'none';
+            editEl.style.display = 'block';
+        } else {
+            displayEl.style.display = 'block';
+            editEl.style.display = 'none';
+        }
+    }
+}
+
+function addRedBoxRow(itemId) {
+    const container = document.getElementById('redBoxFields-' + itemId);
+    const rows = container.querySelectorAll('.red-box-row');
+    const index = rows.length;
+    const newRow = document.createElement('div');
+    newRow.className = 'row g-2 mb-2 red-box-row';
+    newRow.dataset.index = index;
+    newRow.innerHTML = `
+        <div class="col-1 d-flex align-items-center">
+            <span class="badge bg-secondary box-num">${index + 1}</span>
+        </div>
+        <div class="col-3">
+            <input type="number" step="0.01" class="form-control form-control-sm" name="box_length_${index}" placeholder="长(mm)" required>
+        </div>
+        <div class="col-3">
+            <input type="number" step="0.01" class="form-control form-control-sm" name="box_width_${index}" placeholder="宽(mm)" required>
+        </div>
+        <div class="col-3">
+            <input type="number" min="1" class="form-control form-control-sm" name="box_qty_${index}" value="1" placeholder="数量" required>
+        </div>
+        <div class="col-2">
+            <button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="removeRedBoxRow(this)">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        </div>
+    `;
+    container.appendChild(newRow);
+    updateBoxNumbers(container);
+}
+
+function removeRedBoxRow(btn) {
+    const row = btn.closest('.red-box-row');
+    const container = row.parentElement;
+    row.remove();
+    updateBoxNumbers(container);
+}
+
+function updateBoxNumbers(container) {
+    const rows = container.querySelectorAll('.red-box-row');
+    rows.forEach((row, idx) => {
+        row.dataset.index = idx;
+        const numBadge = row.querySelector('.box-num');
+        if (numBadge) numBadge.textContent = idx + 1;
+        const inputs = row.querySelectorAll('input');
+        inputs.forEach(input => {
+            const name = input.name;
+            if (name.startsWith('box_length_')) input.name = `box_length_${idx}`;
+            if (name.startsWith('box_width_')) input.name = `box_width_${idx}`;
+            if (name.startsWith('box_qty_')) input.name = `box_qty_${idx}`;
+        });
+    });
+}
+</script>
 {% endblock %}

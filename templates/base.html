@@ -5,17 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
     <style>
         :root {
             --sidebar-width: 220px;
-            --sidebar-bg: #0f1d32;
-            --sidebar-bg-hover: rgba(255,255,255,0.06);
-            --sidebar-bg-active: #1a3a5c;
-            --sidebar-text: #94a3b8;
-            --sidebar-text-active: #ffffff;
-            --sidebar-border: rgba(255,255,255,0.06);
-            --accent: #e8b341;
+            --sidebar-bg: #ffffff;
+            --sidebar-bg-hover: #f1f5f9;
+            --sidebar-bg-active: #eff6ff;
+            --sidebar-text: #475569;
+            --sidebar-text-active: #1565c0;
+            --sidebar-border: #e2e8f0;
+            --accent: #1565c0;
 
             --primary: #1565c0;
             --primary-hover: #0d47a1;
@@ -85,7 +85,7 @@
             background: var(--accent);
             border-radius: 8px;
             display: flex; align-items: center; justify-content: center;
-            color: #0f1d32;
+            color: #fff;
             font-size: 20px;
             font-weight: bold;
             flex-shrink: 0;
@@ -94,14 +94,14 @@
         .sidebar-brand-text {
             font-size: 16px;
             font-weight: 600;
-            color: #fff;
+            color: var(--text-main);
             letter-spacing: 1px;
         }
 
         .nav-section {
             font-size: 11px;
-            font-weight: 500;
-            color: #64748b;
+            font-weight: 600;
+            color: #94a3b8;
             padding: 20px 20px 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -124,7 +124,7 @@
 
         .nav-link:hover {
             background: var(--sidebar-bg-hover);
-            color: #fff;
+            color: var(--text-main);
         }
 
         .nav-link.active {
@@ -146,6 +146,16 @@
             width: 20px;
             text-align: center;
             font-size: 16px;
+            color: var(--text-muted);
+            transition: color 0.2s ease;
+        }
+
+        .nav-link:hover i {
+            color: var(--primary);
+        }
+
+        .nav-link.active i {
+            color: var(--primary);
         }
 
         .sidebar-footer {
@@ -159,7 +169,7 @@
             align-items: center;
             gap: 10px;
             padding: 10px 12px;
-            background: rgba(255,255,255,0.04);
+            background: #f8fafc;
             border-radius: 8px;
             border: 1px solid var(--sidebar-border);
         }
@@ -167,9 +177,9 @@
         .user-avatar {
             width: 32px; height: 32px;
             border-radius: 50%;
-            background: var(--accent);
+            background: var(--primary-light);
             display: flex; align-items: center; justify-content: center;
-            color: #0f1d32;
+            color: var(--primary);
             font-size: 13px;
             font-weight: 600;
         }
@@ -239,37 +249,47 @@
         /* ===== Stat Cards ===== */
         .stat-card {
             padding: 20px;
-            position: relative;
-        }
-
-        .stat-label {
-            font-size: 13px;
-            color: var(--text-muted);
-            font-weight: 400;
-            margin-bottom: 6px;
-        }
-
-        .stat-value {
-            font-size: 28px;
-            font-weight: 600;
-            color: var(--text-main);
-            letter-spacing: 0;
-            line-height: 1.2;
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
 
         .stat-icon {
-            position: absolute;
-            top: 16px; right: 16px;
-            width: 40px; height: 40px;
-            border-radius: var(--radius-sm);
+            width: 52px; height: 52px;
+            border-radius: var(--radius-md);
             display: flex; align-items: center; justify-content: center;
-            font-size: 18px;
+            font-size: 22px;
+            flex-shrink: 0;
         }
 
         .stat-icon.primary { background: var(--primary-light); color: var(--primary); }
         .stat-icon.info    { background: #FFF3E0; color: var(--orange); }
         .stat-icon.warning { background: #E3F2FD; color: var(--primary); }
         .stat-icon.success { background: #E8F5E9; color: var(--green); }
+        .stat-icon.blue    { background: #E3F2FD; color: var(--primary); }
+        .stat-icon.green   { background: #E8F5E9; color: var(--green); }
+        .stat-icon.orange  { background: #FFF3E0; color: var(--orange); }
+        .stat-icon.purple  { background: #F3E5F5; color: #7b1fa2; }
+
+        .stat-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 400;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 26px;
+            font-weight: 600;
+            color: var(--text-main);
+            letter-spacing: 0;
+            line-height: 1.2;
+        }
 
         /* ===== Buttons ===== */
         .btn {
@@ -617,7 +637,7 @@
     <nav class="sidebar">
         <div class="sidebar-brand">
             <div class="sidebar-brand-logo">
-                <i class="bi bi-lightning-charge-fill"></i>
+                <i class="fa-solid fa-bolt"></i>
             </div>
             <div class="sidebar-brand-text">闪电制版</div>
         </div>
@@ -644,7 +664,7 @@
                         </div>
                     {% endif %}
                     {% endwith %}
-                    <a href="{% url 'logout' %}" style="color:rgba(255,255,255,0.7);font-size:16px;"><i class="bi bi-box-arrow-right"></i></a>
+                    <a href="{% url 'logout' %}" style="color:var(--text-muted);font-size:16px;"><i class="fa-solid fa-arrow-right-from-bracket"></i></a>
                 </div>
             {% endif %}
         </div>
@@ -657,7 +677,7 @@
                 <div class="page-title">{% block page_title %}首页{% endblock %}</div>
                 <div class="page-subtitle">{% block page_subtitle %}{% endblock %}</div>
             </div>
-            <button class="btn btn-sm btn-outline-secondary d-md-none" id="sidebarToggle"><i class="bi bi-list"></i></button>
+            <button class="btn btn-sm btn-outline-secondary d-md-none" id="sidebarToggle"><i class="fa-solid fa-list"></i></button>
         </div>
 
         <div class="content-body">
@@ -676,7 +696,7 @@
 
     <!-- 联系客服浮动按钮 -->
     <a class="customer-service-float" href="https://ada.baidu.com/site/wjzy5dvhc/agent?imid=996e3cb7902ffe7322fa3582fb182d99" target="_blank" rel="noopener noreferrer">
-        <i class="bi bi-headset"></i>
+        <i class="fa-solid fa-headset"></i>
         <span>联系客服</span>
     </a>
 

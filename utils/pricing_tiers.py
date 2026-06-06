@@ -12,15 +12,17 @@ from decimal import Decimal
 ETCHING_PRODUCTS = [
     'etching_concave',
     'etching_convex',
-    'etching_bump_set',
+    'etching_magnesium_concave_resin_convex',
+    'etching_double_sided_magnesium_bump',
 ]
 
 # 雕刻版/树脂版/菲林产品列表（固定价）
 CARVING_PRODUCTS = [
-    'carving_flat_gold',
-    'carving_flat_bump',
-    'carving_relief_gold_bump',
-    'carving_relief_bump_set',
+    'carving_flat_convex',
+    'carving_flat_concave',
+    'carving_relief_bump_gold',
+    'carving_relief_multi_bump_gold',
+    'carving_relief_complex',
     'resin_mold',
     'resin_water',
     'film_alignment',
@@ -62,19 +64,19 @@ TIER_PRICES = {
 # ========== 雕刻版/树脂版/菲林固定价格表 ==========
 # 产品 -> 材质 -> 厚度 -> 单价
 CARVING_PRICE_TABLE = {
-    'carving_flat_gold': {
+    'carving_flat_convex': {
         'copper': {
             '2.0': Decimal('0.40'),
             '3.0': Decimal('0.60'),
         },
     },
-    'carving_flat_bump': {
+    'carving_flat_concave': {
         'copper': {
             '2.0': Decimal('0.40'),
             '3.0': Decimal('0.60'),
         },
     },
-    'carving_relief_gold_bump': {
+    'carving_relief_bump_gold': {
         'magnesium': {
             '3.0': Decimal('1.00'),
             '4.0': Decimal('1.30'),
@@ -84,16 +86,26 @@ CARVING_PRICE_TABLE = {
             '6.0': Decimal('2.00'),
         },
     },
-    'carving_relief_bump_set': {
+    'carving_relief_multi_bump_gold': {
         'magnesium': {
-            '3.0': Decimal('1.30'),
-            '4.0': Decimal('1.70'),
-            '6.35': Decimal('2.00'),
+            '3.0': Decimal('1.20'),
+            '4.0': Decimal('1.50'),
         },
         'copper': {
-            '3.0': Decimal('2.00'),
-            '4.0': Decimal('2.30'),
-            '6.0': Decimal('2.60'),
+            '3.0': Decimal('1.80'),
+            '6.0': Decimal('2.30'),
+        },
+    },
+    'carving_relief_complex': {
+        'magnesium': {
+            '3.0': Decimal('1.50'),
+            '4.0': Decimal('1.80'),
+            '6.35': Decimal('2.20'),
+        },
+        'copper': {
+            '3.0': Decimal('2.20'),
+            '4.0': Decimal('2.60'),
+            '6.0': Decimal('3.00'),
         },
     },
     'resin_mold': {

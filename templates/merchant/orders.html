@@ -89,7 +89,7 @@
 
         <!-- 快捷状态筛选：对账状态 -->
         <div class="statement-tabs">
-            <span class="small text-muted me-1" style="display:flex;align-items:center;"><i class="bi bi-receipt"></i> 对账：</span>
+            <span class="small text-muted me-1" style="display:flex;align-items:center;"><i class="fa-solid fa-receipt"></i> 对账：</span>
             <a href="{% url 'merchant_orders' %}?{{ request.GET.urlencode|cut:'statement_status='|cut:'&' }}" class="statement-tab {% if not statement_status %}active{% endif %}">全部</a>
             <a href="?statement_status=unsettled" class="statement-tab {% if statement_status == 'unsettled' %}active{% endif %}">未对账</a>
             <a href="?statement_status=statemented" class="statement-tab {% if statement_status == 'statemented' %}active{% endif %}">已对账</a>
@@ -129,14 +129,14 @@
     <form method="get" action="{% url 'batch_process_orders' %}" class="d-inline">
         <input type="hidden" name="order_ids" id="batchOrderIds" value="">
         <button type="submit" class="btn btn-sm btn-primary">
-            <i class="bi bi-arrow-right-circle"></i> 进入批量处理页面
+            <i class="fa-solid fa-circle-arrow-right"></i> 进入批量处理页面
         </button>
     </form>
     <form method="post" action="{% url 'statement_generate' %}" class="d-inline" id="batchStatementForm" onsubmit="return buildStatementBatch()">
         {% csrf_token %}
         <input type="hidden" name="order_ids" id="batchStatementIds" value="">
         <button type="submit" class="btn btn-sm btn-success">
-            <i class="bi bi-receipt"></i> 生成对账单
+            <i class="fa-solid fa-receipt"></i> 生成对账单
         </button>
     </form>
 </div>
@@ -214,7 +214,7 @@
                 </tr>
                 {% empty %}
                 <tr><td colspan="9" class="text-center text-muted py-5">
-                    <i class="bi bi-inbox fs-1 d-block mb-2" style="color:var(--border-light);"></i>
+                    <i class="fa-solid fa-box-open fs-1 d-block mb-2" style="color:var(--border-light);"></i>
                     暂无订单
                 </td></tr>
                 {% endfor %}

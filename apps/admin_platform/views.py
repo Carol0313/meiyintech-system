@@ -228,7 +228,7 @@ def spec_request_approve(request, req_id):
         price = request.POST.get('unit_price', '0')
         ProductSpec.objects.create(
             merchant=req.merchant,
-            product_name='carving_flat_gold',
+            product_name='carving_flat_convex',
             material=req.material,
             thickness=req.thickness,
             unit_price=price,

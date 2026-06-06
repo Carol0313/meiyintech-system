@@ -160,19 +160,24 @@ def get_plate_type_by_product(product_name, material, thickness):
     """
     # 腐蚀版
     if product_name == 'etching_concave':
-        return 'emboss'  # 蚀刻凹版 → 压纹版（阳片，裁切框）
+        return 'emboss'  # 凹版 → 压纹版（阳片，裁切框）
     if product_name == 'etching_convex':
-        return 'etching_gold'  # 蚀刻凸版 → 烫金版（阴片）
-    if product_name == 'etching_bump_set':
-        return 'relief_convex'  # 击凸/凹配套 → 激凸版（主版）
+        return 'etching_gold'  # 凸版 → 烫金版（阴片）
+    if product_name == 'etching_magnesium_concave_resin_convex':
+        return 'relief_convex'  # 镁凹树凸 → 激凸版（主版）
+    if product_name == 'etching_double_sided_magnesium_bump':
+        return 'relief_convex'  # 双面镁激凸 → 激凸版（主版）
     # 平雕版
-    if product_name in ('carving_flat_gold', 'carving_flat_bump'):
+    if product_name in ('carving_flat_convex', 'carving_flat_concave'):
         return 'carving_flat'
     # 浮雕版
-    if product_name == 'carving_relief_gold_bump':
+    if product_name == 'carving_relief_bump_gold':
         return 'carving_relief'
     # 多层次浮雕版
-    if product_name == 'carving_relief_bump_set':
+    if product_name == 'carving_relief_multi_bump_gold':
+        return 'carving_multi_layer'
+    # 多层复杂浮雕
+    if product_name == 'carving_relief_complex':
         return 'carving_multi_layer'
     # 树脂版
     if product_name == 'resin_mold':

@@ -3,7 +3,7 @@
 {% block page_title %}工厂管理{% endblock %}
 {% block content %}
 <div class="mb-3">
-    <a href="{% url 'factory_add' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 添加工厂</a>
+    <a href="{% url 'factory_add' %}" class="btn btn-primary"><i class="fa-solid fa-plus"></i> 添加工厂</a>
 </div>
 <div class="row g-3">
     {% for f in factories %}
@@ -18,7 +18,7 @@
                 <p class="small mb-0">联系人：{{ f.contact_person|default:"-" }} {{ f.contact_phone|default:"-" }}</p>
                 <div class="d-flex gap-2 mt-2">
                     <a href="{% url 'factory_detail' f.id %}" class="btn btn-sm btn-primary">
-                        <i class="bi bi-box-arrow-in-right"></i> 进入管理
+                        <i class="fa-solid fa-arrow-right-to-bracket"></i> 进入管理
                     </a>
                     <a href="{% url 'factory_edit' f.id %}" class="btn btn-sm btn-outline-primary">编辑</a>
                 </div>
