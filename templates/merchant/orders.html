@@ -153,6 +153,7 @@
                     <th>客户</th>
                     <th>产品信息</th>
                     <th>状态</th>
+                    <th>时效</th>
                     <th>对账</th>
                     <th>金额</th>
                     <th>时间</th>
@@ -192,6 +193,15 @@
                         </div>
                     </td>
                     <td><span class="badge badge-status status-{{ o.status }}">{{ o.get_status_display }}</span></td>
+                    <td>
+                        {% if o.sla_status %}
+                        <span class="badge {{ o.sla_class }}" style="font-size:0.7rem;">
+                            <i class="fa-solid fa-clock"></i> {{ o.sla_label }}
+                        </span>
+                        {% else %}
+                        <span class="text-muted small">-</span>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if o.is_settled %}
                             <span class="badge bg-secondary">已结清</span>

@@ -985,6 +985,7 @@ def _handle_quick_order_post(request, profile, tier):
         total_files += len(files)
 
     # 创建订单
+    from django.utils import timezone
     order = Order.objects.create(
         customer=request.user,
         merchant=profile.merchant,
@@ -994,6 +995,8 @@ def _handle_quick_order_post(request, profile, tier):
         special_requests=special_requests,
         preset_options=preset_options,
         is_submitted=True,
+        submitted_at=timezone.now(),
+        file_uploaded_at=timezone.now(),  # 【新增】记录客户上传文件时间
     )
 
     # 地址

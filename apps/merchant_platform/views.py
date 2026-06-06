@@ -668,6 +668,56 @@ def merchant_orders(request):
     elif statement_status == 'settled':
         orders = orders.filter(is_settled=True)
     orders = orders.order_by('-created_at')
+    
+    # 【新增】计算每个订单的时效状态
+    from django.utils import timezone
+    now = timezone.now()
+    for order in orders:
+        order.sla_status = None
+        order.sla_label = '-'
+        order.sla_class = ''
+        
+        # 客服处理时效：pending_confirm 状态
+        if order.status == 'pending_confirm' and order.file_uploaded_at:
+            elapsed = (now - order.file_uploaded_at).total_seconds() / 60
+            if order.customer_service_processed_at:
+                order.sla_status = 'done'
+                order.sla_label = f'已处理'
+                order.sla_class = 'bg-secondary'
+            elif elapsed > 30:
+                order.sla_status = 'overdue'
+                order.sla_label = f'已超{int(elapsed - 30)}分'
+                order.sla_class = 'bg-danger'
+            elif elapsed > 15:
+                order.sla_status = 'warning'
+                order.sla_label = f'剩{int(30 - elapsed)}分'
+                order.sla_class = 'bg-warning text-dark'
+            else:
+                order.sla_status = 'normal'
+                order.sla_label = '正常'
+                order.sla_class = 'bg-success'
+        
+        # 工厂下载时效：in_production 状态
+        elif order.status == 'in_production' and order.factory_notified_at:
+            if order.factory_downloaded_at:
+                order.sla_status = 'done'
+                order.sla_label = '已下载'
+                order.sla_class = 'bg-secondary'
+            else:
+                elapsed = (now - order.factory_notified_at).total_seconds() / 60
+                if elapsed > 30:
+                    order.sla_status = 'overdue'
+                    order.sla_label = f'已超{int(elapsed - 30)}分'
+                    order.sla_class = 'bg-danger'
+                elif elapsed > 15:
+                    order.sla_status = 'warning'
+                    order.sla_label = f'剩{int(30 - elapsed)}分'
+                    order.sla_class = 'bg-warning text-dark'
+                else:
+                    order.sla_status = 'normal'
+                    order.sla_label = '正常'
+                    order.sla_class = 'bg-success'
+    
     return render(request, 'merchant/orders.html', {
         'orders': orders,
         'status_choices': Order.STATUS_CHOICES,
@@ -693,11 +743,13 @@ def merchant_order_detail(request, order_id):
                 messages.success(request, '沟通记录已添加')
         elif action == 'audit':
             # 审核通过 -> 待设计/已确认
+            from django.utils import timezone
             order.transition_status('design_confirmed', operator=request.user, remark='商家审核通过')
+            order.customer_service_processed_at = timezone.now()  # 【新增】记录客服处理时间
             # 自动拼版：为该订单生成拼版建议
             auto_generate_plate_layout_for_order(order)
             order.plate_status = 'auto_generated'
-            order.save(update_fields=['plate_status'])
+            order.save(update_fields=['plate_status', 'customer_service_processed_at'])
             messages.success(request, '订单已审核通过，系统已自动拼版，请设计师确认')
         elif action == 'assign_design':
             designer_id = request.POST.get('designer_id')
@@ -720,9 +772,11 @@ def merchant_order_detail(request, order_id):
                 if not has_layout:
                     messages.error(request, '该订单尚未完成拼版，请先安排设计师拼版')
                     return redirect('merchant_order_detail', order_id=order_id)
+                from django.utils import timezone
                 order.factory_id = factory_id
                 order.production_cycle = int(cycle)
-                order.save(update_fields=['factory', 'production_cycle'])
+                order.factory_notified_at = timezone.now()  # 【新增】记录工厂通知时间
+                order.save(update_fields=['factory', 'production_cycle', 'factory_notified_at'])
                 order.transition_status('in_production', operator=request.user, remark='已安排生产')
                 # 同步更新 PlateBatch
                 for pbi in order.plate_batch_items.all():
@@ -987,10 +1041,12 @@ def batch_process_orders(request):
             try:
                 if action == 'audit':
                     if order.status == 'pending_confirm':
+                        from django.utils import timezone
                         order.transition_status('design_confirmed', operator=request.user, remark='批量审核通过')
+                        order.customer_service_processed_at = timezone.now()
                         auto_generate_plate_layout_for_order(order)
                         order.plate_status = 'auto_generated'
-                        order.save(update_fields=['plate_status'])
+                        order.save(update_fields=['plate_status', 'customer_service_processed_at'])
                         success_count += 1
                     else:
                         error_msgs.append(f'{order.sn}: 当前状态不支持审核通过')
@@ -1037,9 +1093,11 @@ def batch_process_orders(request):
                             if not has_layout:
                                 error_msgs.append(f'{order.sn}: 该订单尚未完成拼版')
                                 continue
+                            from django.utils import timezone
                             order.factory_id = factory_id
                             order.production_cycle = int(cycle)
-                            order.save(update_fields=['factory', 'production_cycle'])
+                            order.factory_notified_at = timezone.now()
+                            order.save(update_fields=['factory', 'production_cycle', 'factory_notified_at'])
                             order.transition_status('in_production', operator=request.user, remark='批量安排生产')
                             # 同步更新 PlateBatch
                             for pbi in order.plate_batch_items.all():
@@ -1256,7 +1314,9 @@ def plate_layout_work(request, order_id):
             default_factory = merchant.factories.filter(is_active=True).first()
             if default_factory:
                 order.factory = default_factory
-            order.save(update_fields=['plate_status', 'factory'])
+            from django.utils import timezone
+            order.factory_notified_at = timezone.now()
+            order.save(update_fields=['plate_status', 'factory', 'factory_notified_at'])
             # 状态变为生产中，工厂立刻收到
             order.transition_status('in_production', operator=request.user, remark='设计师已确认拼版，自动下发工厂生产')
             messages.success(request, f'订单 {order.sn} 拼版已确认，已自动下发到工厂生产')
@@ -1434,6 +1494,35 @@ def factory_production_board(request):
     # 已完成：生产完成待发货
     completed_orders = base_qs.filter(production_completed_at__isnull=False).order_by('-production_completed_at')
 
+    # 【新增】为看板订单计算工厂下载时效状态
+    now = timezone.now()
+    def _calc_download_sla(order):
+        """计算工厂下载时效状态"""
+        order.download_sla_status = 'none'
+        order.download_sla_class = ''
+        order.download_sla_title = ''
+        if order.factory_notified_at:
+            if order.factory_downloaded_at:
+                order.download_sla_status = 'done'
+                order.download_sla_class = 'done'
+                order.download_sla_title = '已下载'
+            else:
+                elapsed = (now - order.factory_notified_at).total_seconds() / 60
+                if elapsed > 30:
+                    order.download_sla_status = 'overdue'
+                    order.download_sla_class = 'overdue'
+                    order.download_sla_title = f'已超{int(elapsed - 30)}分'
+                elif elapsed > 15:
+                    order.download_sla_status = 'warning'
+                    order.download_sla_class = 'warning'
+                    order.download_sla_title = f'剩{int(30 - elapsed)}分'
+                else:
+                    order.download_sla_status = 'normal'
+                    order.download_sla_class = 'normal'
+                    order.download_sla_title = '正常'
+    for o in list(pending_orders) + list(active_orders) + list(completed_orders):
+        _calc_download_sla(o)
+
     # 处理POST操作
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -1564,7 +1653,6 @@ def factory_production_board(request):
         return redirect('factory_production_board')
 
     # 计算下次刷新时间（整点刷新，下午1点开始工作）
-    now = timezone.now()
     next_refresh = now.replace(minute=0, second=0, microsecond=0)
     if next_refresh <= now:
         next_refresh = next_refresh.replace(hour=(next_refresh.hour + 1) % 24)
@@ -2743,6 +2831,12 @@ def download_order_file(request, order_id, item_id):
     # OSS 或本地存储：统一通过服务器读取文件内容返回
     # 避免浏览器直接访问 OSS 内网 URL
     try:
+        # 【新增】记录工厂下载时间（如果订单已在生产中）
+        from django.utils import timezone
+        if order.status == 'in_production' and order.factory_notified_at and not order.factory_downloaded_at:
+            order.factory_downloaded_at = timezone.now()
+            order.save(update_fields=['factory_downloaded_at'])
+        
         with item.file.open('rb') as f:
             # 根据文件扩展名设置正确的 Content-Type
             ext = os.path.splitext(filename)[1].lower()
@@ -2932,6 +3026,12 @@ def download_plate_file(request, order_id, item_id):
         return redirect('pending_plate_orders')
     
     try:
+        # 【新增】记录工厂下载时间
+        from django.utils import timezone
+        if order.factory_notified_at and not order.factory_downloaded_at:
+            order.factory_downloaded_at = timezone.now()
+            order.save(update_fields=['factory_downloaded_at'])
+        
         with item.plate_file.open('rb') as f:
             response = HttpResponse(f.read(), content_type='application/octet-stream')
             from urllib.parse import quote

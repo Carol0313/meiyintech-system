@@ -122,6 +122,34 @@
     .kb-status-dot.normal { background: #22c55e; }
     .kb-status-dot.warning { background: #f59e0b; }
     .kb-status-dot.overdue { background: var(--c-overdue); }
+    .kb-status-dot.done { background: #94a3b8; }
+
+    /* 工厂下载时效标识 */
+    .kb-download-sla {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 100px;
+        font-weight: 500;
+    }
+    .kb-download-sla.normal {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .kb-download-sla.warning {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    .kb-download-sla.overdue {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .kb-download-sla.done {
+        background: #f1f5f9;
+        color: #64748b;
+    }
 
     .kb-customer {
         font-size: 12px;
@@ -338,13 +366,20 @@
                 <div class="kb-sn">
                     <a href="{% url 'merchant_order_detail' order.id %}">{{ order.sn }}</a>
                 </div>
-                {% if order.is_overdue %}
-                <span class="kb-status-dot overdue" title="已逾期"></span>
-                {% elif order.is_warning %}
-                <span class="kb-status-dot warning" title="即将逾期"></span>
-                {% else %}
-                <span class="kb-status-dot normal" title="正常"></span>
-                {% endif %}
+                <div class="d-flex align-items-center gap-2">
+                    {% if order.download_sla_status != 'none' %}
+                    <span class="kb-download-sla {{ order.download_sla_class }}" title="工厂下载时效: {{ order.download_sla_title }}">
+                        <i class="fa-solid fa-download"></i> {{ order.download_sla_title }}
+                    </span>
+                    {% endif %}
+                    {% if order.is_overdue %}
+                    <span class="kb-status-dot overdue" title="已逾期"></span>
+                    {% elif order.is_warning %}
+                    <span class="kb-status-dot warning" title="即将逾期"></span>
+                    {% else %}
+                    <span class="kb-status-dot normal" title="正常"></span>
+                    {% endif %}
+                </div>
             </div>
             <div class="kb-customer">
                 <i class="fa-solid fa-user"></i> {{ order.customer.phone|slice:":3" }}****{{ order.customer.phone|slice:"-4:" }}
@@ -401,13 +436,20 @@
                 <div class="kb-sn">
                     <a href="{% url 'merchant_order_detail' order.id %}">{{ order.sn }}</a>
                 </div>
-                {% if order.is_overdue %}
-                <span class="kb-status-dot overdue" title="已逾期"></span>
-                {% elif order.is_warning %}
-                <span class="kb-status-dot warning" title="即将逾期"></span>
-                {% else %}
-                <span class="kb-status-dot normal" title="正常"></span>
-                {% endif %}
+                <div class="d-flex align-items-center gap-2">
+                    {% if order.download_sla_status != 'none' %}
+                    <span class="kb-download-sla {{ order.download_sla_class }}" title="工厂下载时效: {{ order.download_sla_title }}">
+                        <i class="fa-solid fa-download"></i> {{ order.download_sla_title }}
+                    </span>
+                    {% endif %}
+                    {% if order.is_overdue %}
+                    <span class="kb-status-dot overdue" title="已逾期"></span>
+                    {% elif order.is_warning %}
+                    <span class="kb-status-dot warning" title="即将逾期"></span>
+                    {% else %}
+                    <span class="kb-status-dot normal" title="正常"></span>
+                    {% endif %}
+                </div>
             </div>
             <div class="kb-customer">
                 <i class="fa-solid fa-user"></i> {{ order.customer.phone|slice:":3" }}****{{ order.customer.phone|slice:"-4:" }}
@@ -486,6 +528,13 @@
                         <div class="kb-sn">
                             <a href="{% url 'merchant_order_detail' order.id %}">{{ order.sn }}</a>
                         </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if order.download_sla_status != 'none' %}
+                        <span class="kb-download-sla {{ order.download_sla_class }}" title="工厂下载时效: {{ order.download_sla_title }}">
+                            <i class="fa-solid fa-download"></i> {{ order.download_sla_title }}
+                        </span>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="kb-customer">

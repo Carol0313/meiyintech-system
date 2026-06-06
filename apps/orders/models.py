@@ -97,6 +97,14 @@ class Order(models.Model):
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
     submitted_at = models.DateTimeField('提交时间', blank=True, null=True)
+    
+    # ===== 时效追踪字段（SLA）=====
+    # 客服处理时效：客户上传文件 → 客服确认
+    file_uploaded_at = models.DateTimeField('客户上传文件时间', blank=True, null=True)
+    customer_service_processed_at = models.DateTimeField('客服处理时间', blank=True, null=True)
+    # 工厂下载时效：工厂收到通知 → 工厂下载文件
+    factory_notified_at = models.DateTimeField('工厂通知时间', blank=True, null=True)
+    factory_downloaded_at = models.DateTimeField('工厂下载时间', blank=True, null=True)
 
     class Meta:
         verbose_name = '订单'

@@ -101,6 +101,49 @@
                 {% endif %}
             </div>
             <div class="card-body">
+                <!-- 【新增】时效追踪面板 -->
+                {% if order.file_uploaded_at or order.factory_notified_at %}
+                <div class="alert alert-light border mb-3" style="background:#f8fafc;">
+                    <div class="fw-bold mb-2"><i class="fa-solid fa-stopwatch"></i> 时效追踪</div>
+                    <div class="row small">
+                        {% if order.file_uploaded_at %}
+                        <div class="col-md-6">
+                            <span class="text-muted">客服处理：</span>
+                            {% if order.customer_service_processed_at %}
+                                <span class="text-success"><i class="fa-solid fa-check"></i> 已处理（{{ order.file_uploaded_at|timesince:order.customer_service_processed_at }}）</span>
+                            {% else %}
+                                {% with cs_elapsed=(now - order.file_uploaded_at).total_seconds / 60 %}
+                                <span class="{% if cs_elapsed > 30 %}text-danger{% elif cs_elapsed > 15 %}text-warning{% else %}text-success{% endif %}">
+                                    <i class="fa-solid fa-clock"></i> 
+                                    {% if cs_elapsed > 30 %}已超{{ cs_elapsed|add:-30|floatformat:0 }}分钟
+                                    {% elif cs_elapsed > 15 %}剩{{ 30|add:-cs_elapsed|floatformat:0 }}分钟
+                                    {% else %}正常{% endif %}
+                                </span>
+                                {% endwith %}
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        {% if order.factory_notified_at %}
+                        <div class="col-md-6">
+                            <span class="text-muted">工厂下载：</span>
+                            {% if order.factory_downloaded_at %}
+                                <span class="text-success"><i class="fa-solid fa-check"></i> 已下载（{{ order.factory_notified_at|timesince:order.factory_downloaded_at }}）</span>
+                            {% else %}
+                                {% with fd_elapsed=(now - order.factory_notified_at).total_seconds / 60 %}
+                                <span class="{% if fd_elapsed > 30 %}text-danger{% elif fd_elapsed > 15 %}text-warning{% else %}text-success{% endif %}">
+                                    <i class="fa-solid fa-clock"></i> 
+                                    {% if fd_elapsed > 30 %}已超{{ fd_elapsed|add:-30|floatformat:0 }}分钟
+                                    {% elif fd_elapsed > 15 %}剩{{ 30|add:-fd_elapsed|floatformat:0 }}分钟
+                                    {% else %}正常{% endif %}
+                                </span>
+                                {% endwith %}
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
                 <div class="row mb-3">
                     <div class="col-md-6"><strong>客户：</strong>{{ order.customer.phone }}</div>
                     <div class="col-md-6"><strong>创建时间：</strong>{{ order.created_at|date:"Y-m-d H:i" }}</div>
