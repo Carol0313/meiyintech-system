@@ -1,6 +1,6 @@
 # 镁印制版下单系统 - 项目状态记录
 
-> 最后更新：2026-06-06 16:00
+> 最后更新：2026-06-06 22:00
 > 此文件用于快速恢复项目上下文，每次对话开始时请将此文件内容发送给AI
 
 ---
@@ -38,7 +38,7 @@ nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 
 ---
 
-## 三、已完成功能清单（17项）
+## 三、已完成功能清单（22项）
 
 | 功能 | 完成时间 | 备注 |
 |------|---------|------|
@@ -59,6 +59,13 @@ nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 | **产品分类重新调整** | **2026-06-06** | 腐蚀版4种+雕刻版5种+树脂版+菲林 |
 | **红框尺寸修改功能** | **2026-06-06** | 商户后台可修改红框尺寸，支持添加/删除框、修改长宽高、重新计算订单金额 |
 | **Nginx反向代理配置** | **2026-06-06** | `/etc/nginx/conf.d/magnesium.conf` 已配置 |
+| **商户端投诉管理** | **2026-06-06** | 列表页+详情处理页完整实现 |
+| **PDF预览图生成** | **2026-06-06** | OrderItem新增preview_image字段，订单详情页显示预览图 |
+| **待拼版页面改版** | **2026-06-06** | 卡片式展示（预览图+完整信息），底部固定操作栏，支持分组筛选 |
+| **手动上传拼版文件** | **2026-06-06** | 拼版工作台支持跳过自动拼版，直接上传拼版PDF |
+| **生产看板精简改版** | **2026-06-06** | 删除KPI统计和底部统计模块，只保留三列看板+可折叠抽屉 |
+| **SLA时效追踪系统** | **2026-06-06** | 客服30分钟处理+工厂30分钟下载时效追踪，订单列表/详情页/生产看板显示 |
+| **商户端数据分析中心** | **2026-06-06** | 8个KPI卡片+6个ECharts图表（趋势/产品/材质/客户/工厂/状态）+SLA统计面板 |
 
 ---
 
@@ -94,6 +101,7 @@ orders.0025_alter_orderitem_product_name  - 产品分类名称调整（第一轮
 orders.0026_alter_orderitem_product_name  - 产品分类名称调整（第二轮，去掉空格）
 products.0007_alter_productspec_product_name  - ProductSpec产品分类名称调整（第一轮）
 products.0008_alter_productspec_product_name  - ProductSpec产品分类名称调整（第二轮，去掉空格）
+orders.0028_order_customer_service_processed_at_and_more  - Order新增SLA时效字段（file_uploaded_at/customer_service_processed_at/factory_notified_at/factory_downloaded_at）
 ```
 
 ---
@@ -103,6 +111,7 @@ products.0008_alter_productspec_product_name  - ProductSpec产品分类名称调
 1. **PostgreSQL已安装但认证配置有问题**（pg_hba.conf需要改为md5认证），当前回退到SQLite
 2. **Python 3.8 弃用警告** - PyMySQL的cryptography库提示Python 3.8不再支持，不影响运行但建议后续升级
 3. **Nginx systemctl重启会失败**（80端口被占用），需要用 `kill -9` 杀掉旧进程后用 `nginx` 命令启动
+4. **GitHub推送间歇性超时** — 需要多次重试
 
 ---
 
@@ -178,6 +187,8 @@ ps aux | grep nginx
 4. **上传文件区域2行布局** — 已完成：第一行预览图+文件名，第二行尺寸数量输入
 5. **Nginx反向代理配置** — 已完成：`/etc/nginx/conf.d/magnesium.conf` 配置完成
 6. **域名备案** — 预计6月8日通过
+7. **SLA时效追踪系统** — 已完成：客服30分钟处理+工厂30分钟下载时效追踪
+8. **商户端数据分析中心** — 已完成：独立数据分析页面，8个KPI+6个图表+SLA面板
 
 ---
 
