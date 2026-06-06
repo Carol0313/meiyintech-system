@@ -12,6 +12,7 @@
 {% elif user.user_type == 'merchant_admin' %}
     <div class="nav-section">管理中心</div>
     <a class="nav-link {% if request.resolver_match.url_name == 'merchant_dashboard' %}active{% endif %}" href="{% url 'merchant_dashboard' %}"><i class="fa-solid fa-chart-line"></i> 管理中心</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_analytics' %}active{% endif %}" href="{% url 'merchant_analytics' %}"><i class="fa-solid fa-chart-pie"></i> 数据分析</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'member_list' %}active{% endif %}" href="{% url 'member_list' %}"><i class="fa-solid fa-users"></i> 会员管理</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'factory_list' %}active{% endif %}" href="{% url 'factory_list' %}"><i class="fa-solid fa-industry"></i> 工厂管理</a>
     <a class="nav-link {% if request.resolver_match.url_name == 'spec_list' %}active{% endif %}" href="{% url 'spec_list' %}"><i class="fa-solid fa-box-open"></i> 商品规格</a>
@@ -28,6 +29,7 @@
 {% elif user.user_type == 'merchant_staff' %}
     <div class="nav-section">员工工作台</div>
     <a class="nav-link {% if request.resolver_match.url_name == 'merchant_dashboard' %}active{% endif %}" href="{% url 'merchant_dashboard' %}"><i class="fa-solid fa-chart-line"></i> 首页</a>
+    <a class="nav-link {% if request.resolver_match.url_name == 'merchant_analytics' %}active{% endif %}" href="{% url 'merchant_analytics' %}"><i class="fa-solid fa-chart-pie"></i> 数据分析</a>
     {% with role_name=user.staff_profile.role.name %}
         {% if role_name == 'designer' or role_name == 'admin' %}
             <a class="nav-link {% if request.resolver_match.url_name == 'pending_layout_orders' %}active{% endif %}" href="{% url 'pending_layout_orders' %}"><i class="fa-solid fa-table-cells"></i> 待拼版</a>

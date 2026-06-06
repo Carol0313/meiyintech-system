@@ -132,6 +132,215 @@ def merchant_dashboard(request):
     return render(request, 'merchant/dashboard.html', ctx)
 
 
+# ==================== 数据分析中心 ====================
+
+@login_required
+@merchant_required
+def merchant_analytics(request):
+    """商户数据分析中心 - 经营数据可视化"""
+    from django.db.models import Sum, Count, Avg, Q, F
+    from datetime import timedelta
+    from django.utils import timezone
+    from apps.products.models import ProductSpec
+
+    merchant = get_merchant(request)
+
+    # ---- 时间范围参数 ----
+    range_key = request.GET.get('range', 'month')
+    now = timezone.now()
+    today = now.date()
+
+    if range_key == 'today':
+        start_date = today
+        end_date = today
+    elif range_key == 'week':
+        start_date = today - timedelta(days=today.weekday())
+        end_date = today
+    elif range_key == 'month':
+        start_date = today.replace(day=1)
+        end_date = today
+    elif range_key == 'quarter':
+        quarter_start_month = (today.month - 1) // 3 * 3 + 1
+        start_date = today.replace(month=quarter_start_month, day=1)
+        end_date = today
+    elif range_key == 'year':
+        start_date = today.replace(month=1, day=1)
+        end_date = today
+    else:
+        range_key = 'month'
+        start_date = today.replace(day=1)
+        end_date = today
+
+    # 基础查询集（已提交的订单）
+    base_orders = merchant.orders.filter(is_submitted=True)
+    date_orders = base_orders.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
+
+    # ---- KPI 统计 ----
+    total_orders = date_orders.count()
+    total_amount = date_orders.aggregate(s=Sum('total_amount'))['s'] or 0
+    total_customers = date_orders.values('customer').distinct().count()
+
+    # 总版数 + 总面积
+    date_items = OrderItem.objects.filter(order__in=date_orders)
+    total_plates = date_items.aggregate(s=Sum('quantity'))['s'] or 0
+    total_area = date_items.aggregate(s=Sum('area'))['s'] or 0
+
+    avg_order_value = total_amount / total_orders if total_orders > 0 else 0
+
+    remake_count = date_orders.filter(order_type='remake').count()
+    remake_rate = round(remake_count / total_orders * 100, 1) if total_orders > 0 else 0
+
+    # ---- 订单趋势（按天）----
+    from django.db.models.functions import TruncDate
+    trend_data = list(date_orders.annotate(
+        day=TruncDate('created_at')
+    ).values('day').annotate(
+        amount=Sum('total_amount'),
+        count=Count('id')
+    ).order_by('day'))
+
+    trend_labels = [d['day'].strftime('%m-%d') for d in trend_data]
+    trend_amounts = [float(d['amount'] or 0) for d in trend_data]
+    trend_counts = [d['count'] for d in trend_data]
+
+    # ---- 产品类型分布 ----
+    product_stats = list(date_items.values('product_name').annotate(
+        order_count=Count('order', distinct=True),
+        total_qty=Sum('quantity')
+    ).order_by('-total_qty'))
+    product_name_map = {p[0]: p[1] for p in ProductSpec.PRODUCT_NAME_CHOICES}
+    for s in product_stats:
+        s['label'] = product_name_map.get(s['product_name'], s['product_name'])
+
+    # ---- 材质分布 ----
+    material_stats = list(date_items.values('material').annotate(
+        total_area=Sum('area'),
+        total_qty=Sum('quantity')
+    ).order_by('-total_area'))
+    material_name_map = dict(OrderItem.MATERIAL_CHOICES)
+    for s in material_stats:
+        s['label'] = material_name_map.get(s['material'], s['material'])
+
+    # ---- 客户价值排行 Top 10 ----
+    customer_stats = list(date_orders.values('customer__phone').annotate(
+        total_amount=Sum('total_amount'),
+        order_count=Count('id')
+    ).order_by('-total_amount')[:10])
+    for c in customer_stats:
+        phone = c['customer__phone'] or ''
+        c['phone_display'] = f"{phone[:3]}****{phone[-4:]}" if len(phone) >= 7 else phone
+
+    # ---- 工厂产能对比 ----
+    factory_stats = list(date_orders.filter(factory__isnull=False).values(
+        'factory__name'
+    ).annotate(
+        order_count=Count('id'),
+        total_amount=Sum('total_amount')
+    ).order_by('-order_count'))
+    # 补充面积数据
+    factory_area_stats = {
+        fa['factory__name']: fa['total_area']
+        for fa in date_items.filter(order__factory__isnull=False).values(
+            'order__factory__name'
+        ).annotate(total_area=Sum('area'))
+    }
+    for f in factory_stats:
+        f['total_area'] = factory_area_stats.get(f['factory__name'], 0)
+
+    # ---- 订单状态分布 ----
+    status_distribution = []
+    status_flow = [
+        ('pending_confirm', '待确认'),
+        ('design_confirmed', '设计确认'),
+        ('paid', '已付款'),
+        ('in_production', '生产中'),
+        ('shipped', '已发货'),
+        ('received', '已收货'),
+    ]
+    for code, label in status_flow:
+        count = date_orders.filter(status=code).count()
+        status_distribution.append({'code': code, 'label': label, 'count': count})
+
+    # ---- SLA 时效统计 ----
+    sla_stats = {
+        'cs_avg_minutes': None,
+        'factory_avg_minutes': None,
+        'cs_overdue_count': 0,
+        'factory_overdue_count': 0,
+    }
+
+    # 客服平均处理时长
+    cs_orders = date_orders.filter(
+        file_uploaded_at__isnull=False,
+        customer_service_processed_at__isnull=False
+    )
+    cs_times = []
+    for o in cs_orders:
+        delta = (o.customer_service_processed_at - o.file_uploaded_at).total_seconds() / 60
+        if delta > 0:
+            cs_times.append(delta)
+    if cs_times:
+        sla_stats['cs_avg_minutes'] = round(sum(cs_times) / len(cs_times), 1)
+
+    # 工厂平均下载时长
+    factory_times = []
+    factory_orders = date_orders.filter(
+        factory_notified_at__isnull=False,
+        factory_downloaded_at__isnull=False
+    )
+    for o in factory_orders:
+        delta = (o.factory_downloaded_at - o.factory_notified_at).total_seconds() / 60
+        if delta > 0:
+            factory_times.append(delta)
+    if factory_times:
+        sla_stats['factory_avg_minutes'] = round(sum(factory_times) / len(factory_times), 1)
+
+    # 超时统计
+    cs_pending = date_orders.filter(
+        file_uploaded_at__isnull=False,
+        customer_service_processed_at__isnull=False
+    )
+    for o in cs_pending:
+        elapsed = (o.customer_service_processed_at - o.file_uploaded_at).total_seconds() / 60
+        if elapsed > 30:
+            sla_stats['cs_overdue_count'] += 1
+
+    factory_pending = date_orders.filter(
+        factory_notified_at__isnull=False,
+        factory_downloaded_at__isnull=False
+    )
+    for o in factory_pending:
+        elapsed = (o.factory_downloaded_at - o.factory_notified_at).total_seconds() / 60
+        if elapsed > 30:
+            sla_stats['factory_overdue_count'] += 1
+
+    ctx = {
+        'range_key': range_key,
+        'start_date': start_date,
+        'end_date': end_date,
+        'kpi': {
+            'total_orders': total_orders,
+            'total_amount': total_amount,
+            'total_plates': total_plates,
+            'total_area': total_area,
+            'avg_order_value': avg_order_value,
+            'total_customers': total_customers,
+            'remake_count': remake_count,
+            'remake_rate': remake_rate,
+        },
+        'trend_labels': trend_labels,
+        'trend_amounts': trend_amounts,
+        'trend_counts': trend_counts,
+        'product_stats': product_stats,
+        'material_stats': material_stats,
+        'customer_stats': customer_stats,
+        'factory_stats': factory_stats,
+        'status_distribution': status_distribution,
+        'sla_stats': sla_stats,
+    }
+    return render(request, 'merchant/analytics.html', ctx)
+
+
 # ==================== 账号设置 ====================
 
 @login_required

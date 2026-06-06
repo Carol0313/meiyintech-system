@@ -109,6 +109,24 @@
     </div>
 </div>
 
+<!-- 数据分析快捷入口 -->
+<div class="card mb-4" style="border:1px dashed var(--primary);background:linear-gradient(135deg,#eff6ff,#fff);">
+    <div class="card-body d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-3">
+            <div style="width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,#1565c0,#0d47a1);display:flex;align-items:center;justify-content:center;color:white;font-size:20px;">
+                <i class="fa-solid fa-chart-pie"></i>
+            </div>
+            <div>
+                <div style="font-weight:600;color:var(--text-main);">数据分析中心</div>
+                <div style="font-size:12px;color:var(--text-muted);">查看订单趋势、客户价值、产品分布、工厂产能等完整经营数据</div>
+            </div>
+        </div>
+        <a href="{% url 'merchant_analytics' %}" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-arrow-right"></i> 立即查看
+        </a>
+    </div>
+</div>
+
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>最近订单</span>

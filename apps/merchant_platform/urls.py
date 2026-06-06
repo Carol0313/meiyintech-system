@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path('', views.merchant_dashboard, name='merchant_dashboard'),
+    path('analytics/', views.merchant_analytics, name='merchant_analytics'),
     path('settings/', views.merchant_settings, name='merchant_settings'),
     # 会员管理
     path('members/', views.member_list, name='member_list'),

@@ -1,0 +1,399 @@
+{% extends 'base.html' %}
+{% block title %}数据分析{% endblock %}
+{% block page_title %}数据分析中心{% endblock %}
+{% block page_subtitle %}经营数据可视化分析{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 时间筛选 */
+    .range-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+    .range-tab {
+        padding: 8px 18px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        border: 1px solid var(--border-color);
+        background: white;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.15s;
+        text-decoration: none;
+    }
+    .range-tab:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    .range-tab.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+
+    /* KPI 卡片 */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    .kpi-card {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 18px 20px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        transition: all 0.15s;
+    }
+    .kpi-card:hover {
+        border-color: var(--primary);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .kpi-icon {
+        width: 48px; height: 48px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; flex-shrink: 0;
+    }
+    .kpi-icon.blue { background: #E3F2FD; color: #1976D2; }
+    .kpi-icon.green { background: #E8F5E9; color: #388E3C; }
+    .kpi-icon.orange { background: #FFF3E0; color: #F57C00; }
+    .kpi-icon.purple { background: #F3E5F5; color: #7B1FA2; }
+    .kpi-icon.red { background: #FFEBEE; color: #C62828; }
+    .kpi-icon.teal { background: #E0F2F1; color: #00695C; }
+    .kpi-icon.indigo { background: #E8EAF6; color: #303F9F; }
+    .kpi-icon.pink { background: #FCE4EC; color: #AD1457; }
+    .kpi-value { font-size: 22px; font-weight: 700; color: var(--text-main); line-height: 1.2; }
+    .kpi-label { font-size: 12px; color: var(--text-muted); }
+
+    /* 图表卡片 */
+    .chart-card {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+    .chart-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .chart-title i { color: var(--primary); }
+
+    /* 空状态 */
+    .chart-empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+
+    @media (max-width: 991px) {
+        .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 575px) {
+        .kpi-grid { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- 时间范围筛选 -->
+<div class="range-tabs">
+    <a href="?range=today" class="range-tab {% if range_key == 'today' %}active{% endif %}">今日</a>
+    <a href="?range=week" class="range-tab {% if range_key == 'week' %}active{% endif %}">本周</a>
+    <a href="?range=month" class="range-tab {% if range_key == 'month' %}active{% endif %}">本月</a>
+    <a href="?range=quarter" class="range-tab {% if range_key == 'quarter' %}active{% endif %}">本季度</a>
+    <a href="?range=year" class="range-tab {% if range_key == 'year' %}active{% endif %}">本年</a>
+    <span class="ms-auto text-muted small" style="line-height:34px;">
+        {{ start_date|date:"Y-m-d" }} ~ {{ end_date|date:"Y-m-d" }}
+    </span>
+</div>
+
+<!-- KPI 统计卡片 -->
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-icon blue"><i class="fa-solid fa-clipboard-list"></i></div>
+        <div>
+            <div class="kpi-value">{{ kpi.total_orders }}</div>
+            <div class="kpi-label">订单总数</div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon green"><i class="fa-solid fa-yen-sign"></i></div>
+        <div>
+            <div class="kpi-value">¥{{ kpi.total_amount|floatformat:0 }}</div>
+            <div class="kpi-label">订单总金额</div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon orange"><i class="fa-solid fa-layer-group"></i></div>
+        <div>
+            <div class="kpi-value">{{ kpi.total_plates }}</div>
+            <div class="kpi-label">总版数（块）</div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon purple"><i class="fa-solid fa-ruler-combined"></i></div>
+        <div>
+            <div class="kpi-value">{{ kpi.total_area|floatformat:0 }}</div>
+            <div class="kpi-label">做版面积（cm²）</div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon teal"><i class="fa-solid fa-receipt"></i></div>
+        <div>
+            <div class="kpi-value">¥{{ kpi.avg_order_value|floatformat:0 }}</div>
+            <div class="kpi-label">平均客单价</div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon indigo"><i class="fa-solid fa-users"></i></div>
+        <div>
+            <div class="kpi-value">{{ kpi.total_customers }}</div>
+            <div class="kpi-label">下单客户数</div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon red"><i class="fa-solid fa-rotate-left"></i></div>
+        <div>
+            <div class="kpi-value">{{ kpi.remake_count }}</div>
+            <div class="kpi-label">补版单数</div>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-icon pink"><i class="fa-solid fa-percent"></i></div>
+        <div>
+            <div class="kpi-value">{{ kpi.remake_rate }}%</div>
+            <div class="kpi-label">补版率</div>
+        </div>
+    </div>
+</div>
+
+<!-- 订单趋势图 -->
+<div class="chart-card">
+    <div class="chart-title"><i class="fa-solid fa-chart-line"></i> 订单趋势</div>
+    <div id="trendChart" style="width:100%;height:300px;"></div>
+</div>
+
+<!-- 产品分布 + 材质分布 -->
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="chart-card h-100">
+            <div class="chart-title"><i class="fa-solid fa-chart-column"></i> 产品类型分布</div>
+            <div id="productChart" style="width:100%;height:220px;"></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="chart-card h-100">
+            <div class="chart-title"><i class="fa-solid fa-chart-pie"></i> 材质分布（按面积）</div>
+            <div id="materialChart" style="width:100%;height:220px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 客户排行 + 工厂对比 -->
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="chart-card h-100">
+            <div class="chart-title"><i class="fa-solid fa-trophy"></i> 客户价值排行 Top 10</div>
+            <div id="customerChart" style="width:100%;height:260px;"></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="chart-card h-100">
+            <div class="chart-title"><i class="fa-solid fa-industry"></i> 工厂产能对比</div>
+            <div id="factoryChart" style="width:100%;height:260px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 状态漏斗 + SLA统计 -->
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="chart-card h-100">
+            <div class="chart-title"><i class="fa-solid fa-filter"></i> 订单状态分布</div>
+            <div id="statusChart" style="width:100%;height:260px;"></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="chart-card h-100">
+            <div class="chart-title"><i class="fa-solid fa-stopwatch"></i> SLA 时效统计</div>
+            <div class="row g-3 p-3">
+                <div class="col-6">
+                    <div class="text-center p-3" style="background:#f8fafc;border-radius:10px;">
+                        <div class="text-muted small mb-1">客服平均处理</div>
+                        <div style="font-size:28px;font-weight:700;color:#1976D2;">
+                            {% if sla_stats.cs_avg_minutes %}{{ sla_stats.cs_avg_minutes }}{% else %}-{% endif %}
+                        </div>
+                        <div class="text-muted small">分钟</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="text-center p-3" style="background:#f8fafc;border-radius:10px;">
+                        <div class="text-muted small mb-1">工厂平均下载</div>
+                        <div style="font-size:28px;font-weight:700;color:#388E3C;">
+                            {% if sla_stats.factory_avg_minutes %}{{ sla_stats.factory_avg_minutes }}{% else %}-{% endif %}
+                        </div>
+                        <div class="text-muted small">分钟</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="text-center p-3" style="background:#fff3e0;border-radius:10px;">
+                        <div class="text-muted small mb-1">客服超时单</div>
+                        <div style="font-size:28px;font-weight:700;color:#E65100;">{{ sla_stats.cs_overdue_count }}</div>
+                        <div class="text-muted small">单</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="text-center p-3" style="background:#ffebee;border-radius:10px;">
+                        <div class="text-muted small mb-1">工厂超时单</div>
+                        <div style="font-size:28px;font-weight:700;color:#C62828;">{{ sla_stats.factory_overdue_count }}</div>
+                        <div class="text-muted small">单</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    // 通用图表配置
+    const commonGrid = { left: '3%', right: '4%', bottom: '3%', top: '12%', containLabel: true };
+    const commonTooltip = { trigger: 'axis', axisPointer: { type: 'shadow' } };
+
+    // 1. 订单趋势图（折线+柱状混合）
+    const trendLabels = {{ trend_labels|safe }};
+    const trendAmounts = {{ trend_amounts|safe }};
+    const trendCounts = {{ trend_counts|safe }};
+    if (trendLabels.length > 0) {
+        const trendChart = echarts.init(document.getElementById('trendChart'));
+        trendChart.setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['订单金额', '订单数量'], top: 0 },
+            grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
+            xAxis: { type: 'category', data: trendLabels, axisLine: { lineStyle: { color: '#ddd' } }, axisLabel: { color: '#666', fontSize: 11 } },
+            yAxis: [
+                { type: 'value', name: '金额(元)', position: 'left', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#999', fontSize: 11 } },
+                { type: 'value', name: '数量', position: 'right', axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { color: '#999', fontSize: 11 } }
+            ],
+            series: [
+                { name: '订单金额', type: 'line', data: trendAmounts, smooth: true, symbol: 'circle', symbolSize: 6, lineStyle: { color: '#1976D2', width: 2 }, itemStyle: { color: '#1976D2' }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(25,118,210,0.15)' }, { offset: 1, color: 'rgba(25,118,210,0.01)' }] } } },
+                { name: '订单数量', type: 'bar', yAxisIndex: 1, data: trendCounts, barWidth: '30%', itemStyle: { color: '#90CAF9', borderRadius: [3, 3, 0, 0] } }
+            ]
+        });
+        window.addEventListener('resize', () => trendChart.resize());
+    } else {
+        document.getElementById('trendChart').innerHTML = '<div class="chart-empty" style="height:300px;">暂无数据</div>';
+    }
+
+    // 2. 产品类型分布（横向柱状图）
+    const productData = {{ product_stats|safe }};
+    if (productData.length > 0) {
+        const productChart = echarts.init(document.getElementById('productChart'));
+        productChart.setOption({
+            tooltip: { trigger: 'axis', formatter: '{b}: {c}块' },
+            grid: { left: '3%', right: '8%', bottom: '3%', top: '5%', containLabel: true },
+            xAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#999', fontSize: 11 } },
+            yAxis: { type: 'category', data: productData.map(d => d.label).reverse(), axisLine: { lineStyle: { color: '#ddd' } }, axisLabel: { color: '#666', fontSize: 11 } },
+            series: [{ type: 'bar', data: productData.map(d => d.total_qty).reverse(), barWidth: '50%', itemStyle: { color: '#1976D2', borderRadius: [0, 4, 4, 0] }, label: { show: true, position: 'right', formatter: '{c}块', fontSize: 11, color: '#333' } }]
+        });
+        window.addEventListener('resize', () => productChart.resize());
+    } else {
+        document.getElementById('productChart').innerHTML = '<div class="chart-empty" style="height:220px;">暂无数据</div>';
+    }
+
+    // 3. 材质分布（环形图）
+    const materialData = {{ material_stats|safe }};
+    if (materialData.length > 0) {
+        const materialChart = echarts.init(document.getElementById('materialChart'));
+        materialChart.setOption({
+            tooltip: { trigger: 'item', formatter: '{b}: {c}cm² ({d}%)' },
+            legend: { orient: 'vertical', right: '5%', top: 'center', textStyle: { color: '#666', fontSize: 11 } },
+            series: [{
+                type: 'pie', radius: ['40%', '65%'], center: ['35%', '50%'],
+                data: materialData.map(d => ({ name: d.label, value: parseFloat((d.total_area || 0).toFixed(1)) })),
+                label: { show: false },
+                itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 }
+            }]
+        });
+        window.addEventListener('resize', () => materialChart.resize());
+    } else {
+        document.getElementById('materialChart').innerHTML = '<div class="chart-empty" style="height:220px;">暂无数据</div>';
+    }
+
+    // 4. 客户价值排行（横向柱状图）
+    const customerData = {{ customer_stats|safe }};
+    if (customerData.length > 0) {
+        const customerChart = echarts.init(document.getElementById('customerChart'));
+        customerChart.setOption({
+            tooltip: { trigger: 'axis', formatter: function(p) { return p[0].name + '<br/>金额: ¥' + p[0].value.toLocaleString() + '<br/>订单: ' + customerData[p[0].dataIndex].order_count + '单'; } },
+            grid: { left: '3%', right: '12%', bottom: '3%', top: '5%', containLabel: true },
+            xAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#999', fontSize: 11, formatter: '¥{value}' } },
+            yAxis: { type: 'category', data: customerData.map(d => d.phone_display).reverse(), axisLine: { lineStyle: { color: '#ddd' } }, axisLabel: { color: '#666', fontSize: 11 } },
+            series: [{ type: 'bar', data: customerData.map(d => parseFloat(d.total_amount)).reverse(), barWidth: '55%', itemStyle: { color: '#7B1FA2', borderRadius: [0, 4, 4, 0] }, label: { show: true, position: 'right', formatter: function(p) { return '¥' + p.value.toLocaleString(); }, fontSize: 10, color: '#333' } }]
+        });
+        window.addEventListener('resize', () => customerChart.resize());
+    } else {
+        document.getElementById('customerChart').innerHTML = '<div class="chart-empty" style="height:260px;">暂无数据</div>';
+    }
+
+    // 5. 工厂产能对比（柱状图）
+    const factoryData = {{ factory_stats|safe }};
+    if (factoryData.length > 0) {
+        const factoryChart = echarts.init(document.getElementById('factoryChart'));
+        factoryChart.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            legend: { data: ['订单数', '做版面积(cm²)'], top: 0 },
+            grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
+            xAxis: { type: 'category', data: factoryData.map(d => d.factory__name), axisLine: { lineStyle: { color: '#ddd' } }, axisLabel: { color: '#666', fontSize: 11, interval: 0, rotate: factoryData.length > 3 ? 15 : 0 } },
+            yAxis: [
+                { type: 'value', name: '订单数', position: 'left', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#999', fontSize: 11 } },
+                { type: 'value', name: '面积', position: 'right', axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { color: '#999', fontSize: 11 } }
+            ],
+            series: [
+                { name: '订单数', type: 'bar', data: factoryData.map(d => d.order_count), barWidth: '30%', itemStyle: { color: '#1976D2', borderRadius: [3, 3, 0, 0] } },
+                { name: '做版面积(cm²)', type: 'bar', yAxisIndex: 1, data: factoryData.map(d => parseFloat((d.total_area || 0).toFixed(1))), barWidth: '30%', itemStyle: { color: '#4DB6AC', borderRadius: [3, 3, 0, 0] } }
+            ]
+        });
+        window.addEventListener('resize', () => factoryChart.resize());
+    } else {
+        document.getElementById('factoryChart').innerHTML = '<div class="chart-empty" style="height:260px;">暂无数据</div>';
+    }
+
+    // 6. 订单状态分布（柱状图）
+    const statusData = {{ status_distribution|safe }};
+    const hasStatusData = statusData.some(d => d.count > 0);
+    if (hasStatusData) {
+        const statusChart = echarts.init(document.getElementById('statusChart'));
+        const statusColors = ['#F9A825', '#1976D2', '#388E3C', '#7B1FA2', '#E65100', '#00695C'];
+        statusChart.setOption({
+            tooltip: { trigger: 'axis', formatter: '{b}: {c}单' },
+            grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+            xAxis: { type: 'category', data: statusData.map(d => d.label), axisLine: { lineStyle: { color: '#ddd' } }, axisLabel: { color: '#666', fontSize: 11 } },
+            yAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#999', fontSize: 11 } },
+            series: [{
+                type: 'bar', data: statusData.map((d, i) => ({ value: d.count, itemStyle: { color: statusColors[i % statusColors.length], borderRadius: [4, 4, 0, 0] } })),
+                barWidth: '45%', label: { show: true, position: 'top', formatter: '{c}单', fontSize: 12, color: '#333' }
+            }]
+        });
+        window.addEventListener('resize', () => statusChart.resize());
+    } else {
+        document.getElementById('statusChart').innerHTML = '<div class="chart-empty" style="height:260px;">暂无数据</div>';
+    }
+})();
+</script>
+
+{% endblock %}
