@@ -1,6 +1,6 @@
 # 镁印制版下单系统 - 项目状态记录
 
-> 最后更新：2026-06-05 18:50
+> 最后更新：2026-06-06 16:00
 > 此文件用于快速恢复项目上下文，每次对话开始时请将此文件内容发送给AI
 
 ---
@@ -10,11 +10,11 @@
 | 项目 | 内容 |
 |------|------|
 | 项目名称 | 镁印制版下单系统（闪电制版 / 制版家） |
-| 域名 | www.zhibanhome.com |
+| 域名 | www.zhibanhome.com（备案中） |
 | 服务器IP | 47.100.212.79 |
 | 技术栈 | Django 4.2, Python 3.8, Bootstrap 5.3, SQLite(开发)/PostgreSQL(生产) |
 | 代码仓库 | https://github.com/Carol0313/meiyintech-system |
-| 部署状态 | 测试阶段，使用 runserver + SQLite |
+| 部署状态 | 测试阶段，使用 runserver + SQLite + Nginx反向代理 |
 
 ---
 
@@ -31,14 +31,14 @@ source venv/bin/activate
 nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 
 # Nginx配置
-/etc/nginx/conf.d/*.conf
+/etc/nginx/conf.d/magnesium.conf
 # 静态文件路径
 /home/magnesium/magnesium_order_platform/staticfiles/
 ```
 
 ---
 
-## 三、已完成功能清单（12项）
+## 三、已完成功能清单（17项）
 
 | 功能 | 完成时间 | 备注 |
 |------|---------|------|
@@ -55,15 +55,16 @@ nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 | SSL证书申请 | 2026-06-05 | Certbot证书已申请 |
 | 规格组特殊要求备注 | 2026-06-05 | 每个规格组独立备注 |
 | 规格组缩放比例设置 | 2026-06-05 | 支持99.75%缩放补偿金属膨胀 |
+| **UI全面改版** | **2026-06-06** | 白色侧边栏+Font Awesome图标+统计卡片新布局 |
+| **产品分类重新调整** | **2026-06-06** | 腐蚀版4种+雕刻版5种+树脂版+菲林 |
+| **红框尺寸修改功能** | **2026-06-06** | 商户后台可修改红框尺寸，支持添加/删除框、修改长宽高、重新计算订单金额 |
+| **Nginx反向代理配置** | **2026-06-06** | `/etc/nginx/conf.d/magnesium.conf` 已配置 |
 
 ---
 
-## 四、已完成功能（2项）
+## 四、进行中功能（0项）
 
-| 功能 | 完成时间 | 备注 |
-|------|---------|------|
-| 红框尺寸修改功能 | 2026-06-06 | **商户后台可修改红框尺寸**，支持添加/删除框、修改长宽高、重新计算订单金额 |
-| 商户端投诉管理 | 2026-06-06 | 查看投诉列表、处理投诉（功能已存在，验证通过） |
+暂无
 
 ---
 
@@ -89,6 +90,10 @@ nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 ```
 orders.0023_add_item_special_requests  - OrderItem新增special_requests字段
 orders.0024_add_scale_ratio            - OrderItem新增scale_ratio字段
+orders.0025_alter_orderitem_product_name  - 产品分类名称调整（第一轮）
+orders.0026_alter_orderitem_product_name  - 产品分类名称调整（第二轮，去掉空格）
+products.0007_alter_productspec_product_name  - ProductSpec产品分类名称调整（第一轮）
+products.0008_alter_productspec_product_name  - ProductSpec产品分类名称调整（第二轮，去掉空格）
 ```
 
 ---
@@ -96,7 +101,7 @@ orders.0024_add_scale_ratio            - OrderItem新增scale_ratio字段
 ## 八、已知问题
 
 1. **PostgreSQL已安装但认证配置有问题**（pg_hba.conf需要改为md5认证），当前回退到SQLite
-2. **服务器上Django runserver绑定127.0.0.1:8000**，通过Nginx反向代理访问
+2. **Python 3.8 弃用警告** - PyMySQL的cryptography库提示Python 3.8不再支持，不影响运行但建议后续升级
 3. **Nginx systemctl重启会失败**（80端口被占用），需要用 `kill -9` 杀掉旧进程后用 `nginx` 命令启动
 
 ---
@@ -148,7 +153,7 @@ python manage.py migrate
 python manage.py collectstatic --noinput
 
 # 7. 重启Nginx（如果失败用kill方式）
-systemctl restart nginx
+nginx -s reload
 # 或
 kill -9 $(pgrep nginx)
 nginx
@@ -165,12 +170,14 @@ ps aux | grep nginx
 
 ---
 
-## 十二、上次对话关键决策
+## 十二、本次对话关键决策
 
-1. **每个规格组需要有独立的"特殊要求备注"** — 已完成
-2. **添加缩放比例设置**（金属材料加热膨胀补偿）— 已完成，默认100%，推荐99.75%，支持自定义
-3. **红框尺寸修改功能** — 进行中，商户后台可修改（不是客户前端修改）
-4. **域名备案** — 预计6月8日通过，是后续部署的前置条件
+1. **UI全面改版** — 已完成：白色侧边栏+蓝色active指示、Font Awesome 6.4图标、统计卡片左侧大图标布局
+2. **产品分类重新调整** — 已完成：腐蚀版4种（凹版/凸版/镁凹树凸/双面镁激凸）+ 雕刻版5种（平雕凸/平雕凹/浮雕激凸烫凸一体/浮雕多层次激凸烫凸一体/多层次浮雕）+ 树脂版 + 菲林
+3. **红框尺寸修改功能** — 已完成：商户后台可修改，支持添加/删除框，修改后自动重新计算订单金额
+4. **上传文件区域2行布局** — 已完成：第一行预览图+文件名，第二行尺寸数量输入
+5. **Nginx反向代理配置** — 已完成：`/etc/nginx/conf.d/magnesium.conf` 配置完成
+6. **域名备案** — 预计6月8日通过
 
 ---
 
