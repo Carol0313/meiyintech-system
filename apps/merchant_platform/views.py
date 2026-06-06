@@ -238,14 +238,15 @@ def merchant_analytics(request):
         total_amount=Sum('total_amount')
     ).order_by('-order_count'))
     # 补充面积数据
+    factory_area_qs = list(date_items.filter(order__factory__isnull=False).values(
+        'order__factory__name'
+    ).annotate(total_area=Sum('area')))
     factory_area_stats = {
-        fa['factory__name']: fa['total_area']
-        for fa in date_items.filter(order__factory__isnull=False).values(
-            'order__factory__name'
-        ).annotate(total_area=Sum('area'))
+        fa.get('order__factory__name', ''): fa.get('total_area', 0)
+        for fa in factory_area_qs
     }
     for f in factory_stats:
-        f['total_area'] = factory_area_stats.get(f['factory__name'], 0)
+        f['total_area'] = factory_area_stats.get(f.get('factory__name', ''), 0)
 
     # ---- 订单状态分布 ----
     status_distribution = []
