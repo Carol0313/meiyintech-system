@@ -2524,6 +2524,47 @@ def plate_batch_detail(request, batch_id):
             messages.warning(request, f'拼版批次已驳回，原因：{reason}')
             return redirect('plate_batch_list')
 
+        elif action == 'upload_manual':
+            # 【新增】手动上传拼版文件
+            if request.FILES.get('manual_plate_file'):
+                uploaded_file = request.FILES['manual_plate_file']
+                ext = os.path.splitext(uploaded_file.name)[1].lower()
+                if ext != '.pdf':
+                    messages.error(request, '仅支持PDF格式文件')
+                    return redirect('plate_batch_detail', batch_id=batch_id)
+                
+                # 保存文件
+                filename = f"plate_layouts/{batch.id.hex}_manual{ext}"
+                path = default_storage.save(filename, uploaded_file)
+                
+                # 更新批次
+                batch.production_pdf = path
+                batch.designer_note = request.POST.get('manual_note', '')
+                batch.designer = request.user
+                batch.status = 'confirmed'
+                default_factory = merchant.factories.filter(is_active=True).first()
+                if default_factory:
+                    batch.factory = default_factory
+                batch.save()
+                
+                # 更新关联订单状态
+                affected_orders = set()
+                for bi in batch.items.all():
+                    bi.order_item.order.plate_status = 'confirmed'
+                    bi.order_item.order.factory = default_factory
+                    bi.order_item.order.save(update_fields=['plate_status', 'factory'])
+                    affected_orders.add(bi.order_item.order)
+                
+                for order in affected_orders:
+                    order.transition_status('in_production', operator=request.user,
+                                            remark=f'拼版批次 {batch.id.hex[:8]} 已手动上传确认，下发工厂生产')
+                
+                messages.success(request, f'拼版文件已手动上传并确认，共影响 {len(affected_orders)} 个订单')
+                return redirect('plate_batch_list')
+            else:
+                messages.error(request, '请选择要上传的文件')
+                return redirect('plate_batch_detail', batch_id=batch_id)
+
     # 为侧边栏订单列表生成颜色 + 计算客户数
     sidebar_items = []
     sidebar_hue_idx = 0
@@ -2953,6 +2994,29 @@ def pending_layout_orders(request):
     ).exclude(
         plate_batch__status='confirmed'
     ).select_related('order', 'order__customer__customer_profile').order_by('order__created_at')
+    
+    # 【新增】为每个item准备预览图URL
+    import os
+    from django.conf import settings
+    from utils.pdf_processor import generate_pdf_preview
+    for item in items:
+        if item.preview_image:
+            item.preview_url = item.preview_image.url
+        elif item.plate_file:
+            # 尝试生成预览图
+            try:
+                preview_filename = f"previews/{item.id}_plate.png"
+                preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
+                if not os.path.exists(preview_path):
+                    generate_pdf_preview(item.plate_file.name, preview_filename, dpi=72)
+                if os.path.exists(preview_path):
+                    item.preview_url = settings.MEDIA_URL + preview_filename
+                else:
+                    item.preview_url = None
+            except Exception:
+                item.preview_url = None
+        else:
+            item.preview_url = None
     
     # 按 (product_name, material, thickness) 分组
     groups = {}

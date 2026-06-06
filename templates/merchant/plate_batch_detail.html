@@ -237,6 +237,10 @@
                         <i class="fa-solid fa-check"></i> 确认拼版
                     </button>
                 </form>
+                <!-- 【新增】手动上传拼版文件 -->
+                <button type="button" class="btn btn-outline-primary btn-sm w-100 mb-2" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                    <i class="fa-solid fa-upload"></i> 手动上传拼版文件
+                </button>
                 <button type="button" class="btn btn-outline-danger btn-sm w-100" data-bs-toggle="modal" data-bs-target="#rejectModal">
                     <i class="fa-solid fa-xmark"></i> 驳回拼版
                 </button>
@@ -327,6 +331,42 @@
         </div>
     </div>
 </div>
+
+<!-- 手动上传拼版文件弹窗 -->
+{% if batch.status == 'auto_generated' %}
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-medium">手动上传拼版文件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="upload_manual">
+                <div class="modal-body">
+                    <div class="alert alert-info small">
+                        <i class="fa-solid fa-circle-info"></i> 
+                        如果您已用外部软件完成拼版，可直接上传拼版后的PDF文件，系统将跳过自动布局，直接使用您的文件。
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">选择拼版PDF文件</label>
+                        <input type="file" name="manual_plate_file" class="form-control" accept=".pdf" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">备注说明</label>
+                        <textarea name="manual_note" class="form-control" rows="2" placeholder="可选：说明拼版情况"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">上传并确认</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- 驳回弹窗 -->
 {% if batch.status == 'auto_generated' %}
