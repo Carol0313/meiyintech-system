@@ -1,99 +1,30 @@
 {% extends 'base.html' %}
 {% block title %}工厂生产看板{% endblock %}
 {% block page_title %}工厂生产看板{% endblock %}
-{% block page_subtitle %}每小时整点自动刷新，当前工作时段显示{% endblock %}
+{% block page_subtitle %}每小时整点自动刷新{% endblock %}
 
 {% block content %}
 <style>
     :root {
         --c-pending: #f59e0b;
-        --c-pending-light: #fff7ed;
-        --c-pending-border: #fed7aa;
         --c-active: #3b82f6;
-        --c-active-light: #eff6ff;
-        --c-active-border: #bfdbfe;
         --c-completed: #10b981;
-        --c-completed-light: #ecfdf5;
-        --c-completed-border: #a7f3d0;
         --c-overdue: #ef4444;
-        --c-overdue-light: #fef2f2;
-        --c-overdue-border: #fecaca;
-        --c-extend: #6366f1;
-        --c-extend-light: #eef2ff;
-        --c-extend-border: #c7d2fe;
     }
 
-    /* 顶部统计卡片 */
-    .kpi-bar {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 16px;
-        margin-bottom: 28px;
-    }
-    .kpi-card {
-        background: white;
-        border-radius: 16px;
-        padding: 20px 16px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    /* 页面头部 */
+    .board-header {
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: 12px;
-        transition: transform 0.2s, box-shadow 0.2s;
-        border: 1px solid #f1f5f9;
-        cursor: default;
+        margin-bottom: 20px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #e2e8f0;
     }
-    .kpi-card.clickable {
-        cursor: pointer;
+    .board-header .refresh-info {
+        font-size: 13px;
+        color: #94a3b8;
     }
-    .kpi-card.clickable:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-    }
-    .kpi-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.4rem;
-        flex-shrink: 0;
-    }
-    .kpi-icon.pending { background: var(--c-pending-light); color: var(--c-pending); }
-    .kpi-icon.active { background: var(--c-active-light); color: var(--c-active); }
-    .kpi-icon.completed { background: var(--c-completed-light); color: var(--c-completed); }
-    .kpi-icon.overdue { background: var(--c-overdue-light); color: var(--c-overdue); }
-    .kpi-icon.extend { background: var(--c-extend-light); color: var(--c-extend); }
-    .kpi-number {
-        font-size: 1.75rem;
-        font-weight: 800;
-        line-height: 1;
-        margin-bottom: 4px;
-    }
-    .kpi-card.pending .kpi-number { color: var(--c-pending); }
-    .kpi-card.active .kpi-number { color: var(--c-active); }
-    .kpi-card.completed .kpi-number { color: var(--c-completed); }
-    .kpi-card.overdue .kpi-number { color: var(--c-overdue); }
-    .kpi-card.extend .kpi-number { color: var(--c-extend); }
-    .kpi-label {
-        font-size: 0.8125rem;
-        color: #64748b;
-        font-weight: 500;
-    }
-    .refresh-badge {
-        margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 14px;
-        background: #f8fafc;
-        border-radius: 100px;
-        font-size: 0.75rem;
-        color: #64748b;
-        border: 1px solid #e2e8f0;
-    }
-    .refresh-badge i { animation: spin 2s linear infinite; }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
     /* 三列看板 */
     .kanban-board {
@@ -104,14 +35,13 @@
     }
     .kanban-col {
         background: #f8fafc;
-        border-radius: 16px;
+        border-radius: 12px;
         padding: 16px;
         min-height: 300px;
-        border: 1px solid #e2e8f0;
     }
-    .kanban-col.pending { border-top: 4px solid var(--c-pending); }
-    .kanban-col.active { border-top: 4px solid var(--c-active); }
-    .kanban-col.completed { border-top: 4px solid var(--c-completed); }
+    .kanban-col.pending { border-top: 3px solid var(--c-pending); }
+    .kanban-col.active { border-top: 3px solid var(--c-active); }
+    .kanban-col.completed { border-top: 3px solid var(--c-completed); }
 
     .col-header {
         display: flex;
@@ -124,217 +54,161 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        font-weight: 700;
-        font-size: 0.9375rem;
+        font-weight: 600;
+        font-size: 15px;
     }
-    .col-title i { font-size: 1.1rem; }
-    .col-title.pending { color: var(--c-pending); }
-    .col-title.active { color: var(--c-active); }
-    .col-title.completed { color: var(--c-completed); }
+    .col-title::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .col-title.pending::before { background: var(--c-pending); }
+    .col-title.active::before { background: var(--c-active); }
+    .col-title.completed::before { background: var(--c-completed); }
     .col-count {
-        font-size: 0.75rem;
-        font-weight: 700;
+        font-size: 12px;
+        font-weight: 600;
         padding: 2px 10px;
         border-radius: 100px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
     }
-    .col-count.pending { background: var(--c-pending-light); color: var(--c-pending); }
-    .col-count.active { background: var(--c-active-light); color: var(--c-active); }
-    .col-count.completed { background: var(--c-completed-light); color: var(--c-completed); }
 
-    /* 看板卡片 */
+    /* 看板卡片 - 精简版 */
     .kb-card {
         background: white;
-        border-radius: 12px;
+        border-radius: 10px;
         padding: 14px;
         margin-bottom: 12px;
         border: 1px solid #e2e8f0;
         transition: all 0.2s;
-        cursor: default;
         position: relative;
-        overflow: hidden;
     }
     .kb-card:hover {
-        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-        transform: translateY(-2px);
-        border-color: #cbd5e1;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        transform: translateY(-1px);
     }
-    .kb-card::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 4px;
+    .kb-card.overdue-card {
+        border-left: 3px solid var(--c-overdue);
     }
-    .kb-card.pending::before { background: var(--c-pending); }
-    .kb-card.active::before { background: var(--c-active); }
-    .kb-card.completed::before { background: var(--c-completed); }
 
     .kb-card-header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        margin-bottom: 8px;
+        margin-bottom: 10px;
     }
     .kb-sn {
         font-weight: 700;
         color: #1e293b;
-        font-size: 0.875rem;
+        font-size: 14px;
         font-family: monospace;
     }
-    .kb-time {
-        font-size: 0.6875rem;
-        color: #94a3b8;
-        margin-top: 2px;
+    .kb-sn a {
+        color: inherit;
+        text-decoration: none;
     }
+    .kb-sn a:hover {
+        color: var(--primary);
+    }
+    .kb-status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .kb-status-dot.normal { background: #22c55e; }
+    .kb-status-dot.warning { background: #f59e0b; }
+    .kb-status-dot.overdue { background: var(--c-overdue); }
+
     .kb-customer {
-        display: inline-flex;
+        font-size: 12px;
+        color: #64748b;
+        margin-bottom: 10px;
+    }
+
+    /* 产品信息区域 */
+    .kb-product-row {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .kb-product-preview {
+        width: 60px;
+        height: 60px;
+        border-radius: 6px;
+        background: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+    }
+    .kb-product-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .kb-product-preview i {
+        font-size: 20px;
+        color: #cbd5e1;
+    }
+    .kb-product-info {
+        flex: 1;
+        min-width: 0;
+    }
+    .kb-product-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 2px;
+    }
+    .kb-product-spec {
+        font-size: 12px;
+        color: #64748b;
+    }
+    .kb-product-size {
+        font-size: 12px;
+        color: #475569;
+        font-weight: 500;
+    }
+
+    .kb-delivery {
+        font-size: 12px;
+        color: #64748b;
+        margin-bottom: 10px;
+        display: flex;
         align-items: center;
         gap: 4px;
-        font-size: 0.75rem;
-        color: #64748b;
-        background: #f8fafc;
-        padding: 3px 8px;
-        border-radius: 6px;
-        margin-top: 4px;
     }
-
-    .kb-info-row {
-        font-size: 0.75rem;
-        color: #475569;
-        margin-bottom: 6px;
-        line-height: 1.5;
-    }
-    .kb-info-row strong {
-        color: #1e293b;
+    .kb-delivery.overdue {
+        color: var(--c-overdue);
         font-weight: 600;
     }
-    .kb-info-row .kb-info-label {
-        color: #94a3b8;
-        font-weight: 500;
-        margin-right: 4px;
+    .kb-delivery.warning {
+        color: #d97706;
+        font-weight: 600;
     }
 
-    .kb-products {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 10px;
-    }
-    .kb-tag {
-        font-size: 0.6875rem;
-        padding: 4px 8px;
-        border-radius: 6px;
-        background: #f1f5f9;
-        color: #475569;
-        font-weight: 500;
-    }
-    .kb-tag.overdue {
-        background: var(--c-overdue-light);
-        color: var(--c-overdue);
-    }
-
-    .kb-files {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 10px;
-    }
-    .kb-file-link {
-        font-size: 0.6875rem;
-        padding: 4px 8px;
-        border-radius: 6px;
-        background: #eff6ff;
-        color: #2563eb;
-        text-decoration: none;
-        font-weight: 500;
-        transition: background 0.15s;
-        max-width: 140px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-    .kb-file-link:hover { background: #dbeafe; }
-    .kb-file-link.pdf { background: #fee2e2; color: #dc2626; }
-    .kb-file-link.pdf:hover { background: #fecaca; }
-
-    .kb-remark {
-        font-size: 0.75rem;
-        color: #854d0e;
-        background: #fef9c3;
-        padding: 6px 10px;
-        border-radius: 8px;
-        margin-bottom: 10px;
-        border-left: 3px solid #eab308;
-    }
-
-    .kb-countdown {
-        font-size: 0.8125rem;
-        font-weight: 700;
-        padding: 4px 10px;
-        border-radius: 8px;
-        margin-bottom: 10px;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-    }
-    .kb-countdown.normal {
-        background: #f0fdf4;
-        color: #15803d;
-    }
-    .kb-countdown.warning {
-        background: #fffbeb;
-        color: #b45309;
-    }
-    .kb-countdown.overdue {
-        background: var(--c-overdue-light);
-        color: var(--c-overdue);
-    }
-
-    .kb-photo-grid {
-        display: flex;
-        gap: 6px;
-        flex-wrap: wrap;
-        margin-bottom: 10px;
-    }
-    .kb-photo-grid img {
-        width: 48px;
-        height: 48px;
-        object-fit: cover;
-        border-radius: 6px;
-        border: 1px solid #e2e8f0;
-        cursor: pointer;
-        transition: transform 0.15s;
-    }
-    .kb-photo-grid img:hover {
-        transform: scale(1.05);
-    }
-
-    .kb-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        align-items: center;
-    }
-    .kb-actions > form {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        align-items: center;
-    }
-    .kb-btn {
+    /* 操作按钮 */
+    .kb-action-btn {
+        width: 100%;
         border: none;
-        padding: 7px 14px;
+        padding: 8px 14px;
         border-radius: 8px;
         font-weight: 600;
-        font-size: 0.75rem;
+        font-size: 13px;
         cursor: pointer;
         transition: all 0.2s;
         display: inline-flex;
         align-items: center;
-        gap: 4px;
+        justify-content: center;
+        gap: 6px;
     }
-    .kb-btn:hover { transform: translateY(-1px); }
+    .kb-action-btn:hover { transform: translateY(-1px); }
     .kb-btn-start {
         background: linear-gradient(135deg, #f59e0b, #d97706);
         color: white;
@@ -350,28 +224,19 @@
         color: white;
     }
     .kb-btn-ship:hover { box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35); }
-    .kb-btn-photo {
-        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-        color: white;
-    }
-    .kb-btn-photo:hover { box-shadow: 0 4px 12px rgba(139, 92, 246, 0.35); }
 
-    .kb-upload {
-        font-size: 0.75rem;
-        padding: 5px 8px;
+    /* 上传照片小按钮 */
+    .kb-photo-btn {
+        font-size: 12px;
+        padding: 4px 10px;
         border: 1px dashed #cbd5e1;
-        border-radius: 8px;
+        border-radius: 6px;
         background: white;
         color: #64748b;
-        max-width: 120px;
-    }
-    .kb-select {
-        font-size: 0.75rem;
-        padding: 5px 8px;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        background: white;
-        color: #475569;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
     }
 
     .kb-empty {
@@ -379,30 +244,7 @@
         padding: 40px 16px;
         color: #94a3b8;
     }
-    .kb-empty i { font-size: 2.5rem; margin-bottom: 8px; display: block; opacity: 0.35; }
-    .kb-empty p { font-size: 0.8125rem; margin: 0; }
-
-    .kb-timeline {
-        font-size: 0.6875rem;
-        color: #94a3b8;
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-    .kb-timeline-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        display: inline-block;
-    }
-    .kb-timeline-dot.pending { background: var(--c-pending); }
-    .kb-timeline-dot.active { background: var(--c-active); animation: pulse 2s infinite; }
-    .kb-timeline-dot.completed { background: var(--c-completed); }
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.4; }
-    }
+    .kb-empty i { font-size: 2rem; margin-bottom: 8px; display: block; opacity: 0.4; }
 
     /* 批量操作栏 */
     .batch-bar {
@@ -412,75 +254,73 @@
         margin-bottom: 12px;
         padding: 10px 12px;
         background: white;
-        border-radius: 10px;
-        border: 1px solid var(--c-completed-border);
+        border-radius: 8px;
+        border: 1px solid #a7f3d0;
     }
 
-    /* Modal 样式 */
-    .modal-header.overdue { background: var(--c-overdue-light); border-bottom: 1px solid var(--c-overdue-border); }
-    .modal-header.overdue .modal-title { color: var(--c-overdue); }
-
-    @media (max-width: 1199px) {
-        .kpi-bar { grid-template-columns: repeat(3, 1fr); }
+    /* 底部抽屉 */
+    .stats-drawer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        border-top: 1px solid #e2e8f0;
+        box-shadow: 0 -4px 12px rgba(0,0,0,0.06);
+        z-index: 1000;
+        transition: transform 0.3s;
     }
+    .stats-drawer.collapsed .stats-content {
+        display: none;
+    }
+    .stats-drawer-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: #64748b;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .stats-drawer-toggle:hover {
+        background: #f8fafc;
+    }
+    .stats-content {
+        padding: 16px 20px;
+        display: flex;
+        gap: 24px;
+        justify-content: center;
+    }
+    .stats-item {
+        text-align: center;
+    }
+    .stats-item .number {
+        font-size: 20px;
+        font-weight: 700;
+    }
+    .stats-item .label {
+        font-size: 12px;
+        color: #94a3b8;
+    }
+
     @media (max-width: 991px) {
         .kanban-board { grid-template-columns: 1fr; }
-        .kpi-bar { grid-template-columns: repeat(2, 1fr); }
-    }
-    @media (max-width: 575px) {
-        .kpi-bar { grid-template-columns: 1fr; }
     }
 </style>
 
-<!-- 顶部统计 -->
-<div class="kpi-bar">
-    <div class="kpi-card pending">
-        <div class="kpi-icon pending"><i class="fa-solid fa-hourglass-half"></i></div>
-        <div>
-            <div class="kpi-number">{{ stats.pending }}</div>
-            <div class="kpi-label">待生产</div>
-        </div>
-        <span class="refresh-badge ms-auto">
-            <i class="fa-solid fa-arrows-rotate"></i>
-            <span id="countdown">--:--</span>后刷新
-        </span>
+<!-- 页面头部 -->
+<div class="board-header">
+    <div class="refresh-info">
+        <i class="fa-solid fa-clock"></i> 每小时整点自动刷新
+        <span class="ms-2">|</span>
+        <span class="ms-2">下次刷新: <span id="countdown">--:--</span></span>
     </div>
-    <div class="kpi-card active">
-        <div class="kpi-icon active"><i class="fa-solid fa-gears"></i></div>
-        <div>
-            <div class="kpi-number">{{ stats.active }}</div>
-            <div class="kpi-label">生产中</div>
-        </div>
-        <span class="refresh-badge ms-auto">
-            <i class="fa-solid fa-clock"></i>
-            <span id="current-time">--:--:--</span>
-        </span>
-    </div>
-    <div class="kpi-card completed">
-        <div class="kpi-icon completed"><i class="fa-solid fa-circle-check"></i></div>
-        <div>
-            <div class="kpi-number">{{ stats.completed }}</div>
-            <div class="kpi-label">已完成待发货</div>
-        </div>
-        <span class="refresh-badge ms-auto">
-            <i class="fa-solid fa-truck-fast"></i>
-            批量发货
-        </span>
-    </div>
-    <div class="kpi-card overdue">
-        <div class="kpi-icon overdue"><i class="fa-solid fa-triangle-exclamation"></i></div>
-        <div>
-            <div class="kpi-number">{{ stats.overdue }}</div>
-            <div class="kpi-label">即将逾期</div>
-        </div>
-    </div>
-    <div class="kpi-card extend clickable" data-bs-toggle="modal" data-bs-target="#extendDeliveryModal">
-        <div class="kpi-icon extend"><i class="fa-solid fa-calendar-plus"></i></div>
-        <div>
-            <div class="kpi-number"><i class="fa-solid fa-plus" style="font-size:1.2rem;"></i></div>
-            <div class="kpi-label">延长交货</div>
-        </div>
-    </div>
+    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#extendDeliveryModal">
+        <i class="fa-solid fa-calendar-plus"></i> 延长交货
+    </button>
 </div>
 
 <!-- 三列看板 -->
@@ -489,93 +329,54 @@
     <!-- 待生产 -->
     <div class="kanban-col pending">
         <div class="col-header">
-            <div class="col-title pending">
-                <i class="fa-solid fa-hourglass-half"></i>
-                待生产
-            </div>
-            <span class="col-count pending">{{ stats.pending }} 单</span>
+            <div class="col-title pending">待生产</div>
+            <span class="col-count">{{ stats.pending }} 单</span>
         </div>
         {% for order in pending_orders %}
-        <div class="kb-card pending" data-delivery-date="{{ order.delivery_date|date:'c'|default:'' }}">
+        <div class="kb-card {% if order.is_overdue %}overdue-card{% endif %}">
             <div class="kb-card-header">
-                <div>
-                    <div class="kb-sn">{{ order.sn }}</div>
-                    <div class="kb-customer"><i class="fa-solid fa-user"></i> {{ order.customer.phone }}</div>
+                <div class="kb-sn">
+                    <a href="{% url 'merchant_order_detail' order.id %}">{{ order.sn }}</a>
+                </div>
+                {% if order.is_overdue %}
+                <span class="kb-status-dot overdue" title="已逾期"></span>
+                {% elif order.is_warning %}
+                <span class="kb-status-dot warning" title="即将逾期"></span>
+                {% else %}
+                <span class="kb-status-dot normal" title="正常"></span>
+                {% endif %}
+            </div>
+            <div class="kb-customer">
+                <i class="fa-solid fa-user"></i> {{ order.customer.phone|slice:":3" }}****{{ order.customer.phone|slice:"-4:" }}
+            </div>
+            <div class="kb-product-row">
+                {% with first_item=order.first_item_with_file %}
+                <div class="kb-product-preview">
+                    {% if first_item and first_item.preview_image %}
+                    <img src="{{ first_item.preview_image.url }}" alt="预览">
+                    {% else %}
+                    <i class="fa-solid fa-file-pdf"></i>
+                    {% endif %}
+                </div>
+                {% endwith %}
+                <div class="kb-product-info">
+                    {% for item in order.items.all|slice:":1" %}
+                    <div class="kb-product-name">{{ item.get_product_name_display }}</div>
+                    <div class="kb-product-spec">{{ item.get_material_display }} {{ item.thickness }}mm</div>
+                    <div class="kb-product-size">{{ item.length_mm }}×{{ item.width_mm }}mm ×{{ item.quantity }}</div>
+                    {% endfor %}
                 </div>
             </div>
-            <div class="kb-timeline">
-                <span class="kb-timeline-dot pending"></span>
-                下单 {{ order.created_at|date:"m-d H:i" }}
-            </div>
             {% if order.delivery_date %}
-            <div class="kb-countdown normal" data-countdown="{{ order.delivery_date|date:'c' }}">
-                <i class="fa-solid fa-clock"></i> <span class="cd-text">计算中...</span>
-            </div>
-            <div class="kb-info-row">
-                <span class="kb-info-label">交货时间:</span>{{ order.delivery_date|date:"m-d H:i" }}
+            <div class="kb-delivery {% if order.is_overdue %}overdue{% elif order.is_warning %}warning{% endif %}">
+                <i class="fa-solid fa-clock"></i> 交货 {{ order.delivery_date|date:"m-d H:i" }}
             </div>
             {% endif %}
-            <!-- 文件编号 -->
-            {% with first_item=order.first_item_with_file %}
-            {% if first_item %}
-            <div class="kb-info-row">
-                <span class="kb-info-label">文件编号:</span>
-                <span class="font-monospace">{{ first_item.file.name|cut:"order_files/" }}</span>
-            </div>
-            {% endif %}
-            {% endwith %}
-            <!-- 做版要求 -->
-            <div class="kb-info-row">
-                <span class="kb-info-label">做版要求:</span>
-                {% for item in order.items.all %}
-                    {{ item.get_material_display }} {{ item.thickness }}mm / {{ item.get_product_name_display }}
-                    {% if not forloop.last %} ; {% endif %}
-                {% endfor %}
-            </div>
-            <!-- 拼版信息 -->
-            {% if order.plate_batch_items.all %}
-            <div class="kb-info-row">
-                <span class="kb-info-label">拼版信息:</span>
-                <a href="{% url 'plate_batch_detail' order.plate_batch_items.first.plate_batch.id %}">
-                    批次 {{ order.plate_batch_items.first.plate_batch.id.hex|slice:":8" }}
-                    ({{ order.plate_batch_items.first.plate_batch.plate_spec_name }})
-                </a>
-            </div>
-            {% endif %}
-            {% if order.special_requests %}
-            <div class="kb-remark">
-                <i class="fa-solid fa-circle-exclamation"></i> {{ order.special_requests }}
-            </div>
-            {% endif %}
-            <div class="kb-products">
-                {% for item in order.items.all %}
-                <span class="kb-tag" title="{{ item.get_product_name_display }}">{{ item.get_product_name_display|truncatechars:12 }} {{ item.thickness }}mm ×{{ item.quantity }}</span>
-                {% endfor %}
-            </div>
-            <div class="kb-files">
-                {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.layout_image %}
-                <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}">
-                    <i class="fa-solid fa-image"></i> 拼版效果图
-                </a>
-                {% endif %}
-                {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.production_pdf %}
-                <a class="kb-file-link pdf" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'production_pdf' %}">
-                    <i class="fa-solid fa-file-pdf"></i> 下载生产PDF
-                </a>
-                {% endif %}
-                {% for item in order.items.all %}
-                    {% if item.file %}
-                    <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" title="{{ item.file.name }}">
-                        <i class="fa-solid fa-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
-                    </a>
-                    {% endif %}
-                {% endfor %}
-            </div>
-            <form method="post" class="kb-actions">
+            <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="order_id" value="{{ order.id }}">
                 <input type="hidden" name="action" value="start">
-                <button type="submit" class="kb-btn kb-btn-start">
+                <button type="submit" class="kb-action-btn kb-btn-start">
                     <i class="fa-solid fa-circle-play"></i> 开始生产
                 </button>
             </form>
@@ -591,124 +392,63 @@
     <!-- 生产中 -->
     <div class="kanban-col active">
         <div class="col-header">
-            <div class="col-title active">
-                <i class="fa-solid fa-gears"></i>
-                生产中
-            </div>
-            <span class="col-count active">{{ stats.active }} 单</span>
+            <div class="col-title active">生产中</div>
+            <span class="col-count">{{ stats.active }} 单</span>
         </div>
         {% for order in active_orders %}
-        <div class="kb-card active" data-delivery-date="{{ order.delivery_date|date:'c'|default:'' }}">
+        <div class="kb-card {% if order.is_overdue %}overdue-card{% endif %}">
             <div class="kb-card-header">
-                <div>
-                    <div class="kb-sn">{{ order.sn }}</div>
-                    <div class="kb-customer"><i class="fa-solid fa-user"></i> {{ order.customer.phone }}</div>
+                <div class="kb-sn">
+                    <a href="{% url 'merchant_order_detail' order.id %}">{{ order.sn }}</a>
+                </div>
+                {% if order.is_overdue %}
+                <span class="kb-status-dot overdue" title="已逾期"></span>
+                {% elif order.is_warning %}
+                <span class="kb-status-dot warning" title="即将逾期"></span>
+                {% else %}
+                <span class="kb-status-dot normal" title="正常"></span>
+                {% endif %}
+            </div>
+            <div class="kb-customer">
+                <i class="fa-solid fa-user"></i> {{ order.customer.phone|slice:":3" }}****{{ order.customer.phone|slice:"-4:" }}
+            </div>
+            <div class="kb-product-row">
+                {% with first_item=order.first_item_with_file %}
+                <div class="kb-product-preview">
+                    {% if first_item and first_item.preview_image %}
+                    <img src="{{ first_item.preview_image.url }}" alt="预览">
+                    {% else %}
+                    <i class="fa-solid fa-file-pdf"></i>
+                    {% endif %}
+                </div>
+                {% endwith %}
+                <div class="kb-product-info">
+                    {% for item in order.items.all|slice:":1" %}
+                    <div class="kb-product-name">{{ item.get_product_name_display }}</div>
+                    <div class="kb-product-spec">{{ item.get_material_display }} {{ item.thickness }}mm</div>
+                    <div class="kb-product-size">{{ item.length_mm }}×{{ item.width_mm }}mm ×{{ item.quantity }}</div>
+                    {% endfor %}
                 </div>
             </div>
-            <div class="kb-timeline">
-                <span class="kb-timeline-dot active"></span>
-                生产开始 {{ order.production_started_at|date:"m-d H:i" }}
-            </div>
             {% if order.delivery_date %}
-            <div class="kb-countdown normal" data-countdown="{{ order.delivery_date|date:'c' }}">
-                <i class="fa-solid fa-clock"></i> <span class="cd-text">计算中...</span>
-            </div>
-            <div class="kb-info-row">
-                <span class="kb-info-label">交货时间:</span>{{ order.delivery_date|date:"m-d H:i" }}
+            <div class="kb-delivery {% if order.is_overdue %}overdue{% elif order.is_warning %}warning{% endif %}">
+                <i class="fa-solid fa-clock"></i> 交货 {{ order.delivery_date|date:"m-d H:i" }}
             </div>
             {% endif %}
-            <!-- 文件编号 -->
-            {% with first_item=order.first_item_with_file %}
-            {% if first_item %}
-            <div class="kb-info-row">
-                <span class="kb-info-label">文件编号:</span>
-                <span class="font-monospace">{{ first_item.file.name|cut:"order_files/" }}</span>
-            </div>
-            {% endif %}
-            {% endwith %}
-            <!-- 做版要求 -->
-            <div class="kb-info-row">
-                <span class="kb-info-label">做版要求:</span>
-                {% for item in order.items.all %}
-                    {{ item.get_material_display }} {{ item.thickness }}mm / {{ item.get_product_name_display }}
-                    {% if not forloop.last %} ; {% endif %}
-                {% endfor %}
-            </div>
-            <!-- 拼版信息 -->
-            {% if order.plate_batch_items.all %}
-            <div class="kb-info-row">
-                <span class="kb-info-label">拼版信息:</span>
-                <a href="{% url 'plate_batch_detail' order.plate_batch_items.first.plate_batch.id %}">
-                    批次 {{ order.plate_batch_items.first.plate_batch.id.hex|slice:":8" }}
-                    ({{ order.plate_batch_items.first.plate_batch.plate_spec_name }})
-                </a>
-            </div>
-            {% endif %}
-            {% if order.special_requests %}
-            <div class="kb-remark">
-                <i class="fa-solid fa-circle-exclamation"></i> {{ order.special_requests }}
-            </div>
-            {% endif %}
-            <div class="kb-products">
-                {% for item in order.items.all %}
-                <span class="kb-tag" title="{{ item.get_product_name_display }}">{{ item.get_product_name_display|truncatechars:12 }} {{ item.thickness }}mm ×{{ item.quantity }}</span>
-                {% endfor %}
-            </div>
-            <div class="kb-files">
-                {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.layout_image %}
-                <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}">
-                    <i class="fa-solid fa-image"></i> 拼版效果图
-                </a>
-                {% endif %}
-                {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.production_pdf %}
-                <a class="kb-file-link pdf" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'production_pdf' %}">
-                    <i class="fa-solid fa-file-pdf"></i> 下载生产PDF
-                </a>
-                {% endif %}
-                {% for item in order.items.all %}
-                    {% if item.file %}
-                    <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" title="{{ item.file.name }}">
-                        <i class="fa-solid fa-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
-                    </a>
-                    {% endif %}
-                {% endfor %}
-            </div>
-            {% with prod_photos=order.production_photos.all %}
-            {% if prod_photos %}
-            <div class="kb-photo-grid">
-                {% for photo in prod_photos %}
-                    {% if photo.photo_type == 'production' %}
-                    <img src="{{ photo.image.url }}" alt="生产照片" data-bs-toggle="modal" data-bs-target="#photoModal" onclick="document.getElementById('modalPhoto').src='{{ photo.image.url }}'">
-                    {% endif %}
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% endwith %}
-            <div class="kb-actions">
-                <form method="post" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                    {% csrf_token %}
-                    <input type="hidden" name="order_id" value="{{ order.id }}">
-                    <input type="hidden" name="action" value="upload_production_photo">
-                    <label class="kb-btn" style="background:#f1f5f9;color:#475569;cursor:pointer;padding:7px 14px;font-size:0.75rem;border-radius:8px;">
-                        <i class="fa-solid fa-camera"></i> 拍照识别
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="order_id" value="{{ order.id }}">
+                <input type="hidden" name="action" value="complete">
+                <div class="d-flex gap-2 mb-2">
+                    <label class="kb-photo-btn flex-fill">
+                        <i class="fa-solid fa-camera"></i> 上传照片
                         <input type="file" name="photo" accept="image/*" style="display:none;" onchange="this.form.submit()">
                     </label>
-                </form>
-                <button type="button" class="kb-btn" style="background:var(--c-extend-light);color:var(--c-extend);"
-                        data-bs-toggle="modal" data-bs-target="#extendDeliveryModal"
-                        onclick="preselectOrderForExtend('{{ order.id }}', '{{ order.delivery_date|date:'Y-m-d H:i'|default:'' }}')">
-                    <i class="fa-solid fa-calendar-plus"></i> 延长交货
+                </div>
+                <button type="submit" class="kb-action-btn kb-btn-complete">
+                    <i class="fa-solid fa-check"></i> 完成生产
                 </button>
-                <form method="post" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                    {% csrf_token %}
-                    <input type="hidden" name="order_id" value="{{ order.id }}">
-                    <input type="hidden" name="action" value="complete">
-                    <input type="file" name="photo" accept="image/*" class="kb-upload" title="上传成品照片">
-                    <button type="submit" class="kb-btn kb-btn-complete">
-                        <i class="fa-solid fa-check"></i> 完成生产
-                    </button>
-                </form>
-            </div>
+            </form>
         </div>
         {% empty %}
         <div class="kb-empty">
@@ -721,11 +461,8 @@
     <!-- 已完成待发货 -->
     <div class="kanban-col completed">
         <div class="col-header">
-            <div class="col-title completed">
-                <i class="fa-solid fa-circle-check"></i>
-                已完成待发货
-            </div>
-            <span class="col-count completed">{{ stats.completed }} 单</span>
+            <div class="col-title completed">已完成待发货</div>
+            <span class="col-count">{{ stats.completed }} 单</span>
         </div>
         <form method="post" enctype="multipart/form-data" id="batchShipForm">
             {% csrf_token %}
@@ -734,105 +471,52 @@
             <div class="batch-bar">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="selectAllShip" onchange="toggleAllShip(this.checked);">
-                    <label class="form-check-label" for="selectAllShip" style="font-size:0.8125rem;font-weight:500;">全选</label>
+                    <label class="form-check-label" for="selectAllShip" style="font-size:13px;">全选</label>
                 </div>
-                <button type="submit" class="kb-btn kb-btn-ship ms-auto" onclick="return confirm('确认批量发货选中的订单吗？');">
+                <button type="submit" class="kb-action-btn kb-btn-ship ms-auto" style="width:auto;padding:6px 16px;font-size:12px;" onclick="return confirm('确认批量发货选中的订单吗？');">
                     <i class="fa-solid fa-truck-fast"></i> 批量发货
                 </button>
             </div>
             {% endif %}
             {% for order in completed_orders %}
-            <div class="kb-card completed" data-delivery-date="{{ order.delivery_date|date:'c'|default:'' }}">
+            <div class="kb-card">
                 <div class="kb-card-header">
                     <div class="d-flex align-items-center gap-2">
                         <input class="form-check-input ship-check" type="checkbox" name="ship_order_{{ order.id }}" value="1" style="margin-top:0;">
-                        <div>
-                            <div class="kb-sn">{{ order.sn }}</div>
-                            <div class="kb-customer"><i class="fa-solid fa-user"></i> {{ order.customer.phone }}</div>
+                        <div class="kb-sn">
+                            <a href="{% url 'merchant_order_detail' order.id %}">{{ order.sn }}</a>
                         </div>
                     </div>
                 </div>
-                <div class="kb-timeline">
-                    <span class="kb-timeline-dot completed"></span>
-                    生产完成 {{ order.production_completed_at|date:"m-d H:i" }}
+                <div class="kb-customer">
+                    <i class="fa-solid fa-user"></i> {{ order.customer.phone|slice:":3" }}****{{ order.customer.phone|slice:"-4:" }}
                 </div>
-                {% if order.delivery_date %}
-                <div class="kb-countdown normal" data-countdown="{{ order.delivery_date|date:'c' }}">
-                    <i class="fa-solid fa-clock"></i> <span class="cd-text">计算中...</span>
-                </div>
-                <div class="kb-info-row">
-                    <span class="kb-info-label">交货时间:</span>{{ order.delivery_date|date:"m-d H:i" }}
-                </div>
-                {% endif %}
-                <!-- 文件编号 -->
-                {% with first_item=order.first_item_with_file %}
-                {% if first_item %}
-                <div class="kb-info-row">
-                    <span class="kb-info-label">文件编号:</span>
-                    <span class="font-monospace">{{ first_item.file.name|cut:"order_files/" }}</span>
-                </div>
-                {% endif %}
-                {% endwith %}
-                <!-- 做版要求 -->
-                <div class="kb-info-row">
-                    <span class="kb-info-label">做版要求:</span>
-                    {% for item in order.items.all %}
-                        {{ item.get_material_display }} {{ item.thickness }}mm / {{ item.get_product_name_display }}
-                        {% if not forloop.last %} ; {% endif %}
-                    {% endfor %}
-                </div>
-                <!-- 拼版信息 -->
-                {% if order.plate_batch_items.all %}
-                <div class="kb-info-row">
-                    <span class="kb-info-label">拼版信息:</span>
-                    <a href="{% url 'plate_batch_detail' order.plate_batch_items.first.plate_batch.id %}">
-                        批次 {{ order.plate_batch_items.first.plate_batch.id.hex|slice:":8" }}
-                        ({{ order.plate_batch_items.first.plate_batch.plate_spec_name }})
-                    </a>
-                </div>
-                {% endif %}
-                {% if order.special_requests %}
-                <div class="kb-remark">
-                    <i class="fa-solid fa-circle-exclamation"></i> {{ order.special_requests }}
-                </div>
-                {% endif %}
-                <div class="kb-products">
-                    {% for item in order.items.all %}
-                    <span class="kb-tag" title="{{ item.get_product_name_display }}">{{ item.get_product_name_display|truncatechars:12 }} {{ item.thickness }}mm ×{{ item.quantity }}</span>
-                    {% endfor %}
-                </div>
-                <div class="kb-files">
-                    {% if order.plate_batch_items.all and order.plate_batch_items.first.plate_batch.layout_image %}
-                    <a class="kb-file-link" href="{% url 'download_plate_batch_file' order.plate_batch_items.first.plate_batch.id 'layout_image' %}">
-                        <i class="fa-solid fa-image"></i> 拼版效果图
-                    </a>
-                    {% endif %}
-                    {% for item in order.items.all %}
-                        {% if item.file %}
-                        <a class="kb-file-link" href="{% url 'download_order_file' order.id item.id %}" title="{{ item.file.name }}">
-                            <i class="fa-solid fa-file-pdf"></i> {{ item.file.name|cut:"order_files/"|truncatechars:10 }}
-                        </a>
+                <div class="kb-product-row">
+                    {% with first_item=order.first_item_with_file %}
+                    <div class="kb-product-preview">
+                        {% if first_item and first_item.preview_image %}
+                        <img src="{{ first_item.preview_image.url }}" alt="预览">
+                        {% else %}
+                        <i class="fa-solid fa-file-pdf"></i>
                         {% endif %}
-                    {% endfor %}
+                    </div>
+                    {% endwith %}
+                    <div class="kb-product-info">
+                        {% for item in order.items.all|slice:":1" %}
+                        <div class="kb-product-name">{{ item.get_product_name_display }}</div>
+                        <div class="kb-product-spec">{{ item.get_material_display }} {{ item.thickness }}mm</div>
+                        <div class="kb-product-size">{{ item.length_mm }}×{{ item.width_mm }}mm ×{{ item.quantity }}</div>
+                        {% endfor %}
+                    </div>
                 </div>
-                {% with prod_photos=order.production_photos.all %}
-                {% if prod_photos %}
-                <div class="kb-photo-grid">
-                    {% for photo in prod_photos %}
-                        {% if photo.photo_type == 'production' %}
-                        <img src="{{ photo.image.url }}" alt="生产照片" data-bs-toggle="modal" data-bs-target="#photoModal" onclick="document.getElementById('modalPhoto').src='{{ photo.image.url }}'">
-                        {% endif %}
-                    {% endfor %}
+                <div class="kb-delivery">
+                    <i class="fa-solid fa-clock"></i> 完成 {{ order.production_completed_at|date:"m-d H:i" }}
                 </div>
-                {% endif %}
-                {% endwith %}
-                <div class="kb-actions">
-                    <input type="file" accept="image/*" class="kb-upload" onchange="uploadProductionPhoto('{{ order.id }}', this)">
-                    <select name="ship_method_{{ order.id }}" class="kb-select" onchange="updatePhotoLabel('{{ order.id }}', this.value);">
+                <div class="d-flex gap-2">
+                    <select name="ship_method_{{ order.id }}" class="form-select form-select-sm" style="font-size:12px;">
                         <option value="express">发快递</option>
                         <option value="self">自己派送</option>
                     </select>
-                    <input type="file" name="photo_{{ order.id }}" accept="image/*" class="kb-upload" title="请上传快递单照片" id="photo-label-{{ order.id }}">
                 </div>
             </div>
             {% empty %}
@@ -846,98 +530,38 @@
 
 </div>
 
-<!-- ========== 今日生产概览 ========== -->
-<div class="card mb-4 mt-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="fa-solid fa-chart-line"></i> 今日生产概览</span>
-        <span class="text-muted small">{{ now|date:"Y-m-d" }}</span>
+<!-- 底部统计抽屉 -->
+<div class="stats-drawer collapsed" id="statsDrawer" style="margin-top: 40px; position: relative;">
+    <div class="stats-drawer-toggle" onclick="toggleDrawer()">
+        <i class="fa-solid fa-chevron-up" id="drawerIcon"></i>
+        <span>今日统计</span>
+        <span class="badge bg-secondary">{{ today_stats.completed_count }} 完成 / {{ today_stats.started_count }} 开始 / {{ today_stats.shipped_count }} 发货</span>
     </div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-md-4">
-                <div class="d-flex align-items-center gap-3 p-3 rounded" style="background:#ecfdf5;border:1px solid #a7f3d0;">
-                    <div class="fs-1" style="color:#059669;"><i class="fa-solid fa-circle-check"></i></div>
-                    <div>
-                        <div class="fs-4 fw-bold" style="color:#059669;">{{ today_stats.completed_count }}</div>
-                        <div class="small text-muted">今日已完成（{{ today_stats.completed_area|floatformat:0 }}cm²）</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="d-flex align-items-center gap-3 p-3 rounded" style="background:#eff6ff;border:1px solid #bfdbfe;">
-                    <div class="fs-1" style="color:#2563eb;"><i class="fa-solid fa-gears"></i></div>
-                    <div>
-                        <div class="fs-4 fw-bold" style="color:#2563eb;">{{ today_stats.started_count }}</div>
-                        <div class="small text-muted">今日开始生产（{{ today_stats.started_area|floatformat:0 }}cm²）</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="d-flex align-items-center gap-3 p-3 rounded" style="background:#fff7ed;border:1px solid #fed7aa;">
-                    <div class="fs-1" style="color:#d97706;"><i class="fa-solid fa-truck-fast"></i></div>
-                    <div>
-                        <div class="fs-4 fw-bold" style="color:#d97706;">{{ today_stats.shipped_count }}</div>
-                        <div class="small text-muted">今日已发货（{{ today_stats.shipped_area|floatformat:0 }}cm²）</div>
-                    </div>
-                </div>
-            </div>
+    <div class="stats-content">
+        <div class="stats-item">
+            <div class="number" style="color:#059669;">{{ today_stats.completed_count }}</div>
+            <div class="label">已完成 ({{ today_stats.completed_area|floatformat:0 }}cm²)</div>
         </div>
-    </div>
-</div>
-
-<!-- ========== 工厂产能排行 ========== -->
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="fa-solid fa-trophy"></i> 工厂产能排行（今日做版面积）</span>
-        <span class="text-muted small">按材料分类统计</span>
-    </div>
-    <div class="card-body">
-        {% if factory_capacity %}
-        <div class="row g-3">
-            {% for fc in factory_capacity %}
-            <div class="col-md-6 col-lg-4">
-                <div class="p-3 rounded h-100" style="background:#f8fafc;border:1px solid #e2e8f0;">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="mb-0 fw-bold">{{ fc.factory.name }}</h6>
-                        <span class="badge bg-primary">{{ fc.total_orders }} 单</span>
-                    </div>
-                    <div class="mb-2">
-                        <span class="text-muted small">总面积</span>
-                        <div class="fs-5 fw-bold text-primary">{{ fc.total_area|floatformat:0 }} <span class="fs-6">cm²</span></div>
-                    </div>
-                    {% if fc.materials %}
-                    <div class="mt-2">
-                        <div class="text-muted small mb-1">材料分类</div>
-                        {% for mat in fc.materials %}
-                        <div class="d-flex justify-content-between align-items-center py-1" style="border-bottom:1px dashed #e2e8f0;">
-                            <span class="small">{{ mat.name }}</span>
-                            <span class="small fw-medium">{{ mat.area|floatformat:0 }}cm²（{{ mat.orders }}单）</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
+        <div class="stats-item">
+            <div class="number" style="color:#2563eb;">{{ today_stats.started_count }}</div>
+            <div class="label">开始生产 ({{ today_stats.started_area|floatformat:0 }}cm²)</div>
         </div>
-        {% else %}
-        <div class="text-center text-muted py-4">
-            <i class="fa-solid fa-box-open fs-2 d-block mb-2"></i>
-            今日暂无生产完成数据
+        <div class="stats-item">
+            <div class="number" style="color:#d97706;">{{ today_stats.shipped_count }}</div>
+            <div class="label">已发货 ({{ today_stats.shipped_area|floatformat:0 }}cm²)</div>
         </div>
-        {% endif %}
     </div>
 </div>
 
 <!-- 延长交货 Modal -->
-<div class="modal fade" id="extendDeliveryModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="extendDeliveryModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
-      <div class="modal-header overdue">
-        <h5 class="modal-title"><i class="fa-solid fa-calendar-plus"></i> 申请延长交货时间</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header" style="background:#fef2f2;border-bottom:1px solid #fecaca;">
+        <h5 class="modal-title" style="color:#ef4444;"><i class="fa-solid fa-calendar-plus"></i> 申请延长交货时间</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="post" action="{% url 'factory_production_board' %}">
+      <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="extend_delivery">
         <div class="modal-body">
@@ -975,113 +599,30 @@
   </div>
 </div>
 
-<!-- 照片放大 Modal -->
-<div class="modal fade" id="photoModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content">
-      <div class="modal-body text-center p-0">
-        <img id="modalPhoto" src="" alt="生产照片" style="max-width:100%; max-height:80vh; border-radius:8px;">
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script>
 function toggleAllShip(checked) {
     document.querySelectorAll('.ship-check').forEach(function(cb) {
         cb.checked = checked;
     });
 }
-function updatePhotoLabel(orderId, value) {
-    var input = document.getElementById('photo-label-' + orderId);
-    input.title = value === 'express' ? '请上传快递单照片' : '请上传派送照片';
-}
 
-// JS 上传生产照片（用于已完成列，避免表单嵌套）
-function uploadProductionPhoto(orderId, inputEl) {
-    if (!inputEl.files || inputEl.files.length === 0) return;
-    var formData = new FormData();
-    formData.append('order_id', orderId);
-    formData.append('action', 'upload_production_photo');
-    formData.append('photo', inputEl.files[0]);
-    var csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]');
-    if (csrfToken) {
-        formData.append('csrfmiddlewaretoken', csrfToken.value);
+function toggleDrawer() {
+    var drawer = document.getElementById('statsDrawer');
+    var icon = document.getElementById('drawerIcon');
+    drawer.classList.toggle('collapsed');
+    if (drawer.classList.contains('collapsed')) {
+        icon.classList.remove('fa-chevron-down');
+        icon.classList.add('fa-chevron-up');
+    } else {
+        icon.classList.remove('fa-chevron-up');
+        icon.classList.add('fa-chevron-down');
     }
-    fetch(window.location.href, {
-        method: 'POST',
-        body: formData,
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    }).then(function(res) {
-        if (res.ok) {
-            location.reload();
-        } else {
-            alert('照片上传失败，请重试');
-        }
-    }).catch(function() {
-        alert('照片上传失败，请重试');
-    });
 }
 
-// 倒计时功能
-function updateCountdowns() {
-    var now = new Date();
-    document.querySelectorAll('[data-countdown]').forEach(function(el) {
-        var targetStr = el.getAttribute('data-countdown');
-        if (!targetStr) return;
-        var target = new Date(targetStr);
-        var diff = target - now;
-        var textSpan = el.querySelector('.cd-text');
-        if (!textSpan) return;
-
-        if (diff <= 0) {
-            var overdueMs = -diff;
-            var overdueDays = Math.floor(overdueMs / (1000 * 60 * 60 * 24));
-            var overdueHrs = Math.floor((overdueMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            var overdueMin = Math.floor((overdueMs % (1000 * 60 * 60)) / (1000 * 60));
-            textSpan.textContent = '已逾期 ' + overdueDays + '天' + overdueHrs + '小时' + overdueMin + '分';
-            el.classList.remove('normal', 'warning');
-            el.classList.add('overdue');
-        } else {
-            var days = Math.floor(diff / (1000 * 60 * 60 * 24));
-            var hrs = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            var min = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-            textSpan.textContent = '剩余 ' + days + '天' + hrs + '小时' + min + '分';
-            el.classList.remove('normal', 'warning', 'overdue');
-            if (days === 0 && hrs < 24) {
-                el.classList.add('warning');
-            } else {
-                el.classList.add('normal');
-            }
-        }
-    });
-}
-
-// 延长交货 Modal 原时间显示
+// 延长交货 Modal
 var extendSelect = document.getElementById('extendOrderSelect');
 var originalDisplay = document.getElementById('originalDateDisplay');
 var newDateInput = document.getElementById('newDateInput');
-
-function preselectOrderForExtend(orderId, deliveryDate) {
-    if (extendSelect) {
-        for (var i = 0; i < extendSelect.options.length; i++) {
-            if (extendSelect.options[i].value === orderId) {
-                extendSelect.selectedIndex = i;
-                break;
-            }
-        }
-        if (deliveryDate) {
-            originalDisplay.value = deliveryDate;
-            newDateInput.min = deliveryDate.replace(' ', 'T');
-        } else {
-            originalDisplay.value = '未设置';
-            newDateInput.min = '';
-        }
-    }
-}
 
 if (extendSelect) {
     extendSelect.addEventListener('change', function() {
@@ -1097,24 +638,21 @@ if (extendSelect) {
     });
 }
 
-// 原有刷新倒计时
+// 刷新倒计时
 (function() {
     let secondsUntilRefresh = {{ seconds_until_refresh }};
     function pad(n) { return n < 10 ? '0' + n : n; }
     function updateCountdown() {
         const min = Math.floor(secondsUntilRefresh / 60);
         const sec = secondsUntilRefresh % 60;
-        document.getElementById('countdown').textContent = pad(min) + ':' + pad(sec);
-        const now = new Date();
-        document.getElementById('current-time').textContent =
-            pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+        var el = document.getElementById('countdown');
+        if (el) el.textContent = pad(min) + ':' + pad(sec);
         if (secondsUntilRefresh <= 0) { location.reload(); }
         else { secondsUntilRefresh--; }
     }
     updateCountdown();
     setInterval(updateCountdown, 1000);
-    setInterval(updateCountdowns, 1000);
-    updateCountdowns();
 })();
 </script>
+
 {% endblock %}
