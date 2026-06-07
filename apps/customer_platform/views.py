@@ -509,13 +509,8 @@ def _calculate_pdf_area(file_path, box_info=None):
         if box_info:
             return box_info['total_area_cm2']
 
-        # 否则重新识别
-        from utils.pdf_red_box import smart_extract_boxes_for_order
-        box_info = smart_extract_boxes_for_order(file_path)
-        if box_info:
-            return box_info['total_area_cm2']
-
-        # 无框时回退到PDF页面尺寸
+        # 【优化】极速模式：不识别红框，直接用PDF页面尺寸计算面积
+        # 红框识别移到用户点击"开始识别"后再处理
         doc = fitz.open(file_path)
         page = doc[0]
         rect = page.rect
@@ -820,7 +815,9 @@ def quick_order_upload(request):
 @login_required
 @customer_required
 def batch_upload_files(request):
-    """AJAX：批量上传PDF并返回每个文件的识别结果"""
+    """AJAX：批量上传PDF并返回每个文件的识别结果
+    【优化】极速模式：先快速返回基本信息，预览图和红框异步生成
+    """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': '请使用POST请求'})
 
@@ -836,39 +833,23 @@ def batch_upload_files(request):
             continue
 
         try:
+            # 【优化】快速保存文件
             filename = f"order_files/{request.user.id}/{uuid.uuid4().hex}{ext}"
             path = default_storage.save(filename, file)
 
-            # 获取本地文件路径（OSS 文件会下载到临时文件）
+            # 获取本地文件路径
             from utils.pdf_processor import _get_pdf_local_path
             local_path = _get_pdf_local_path(path)
             if not local_path:
                 results.append({'success': False, 'error': '文件保存失败', 'file_name': file.name})
                 continue
 
-            # 【修复】先识别红框（必须在转纯黑之前！）
-            from utils.pdf_red_box import smart_extract_boxes_for_order
-            box_info = smart_extract_boxes_for_order(local_path)
-
-            # 计算面积（复用已识别的框信息）
-            area = _calculate_pdf_area(local_path, box_info)
-
-            # 获取页面尺寸
+            # 【优化】极速模式：只获取基本尺寸，不生成预览图和红框
+            # 预览图和红框识别移到前端点击"开始识别"后再处理
             pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
-
-            # 【临时关闭】PDF转纯黑（耗时太长，通过异步任务或单独接口处理）
-            # 预览图恢复生成
-            preview_url = None
-            try:
-                preview_filename = f"previews/{uuid.uuid4().hex}.png"
-                from utils.pdf_processor import generate_pdf_preview
-                # 【修复】降低DPI到72，减少处理时间和内存占用
-                preview_url = generate_pdf_preview(local_path, preview_filename, dpi=72, black_only=True)
-                print(f"[预览图生成-批量] 结果: {preview_url}, 文件: {file.name}")
-            except Exception as e:
-                import traceback
-                print(f"[预览图生成-批量] 失败: {e}")
-                traceback.print_exc()
+            
+            # 快速计算面积（不识别红框，直接用页面尺寸）
+            area = _calculate_pdf_area(local_path)
 
             # 清理临时文件
             if local_path != os.path.join(settings.MEDIA_ROOT, path):
@@ -877,6 +858,7 @@ def batch_upload_files(request):
                 except:
                     pass
 
+            # 【优化】返回基本信息，预览图和红框后续异步处理
             file_result = {
                 'success': True,
                 'file_path': path,
@@ -884,16 +866,13 @@ def batch_upload_files(request):
                 'area': area,
                 'pdf_width_mm': pdf_w_mm,
                 'pdf_height_mm': pdf_h_mm,
-                'preview_url': preview_url,
+                'preview_url': None,  # 前端点击"开始识别"后再生成
+                'box_count': 0,
+                'first_length': 0,
+                'first_width': 0,
+                'first_quantity': 1,
+                'boxes': [],
             }
-            if box_info:
-                file_result.update({
-                    'box_count': box_info['box_count'],
-                    'first_length': box_info['first_length'],
-                    'first_width': box_info['first_width'],
-                    'first_quantity': box_info['first_quantity'],
-                    'boxes': box_info['boxes'],
-                })
             results.append(file_result)
         except Exception as e:
             results.append({'success': False, 'error': str(e), 'file_name': file.name})
