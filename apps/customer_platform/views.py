@@ -1388,3 +1388,174 @@ def complaint_detail(request, complaint_id):
         'order': complaint.order,
     })
 
+
+
+# ==================== 下单页 PDF 预览/效果 API ====================
+
+@login_required
+@customer_required
+def api_pdf_red_boxes(request):
+    """
+    AJAX：获取PDF的红框识别结果（带预览图尺寸）
+    用于下单页 Canvas 交互式红框展示
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': '请使用POST请求'})
+
+    file_path = request.POST.get('file_path', '')
+    if not file_path:
+        return JsonResponse({'success': False, 'error': '缺少文件路径'})
+
+    try:
+        from utils.pdf_processor import _get_pdf_local_path, generate_pdf_preview
+        from utils.pdf_red_box import find_colored_rectangles
+
+        local_path = _get_pdf_local_path(file_path)
+        if not local_path:
+            return JsonResponse({'success': False, 'error': '文件读取失败'})
+
+        # 生成预览图（用于 Canvas 背景）
+        preview_url = None
+        preview_filename = f"previews/{uuid.uuid4().hex}.png"
+        try:
+            preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
+        except Exception as e:
+            print(f"[api_pdf_red_boxes] 预览图生成失败: {e}")
+
+        # 获取预览图实际尺寸
+        img_width, img_height = 0, 0
+        if preview_url:
+            try:
+                from PIL import Image
+                abs_preview = os.path.join(settings.MEDIA_ROOT, preview_filename)
+                if os.path.exists(abs_preview):
+                    with Image.open(abs_preview) as im:
+                        img_width, img_height = im.size
+            except Exception as e:
+                print(f"[api_pdf_red_boxes] 读取预览图尺寸失败: {e}")
+
+        # 识别红框（基于 PDF 点坐标）
+        doc = fitz.open(local_path)
+        page = doc[0]
+        page_pt_width = page.rect.width
+        page_pt_height = page.rect.height
+        doc.close()
+
+        boxes = find_colored_rectangles(local_path)
+        pt_to_mm = 25.4 / 72.0
+
+        # 计算点坐标 -> 预览图像素坐标的转换比例
+        px_scale_x = img_width / page_pt_width if page_pt_width > 0 and img_width > 0 else 1
+        px_scale_y = img_height / page_pt_height if page_pt_height > 0 and img_height > 0 else px_scale_x
+
+        box_list = []
+        for idx, r in enumerate(boxes[:10]):  # 最多10个框
+            length_mm = round(max(r['width'], r['height']) * pt_to_mm, 2)
+            width_mm = round(min(r['width'], r['height']) * pt_to_mm, 2)
+            box_list.append({
+                'id': idx,
+                # 返回基于预览图像素的坐标，前端 Canvas 可直接使用
+                'x': round(r['x'] * px_scale_x, 2),
+                'y': round(r['y'] * px_scale_y, 2),
+                'width': round(r['width'] * px_scale_x, 2),
+                'height': round(r['height'] * px_scale_y, 2),
+                'area': round(r.get('area', r['width'] * r['height']) * px_scale_x * px_scale_y, 2),
+                'length_mm': length_mm,
+                'width_mm': width_mm,
+                'quantity': 1,
+            })
+
+        # 清理临时文件
+        if local_path != os.path.join(settings.MEDIA_ROOT, file_path):
+            try:
+                os.unlink(local_path)
+            except:
+                pass
+
+        return JsonResponse({
+            'success': True,
+            'file_path': file_path,
+            'preview_url': preview_url,
+            'image_width': img_width,
+            'image_height': img_height,
+            'boxes': box_list,
+            'box_count': len(box_list),
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+@customer_required
+def api_preview_effect(request):
+    """
+    AJAX：根据产品类型生成版类效果图
+    参数：file_path, product_name, effect_type(可选)
+    effect_type 直接传入效果函数 key，如 'gold_flat', 'emboss_deboss' 等
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': '请使用POST请求'})
+
+    file_path = request.POST.get('file_path', '')
+    product_name = request.POST.get('product_name', '')
+    effect_type = request.POST.get('effect_type', '')
+
+    if not file_path:
+        return JsonResponse({'success': False, 'error': '缺少文件路径'})
+    if not product_name:
+        return JsonResponse({'success': False, 'error': '缺少产品类型'})
+
+    try:
+        import fitz
+        from PIL import Image
+        from utils.plate_preview_effects import apply_plate_effect, get_effect_name, get_effect_type
+
+        # 解析 effect_type
+        if effect_type:
+            # 前端传入的是效果函数 key（如 'gold_flat'），直接使用
+            actual_effect_type = effect_type
+        else:
+            actual_effect_type = get_effect_type(product_name)
+
+        # 生成预览图
+        if not os.path.isabs(file_path):
+            pdf_path = os.path.join(settings.MEDIA_ROOT, file_path)
+        else:
+            pdf_path = file_path
+
+        if not os.path.exists(pdf_path):
+            return JsonResponse({'success': False, 'error': 'PDF文件不存在'})
+
+        output_filename = f"customer_previews/{uuid.uuid4().hex}.png"
+        output_path = os.path.join(settings.MEDIA_ROOT, output_filename)
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        doc = fitz.open(pdf_path)
+        if len(doc) == 0:
+            doc.close()
+            return JsonResponse({'success': False, 'error': 'PDF为空'})
+        page = doc[0]
+        zoom = 150 / 72
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        doc.close()
+
+        result = apply_plate_effect(img, actual_effect_type)
+        result.save(output_path, "PNG")
+
+        effect_name = get_effect_name(product_name, effect_type or None)
+
+        effect_url = settings.MEDIA_URL + output_filename
+        return JsonResponse({
+            'success': True,
+            'effect_url': effect_url,
+            'effect_type': actual_effect_type,
+            'effect_name': effect_name,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)})

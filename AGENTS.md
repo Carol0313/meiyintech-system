@@ -1,19 +1,23 @@
-# AGENTS.md — 镁印制版下单系统（闪电制版）
+# AGENTS.md — 镁印制版下单系统（闪电制版 / 制版家）
 
 > 本文档面向 AI 编程助手，描述项目架构、技术栈、开发规范与关键注意事项。所有信息基于项目实际代码与配置文件，不假设任何外部知识。
+> 
+> **文档版本**: 2.0  
+> **生成日期**: 2026-06-07  
+> **基于代码版本**: 截至 2026-06-07 的静态分析
 
 ---
 
 ## 1. 项目概述
 
-**镁印制版下单系统**（品牌名：闪电制版 / 制版家，线上域名 `www.zhibanhome.com`）是一个面向印刷制版行业的垂直 B2B 订单管理平台。
+**镁印制版下单系统**（品牌名：闪电制版 / 制版家，线上域名 `www.zhibanhome.com`，服务器 IP `47.100.212.79`）是一个面向印刷制版行业的垂直 B2B 订单管理平台。
 
 平台连接三方角色：
-- **终端客户**（Customer）：制版需求方，在线下单、查看进度、确认收货、管理对账
-- **商家/商户**（Merchant）：制版服务提供方，管理会员、处理订单、拼版排产、发货对账
+- **终端客户**（Customer）：制版需求方，在线下单、查看进度、确认收货、管理对账、发起投诉
+- **商家/商户**（Merchant）：制版服务提供方，管理会员、处理订单、拼版排产、发货对账、数据分析
 - **平台管理员**（Platform Admin）：系统运营方，审核商家入驻、管理全局规格与权限
 
-系统核心能力：PDF 智能红框识别、自动拼版布局、跨订单批次管理、信用额度对账、版类视觉效果预览。
+系统核心能力：PDF 智能红框识别、自动拼版布局、跨订单批次管理、信用额度对账、版类视觉效果预览、SLA 时效追踪、商户数据分析中心。
 
 ---
 
@@ -27,9 +31,9 @@
 | Web 服务器 | Nginx | 反向代理 + 静态文件服务 |
 | 进程管理 | systemd | Linux 生产环境 |
 | 前端框架 | Bootstrap 5.3 | CDN 引入，无构建步骤 |
-| 图标库 | Bootstrap Icons | 1.10.5 |
-| 图表库 | ECharts | 5.4.3（仅订单统计页） |
-| 文件存储 | 阿里云 OSS（生产）/ 本地（开发） | 通过 `DEFAULT_FILE_STORAGE` 切换 |
+| 图标库 | Font Awesome 6.4 | CDN 引入（2026-06-06 从 Bootstrap Icons 切换） |
+| 图表库 | ECharts 5.4.3 | 仅数据分析中心页 |
+| 文件存储 | 阿里云 OSS（生产）/ 本地（开发） | `DEFAULT_FILE_STORAGE` 默认已启用 OSS |
 | PDF 处理 | PyMuPDF (fitz) | 1.24+ |
 | 图片处理 | Pillow | 10.0+ |
 | Excel 处理 | openpyxl | 3.1+ |
@@ -60,9 +64,9 @@
 │   ├── accounts/                  # 用户认证与账户体系（User/Merchant/CustomerProfile/StaffProfile/Role/Address）
 │   ├── admin_platform/            # 平台管理端（商家审核、权限预设、非标审批）
 │   ├── common/                    # 公共组件（上下文处理器、未授权页面、模板标签）
-│   ├── customer_platform/         # 客户平台（下单、订单查询、对账、子账号）
-│   ├── merchant_platform/         # 商家平台（订单处理、拼版、生产看板、会员）
-│   ├── orders/                    # 订单核心模型（Order/OrderItem/PlateBatch/Statement）
+│   ├── customer_platform/         # 客户平台（下单、订单查询、对账、子账号、投诉）
+│   ├── merchant_platform/         # 商家平台（订单处理、拼版、生产看板、会员、数据分析）
+│   ├── orders/                    # 订单核心模型（Order/OrderItem/PlateBatch/Statement/OrderComplaint）
 │   └── products/                  # 产品规格模型（ProductSpec/CustomSpecRequest）
 ├── utils/                         # 工具模块与核心业务逻辑
 │   ├── rectpack/                  # 矩形排版算法库（内嵌，非 pip 包）
@@ -78,12 +82,12 @@
 │   ├── pricing_tiers.py           # 价格体系（腐蚀版档位 + 雕刻版固定价）
 │   ├── kuaidi100.py               # 快递100 物流查询 SDK
 │   └── ...
-├── templates/                     # 全局模板目录（56 个 HTML）
+├── templates/                     # 全局模板目录（65 个 HTML）
 │   ├── base.html                  # 基础模板（侧边栏 220px + 主内容区）
 │   ├── common/menu.html           # 动态侧边栏菜单
-│   ├── customer/                  # 客户平台模板（17 个）
-│   ├── merchant/                  # 商家平台模板（22 个）
-│   ├── admin_platform/            # 平台管理模板（9 个）
+│   ├── customer/                  # 客户平台模板（~17 个）
+│   ├── merchant/                  # 商家平台模板（~22 个）
+│   ├── admin_platform/            # 平台管理模板（~9 个）
 │   ├── accounts/                  # 认证相关模板
 │   └── registration/              # 登录页
 ├── static/                        # 静态文件（CSS 空，JS 含 china_regions.js，images 含 logo）
@@ -99,11 +103,17 @@
 │   ├── magnesium.service          # systemd 服务模板
 │   ├── deploy.sh                  # 阿里云 ECS 一键部署脚本
 │   ├── update.sh                  # 代码更新脚本
-│   └── ssl_certbot.sh             # SSL 证书自动续期
+│   ├── ssl_certbot.sh             # SSL 证书自动续期
+│   ├── QUICK_START.md             # 宝塔面板快速部署指南
+│   ├── README.md                  # 阿里云 ECS 完整部署指南
+│   └── SOP_代码发布.md             # 代码发布 SOP
 ├── manage.py                      # Django 管理命令入口（含 .env 自动加载）
 ├── requirements.txt               # Python 依赖
 ├── start_server.bat               # Windows 开发启动脚本
-└── db.sqlite3                     # 开发环境 SQLite 数据库
+├── db.sqlite3                     # 开发环境 SQLite 数据库
+├── .env                           # 环境变量文件（生产环境）
+├── init_data.py                   # 初始化测试数据脚本
+└── ...
 ```
 
 ---
@@ -128,11 +138,13 @@ oss2>=2.18                    # 阿里云 OSS（可选）
 ### 4.2 `magnesium_order_platform/settings.py`
 - 开发默认：`DEBUG=True`，`DB_ENGINE=sqlite3`，`ALLOWED_HOSTS=*`
 - 生产切换：通过环境变量 `DJANGO_DEBUG=False`、`DB_ENGINE=postgresql`、`DJANGO_ALLOWED_HOSTS=域名`
-- `SECRET_KEY` 默认有占位值，**生产必须通过环境变量覆盖**
-- 阿里云 OSS 配置已存在但 `DEFAULT_FILE_STORAGE` 默认已启用（指向 `utils.oss_storage.AliyunOSSMediaStorage`）
+- `SECRET_KEY` 默认有占位值，**生产必须通过环境变量 `DJANGO_SECRET_KEY` 覆盖**
+- 阿里云 OSS 配置已存在，`DEFAULT_FILE_STORAGE` 默认已启用（指向 `utils.oss_storage.AliyunOSSMediaStorage`）
+- `OSS_ACCESS_KEY_ID` 和 `OSS_ACCESS_KEY_SECRET` 优先从环境变量读取，留空则使用本地存储
 - 快递100 API Key 默认空字符串，需配置真实值
 - 文件上传限制：50MB
 - 自定义用户模型：`AUTH_USER_MODEL = 'accounts.User'`，`USERNAME_FIELD = 'phone'`
+- 会话有效期：7 天（`SESSION_COOKIE_AGE = 86400 * 7`）
 
 ### 4.3 `magnesium_order_platform/urls.py`
 根路由按用户角色划分前缀：
@@ -163,7 +175,7 @@ path('', include('apps.accounts.urls')),            # 根路径 fallback
 
 - `User`（统一用户表，手机号登录）→ `CustomerProfile`（1:1，终端客户）/ `StaffProfile`（1:1，商家员工）/ `managed_merchant`（1:1，商家管理员）
 - `Merchant` → `CustomerProfile`（1:N，会员）/ `Factory`（1:N，工厂）/ `ProductSpec`（1:N，规格）/ `Role`（1:N，岗位）
-- `Order` → `OrderItem`（1:N，明细）/ `PlateBatch`（N:1，拼版批次）/ `Statement`（N:1，对账单）
+- `Order` → `OrderItem`（1:N，明细）/ `PlateBatch`（N:1，拼版批次）/ `Statement`（N:1，对账单）/ `OrderComplaint`（1:N，投诉）
 - `PlateBatch` → `PlateBatchItem`（1:N，拼版项目）
 - `CustomerProfile` 自关联 N:1（parent，子账号体系）
 
@@ -207,8 +219,8 @@ design_confirmed（设计/规格确认）    │
 | App | 职责 | 包含内容 |
 |-----|------|---------|
 | `accounts` | 用户体系 | 模型、认证视图（登录/注册/密码重置）、个人中心、地址管理 |
-| `customer_platform` | 客户端 | 客户首页、下单（单页/分步）、订单查询、文件下载、对账、子账号管理 |
-| `merchant_platform` | 商户端 | 商家首页、会员管理、工厂管理、规格管理、订单处理、拼版工具、生产看板、对账单、岗位与子账号 |
+| `customer_platform` | 客户端 | 客户首页、下单（单页/分步）、订单查询、文件下载、对账、子账号管理、投诉 |
+| `merchant_platform` | 商户端 | 商家首页、会员管理、工厂管理、规格管理、订单处理、拼版工具、生产看板、对账单、岗位与子账号、数据分析中心 |
 | `admin_platform` | 平台管理端 | 平台首页、商家审核、权限预设、非标规格审批 |
 | `orders` | 订单模型层 | 全部订单相关模型、模型方法（计算金额/状态流转/支付）、自定义管理命令 |
 | `products` | 产品模型层 | ProductSpec / CustomSpecRequest 模型 |
@@ -221,9 +233,9 @@ design_confirmed（设计/规格确认）    │
 | 角色 | URL 前缀 | 权限范围 |
 |------|---------|---------|
 | `platform_admin` | `/platform/` + `/accounts/` | 全平台管理：商家审核、全局权限预设、非标审批 |
-| `merchant_admin` | `/merchant/` + `/accounts/` | 商家全功能：会员/工厂/规格/订单/拼版/子账号/对账 |
+| `merchant_admin` | `/merchant/` + `/accounts/` | 商家全功能：会员/工厂/规格/订单/拼版/子账号/对账/数据分析 |
 | `merchant_staff` | `/merchant/` + `/accounts/` | 受限功能：根据 `Role.permissions` 控制（10 项细粒度权限） |
-| `customer` | `/customer/` + `/accounts/` | 仅自身数据：下单/查单/对账/地址/子账号 |
+| `customer` | `/customer/` + `/accounts/` | 仅自身数据：下单/查单/对账/地址/子账号/投诉 |
 
 **自定义装饰器**（定义在各平台 views.py 中）：
 - `@login_required` — Django 内置
@@ -314,6 +326,9 @@ python manage.py runserver
 | 总平台管理员 | 13800000000 | admin123 |
 | 商家管理员 | 13800138000 | admin123 |
 | 终端用户 | 13900139000 | admin123 |
+| 客服岗（内测） | 13800138002 / 13800138005 / 13800138006 | admin123 |
+
+商家邀请码（客户注册用）：`MA1B2C3`
 
 ### 7.2 生产环境（Linux / 阿里云 ECS）
 
@@ -376,7 +391,7 @@ python manage.py test
 - CSS 变量定义在 `base.html` 的 `:root` 中
 - 原生 JavaScript（Vanilla JS），无 jQuery/Vue/React
 - AJAX 请求使用 `fetch` API，必须携带 `X-CSRFToken`
-- Bootstrap 5.3 通过 CDN 引入
+- Bootstrap 5.3 + Font Awesome 6.4 通过 CDN 引入
 
 ### 9.3 模型规范
 - 主键使用 `UUIDField(primary_key=True, default=uuid.uuid4, editable=False)`
@@ -484,6 +499,8 @@ Django Application
 |------|------|
 | `README.md` | 项目简介、快速启动、测试账号 |
 | `PROJECT_ARCHITECTURE.md` | 完整架构文档（技术栈、数据库 ER 图、业务流程、部署运维） |
+| `PROJECT_STATUS.md` | 项目状态记录（已完成功能、进行中、待开始、已知问题、快速恢复命令） |
+| `CHANGELOG.md` | 每日变更日志（按 conventional commit 类型分类） |
 | `PLATE_LAYOUT_TECH_GUIDE.md` | 拼版功能技术栈与嵌入对接指南 |
 | `deploy/QUICK_START.md` | 宝塔面板快速部署指南 |
 | `deploy/README.md` | 阿里云 ECS 完整部署指南 |
@@ -495,6 +512,20 @@ Django Application
 
 ---
 
-> **文档版本**: 1.0  
-> **生成日期**: 2026-06-05  
-> **基于代码版本**: 截至 2026-06-05 的静态分析
+## 14. 项目统计
+
+| 指标 | 数值 |
+|------|------|
+| Python 文件数 | ~125 |
+| Python 代码行数 | ~14,500（apps: ~8,800 + utils: ~5,700） |
+| HTML 模板数 | 65 |
+| 数据库模型数 | 21 |
+| 数据库迁移文件数 | ~49 |
+| Git 提交数 | 94+ |
+| 测试覆盖率 | 0%（尚未编写测试） |
+
+---
+
+> **文档版本**: 2.0  
+> **生成日期**: 2026-06-07  
+> **基于代码版本**: 截至 2026-06-07 的静态分析

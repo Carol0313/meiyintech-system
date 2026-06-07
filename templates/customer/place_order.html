@@ -40,6 +40,89 @@
         max-height: 220px;
         border-radius: var(--radius-sm);
     }
+    /* PDF 红框 Canvas 交互区 */
+    .pdf-canvas-wrapper {
+        position: relative;
+        display: inline-block;
+        border: 1px solid #dee2e6;
+        border-radius: var(--radius-sm);
+        background: #fff;
+        cursor: crosshair;
+        max-width: 100%;
+        overflow: auto;
+    }
+    .pdf-canvas-wrapper canvas {
+        display: block;
+        max-width: 100%;
+    }
+    .pdf-canvas-wrapper.is-drawing {
+        cursor: crosshair;
+    }
+    .box-info-panel {
+        font-size: 12px;
+        color: #495057;
+        background: #f8f9fa;
+        border-radius: var(--radius-sm);
+        padding: 8px 10px;
+        margin-top: 8px;
+    }
+    .box-info-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-right: 10px;
+        margin-bottom: 4px;
+    }
+    .box-info-item .badge {
+        font-size: 11px;
+        font-weight: 500;
+    }
+    .effect-preview-panel {
+        border: 1px solid #e9ecef;
+        border-radius: var(--radius-md);
+        padding: 12px;
+        background: #fff;
+        margin-top: 12px;
+    }
+    .effect-btn-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 10px;
+    }
+    .effect-btn {
+        padding: 4px 10px;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        background: #fff;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .effect-btn:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    .effect-btn.active {
+        border-color: var(--primary);
+        background: var(--primary-light);
+        color: var(--primary);
+        font-weight: 500;
+    }
+    .effect-preview-img {
+        max-width: 100%;
+        max-height: 220px;
+        border-radius: var(--radius-sm);
+        border: 1px solid #f0f0f0;
+    }
+    .effect-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 120px;
+        color: var(--text-muted);
+        font-size: 13px;
+    }
     .size-input-group {
         display: flex;
         align-items: center;
@@ -578,6 +661,9 @@ function bindSpecEvents(groupId) {
         calcTotalPrice();
         updateBorderTip(groupId, prodKey);
 
+        // 更新已上传文件的效果按钮
+        updateFileEffectButtons(groupId);
+
         productGrid.querySelectorAll('.spec-option').forEach(el => {
             el.classList.toggle('active', el.dataset.value === prodKey);
         });
@@ -838,74 +924,74 @@ function renderRecognizedFiles(groupId) {
     resultArea.style.display = 'block';
 
     resultArea.innerHTML = group.recognizedFiles.map((f, idx) => {
-        // 第一行：预览图 + 文件名 + 删除按钮
-        const previewHtml = f.preview_url
-            ? `<img src="${f.preview_url}" class="img-fluid rounded" style="max-height:120px;" alt="预览">`
-            : `<div class="text-muted py-3"><i class="fa-solid fa-file-pdf" style="font-size:36px;"></i><br>PDF</div>`;
-
-        // 第二行：尺寸和数量输入
-        let dimensionsHtml = '';
-        if (f.boxes && f.boxes.length > 1) {
-            dimensionsHtml = f.boxes.map((box, bidx) => `
-                <div class="row g-2 mt-1 box-row" data-box-index="${bidx}">
-                    <div class="col-1 d-flex align-items-end pb-1">
-                        <span class="badge bg-secondary">框${bidx + 1}</span>
-                    </div>
-                    <div class="col-3">
-                        <label class="form-label small mb-0">长(mm)</label>
-                        <input type="number" step="0.01" class="form-control form-control-sm file-length-box" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.length_mm ? box.length_mm.toFixed(1) : ''}">
-                    </div>
-                    <div class="col-3">
-                        <label class="form-label small mb-0">宽(mm)</label>
-                        <input type="number" step="0.01" class="form-control form-control-sm file-width-box" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.width_mm ? box.width_mm.toFixed(1) : ''}">
-                    </div>
-                    <div class="col-3">
-                        <label class="form-label small mb-0">数量</label>
-                        <input type="number" min="1" class="form-control form-control-sm file-qty-box" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.quantity || 1}">
-                    </div>
-                </div>
-            `).join('');
-        } else {
-            dimensionsHtml = `
-                <div class="row g-2 mt-1">
-                    <div class="col-4">
-                        <label class="form-label small mb-0">长(mm)</label>
-                        <input type="number" step="0.01" class="form-control form-control-sm file-length" data-group="${groupId}" data-index="${idx}" value="${f.length_mm ? f.length_mm.toFixed(1) : ''}">
-                    </div>
-                    <div class="col-4">
-                        <label class="form-label small mb-0">宽(mm)</label>
-                        <input type="number" step="0.01" class="form-control form-control-sm file-width" data-group="${groupId}" data-index="${idx}" value="${f.width_mm ? f.width_mm.toFixed(1) : ''}">
-                    </div>
-                    <div class="col-4">
-                        <label class="form-label small mb-0">数量</label>
-                        <input type="number" min="1" class="form-control form-control-sm file-qty" data-group="${groupId}" data-index="${idx}" value="${f.quantity}">
-                    </div>
-                </div>`;
-        }
-
-        const boxInfo = f.box_count > 0
-            ? `<div class="small text-info mt-1"><i class="fa-solid fa-vector-square"></i> 检测到 ${f.box_count} 个内容框</div>`
-            : '';
+        // 版类效果按钮（根据产品类型显示相关效果）
+        const effectButtons = getEffectButtons(group.product_name, groupId, idx);
 
         return `
-        <div class="card mb-2 file-result-card" data-group="${groupId}" data-index="${idx}">
+        <div class="card mb-3 file-result-card" data-group="${groupId}" data-index="${idx}">
             <div class="card-body py-2 px-3">
-                <!-- 第一行：预览图 + 文件名 + 删除按钮 -->
-                <div class="d-flex gap-3 align-items-start">
-                    <div class="flex-shrink-0 text-center" style="width:120px;">${previewHtml}</div>
-                    <div class="flex-grow-1">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <span class="fw-medium" title="${f.file_name}">${f.file_name}</span>
-                            <button type="button" class="btn btn-sm btn-link text-danger py-0" onclick="removeRecognizedFile(${groupId}, ${idx})">
-                                <i class="fa-solid fa-trash-can"></i>
+                <!-- 文件名 + 删除 -->
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="fw-medium" title="${f.file_name}"><i class="fa-solid fa-file-pdf text-danger me-1"></i>${f.file_name}</span>
+                    <button type="button" class="btn btn-sm btn-link text-danger py-0" onclick="removeRecognizedFile(${groupId}, ${idx})">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+
+                <!-- PDF 红框 Canvas 交互区 -->
+                <div class="pdf-preview-section mb-2" id="pdfPreviewSection-${groupId}-${idx}">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small fw-medium"><i class="fa-solid fa-vector-square text-info me-1"></i>红框识别</span>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" style="font-size:11px;padding:2px 8px;" onclick="toggleDrawMode(${groupId}, ${idx})">
+                                <i class="fa-solid fa-pen"></i> 手动画框
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" style="font-size:11px;padding:2px 8px;" onclick="clearAllBoxes(${groupId}, ${idx})">
+                                <i class="fa-solid fa-eraser"></i> 清空
+                            </button>
+                            <button type="button" class="btn btn-outline-primary btn-sm" style="font-size:11px;padding:2px 8px;" onclick="reloadRedBoxes(${groupId}, ${idx})">
+                                <i class="fa-solid fa-rotate-right"></i> 重新识别
                             </button>
                         </div>
-                        ${boxInfo}
+                    </div>
+                    <div class="pdf-canvas-wrapper" id="canvasWrapper-${groupId}-${idx}">
+                        <canvas id="pdfCanvas-${groupId}-${idx}" data-group="${groupId}" data-index="${idx}"></canvas>
+                    </div>
+                    <div class="box-info-panel" id="boxInfoPanel-${groupId}-${idx}">
+                        <span class="text-muted">正在加载识别结果...</span>
                     </div>
                 </div>
-                <!-- 第二行：尺寸和数量 -->
-                <div class="mt-2 pt-2 border-top">
-                    ${dimensionsHtml}
+
+                <!-- 版类效果预览 -->
+                <div class="effect-preview-panel" id="effectPanel-${groupId}-${idx}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="small fw-medium"><i class="fa-solid fa-eye text-primary me-1"></i>版类效果预览</span>
+                        <span class="text-muted" style="font-size:11px;">效果图仅供参考</span>
+                    </div>
+                    <div class="effect-btn-group" id="effectBtnGroup-${groupId}-${idx}">
+                        ${effectButtons}
+                    </div>
+                    <div class="text-center" id="effectPreviewArea-${groupId}-${idx}">
+                        <div class="effect-loading">选择效果后生成预览</div>
+                    </div>
+                </div>
+
+                <!-- 尺寸和数量 -->
+                <div class="mt-2 pt-2 border-top" id="dimensionsArea-${groupId}-${idx}">
+                    <div class="row g-2 mt-1">
+                        <div class="col-4">
+                            <label class="form-label small mb-0">长(mm)</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm file-length" data-group="${groupId}" data-index="${idx}" value="${f.length_mm ? f.length_mm.toFixed(1) : ''}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small mb-0">宽(mm)</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm file-width" data-group="${groupId}" data-index="${idx}" value="${f.width_mm ? f.width_mm.toFixed(1) : ''}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small mb-0">数量</label>
+                            <input type="number" min="1" class="form-control form-control-sm file-qty" data-group="${groupId}" data-index="${idx}" value="${f.quantity}">
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>`;
@@ -917,33 +1003,17 @@ function renderRecognizedFiles(groupId) {
             const gid = parseInt(input.dataset.group);
             const idx = parseInt(input.dataset.index);
             const g = specGroups.find(x => x.id === gid);
-            const card = resultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
-            g.recognizedFiles[idx].length_mm = parseFloat(card.querySelector('.file-length').value) || 0;
-            g.recognizedFiles[idx].width_mm = parseFloat(card.querySelector('.file-width').value) || 0;
-            g.recognizedFiles[idx].quantity = parseInt(card.querySelector('.file-qty').value) || 1;
+            const cardEl = resultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
+            g.recognizedFiles[idx].length_mm = parseFloat(cardEl.querySelector('.file-length').value) || 0;
+            g.recognizedFiles[idx].width_mm = parseFloat(cardEl.querySelector('.file-width').value) || 0;
+            g.recognizedFiles[idx].quantity = parseInt(cardEl.querySelector('.file-qty').value) || 1;
             calcTotalPrice();
         });
     });
 
-    // 绑定多框输入事件
-    resultArea.querySelectorAll('.file-length-box, .file-width-box, .file-qty-box').forEach(input => {
-        input.addEventListener('input', () => {
-            const gid = parseInt(input.dataset.group);
-            const idx = parseInt(input.dataset.index);
-            const boxIdx = parseInt(input.dataset.boxIndex);
-            const g = specGroups.find(x => x.id === gid);
-            const card = resultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
-            const row = card.querySelector(`.box-row[data-box-index="${boxIdx}"]`);
-            g.recognizedFiles[idx].boxes[boxIdx].length_mm = parseFloat(row.querySelector('.file-length-box').value) || 0;
-            g.recognizedFiles[idx].boxes[boxIdx].width_mm = parseFloat(row.querySelector('.file-width-box').value) || 0;
-            g.recognizedFiles[idx].boxes[boxIdx].quantity = parseInt(row.querySelector('.file-qty-box').value) || 1;
-            if (boxIdx === 0) {
-                g.recognizedFiles[idx].length_mm = g.recognizedFiles[idx].boxes[0].length_mm;
-                g.recognizedFiles[idx].width_mm = g.recognizedFiles[idx].boxes[0].width_mm;
-                g.recognizedFiles[idx].quantity = g.recognizedFiles[idx].boxes[0].quantity;
-            }
-            calcTotalPrice();
-        });
+    // 初始化每个文件的 Canvas 和效果
+    group.recognizedFiles.forEach((f, idx) => {
+        initPdfCanvas(groupId, idx);
     });
 }
 
@@ -1118,6 +1188,584 @@ document.getElementById('quickOrderForm').addEventListener('submit', function(e)
     input.value = JSON.stringify(specGroupsData);
     this.appendChild(input);
 });
+
+// ===== PDF 预览/红框/效果 交互功能 =====
+
+// 产品类型 -> 可用效果映射
+const PRODUCT_EFFECT_MAP = {
+    'etching_concave':  [
+        { key: 'emboss', name: '压纹凹陷' },
+        { key: 'normal', name: '普通' },
+    ],
+    'etching_convex':  [
+        { key: 'gold_flat', name: '烫金光泽' },
+        { key: 'normal', name: '普通' },
+    ],
+    'etching_magnesium_concave_resin_convex': [
+        { key: 'relief_strong', name: '激凸浮雕' },
+        { key: 'normal', name: '普通' },
+    ],
+    'etching_double_sided_magnesium_bump': [
+        { key: 'relief_strong', name: '激凸浮雕' },
+        { key: 'normal', name: '普通' },
+    ],
+    'carving_flat_convex': [
+        { key: 'gold_satin', name: '金色平雕' },
+        { key: 'normal', name: '普通' },
+    ],
+    'carving_flat_concave': [
+        { key: 'gold_satin', name: '金色平雕' },
+        { key: 'normal', name: '普通' },
+    ],
+    'carving_relief_bump_gold': [
+        { key: 'relief_gold', name: '金色浮雕' },
+        { key: 'relief_strong', name: '激凸浮雕' },
+        { key: 'normal', name: '普通' },
+    ],
+    'carving_relief_multi_bump_gold': [
+        { key: 'relief_gold_multi', name: '多层金色浮雕' },
+        { key: 'relief_gold', name: '金色浮雕' },
+        { key: 'normal', name: '普通' },
+    ],
+    'carving_relief_complex': [
+        { key: 'relief_gold_multi', name: '多层金色浮雕' },
+        { key: 'relief_gold', name: '金色浮雕' },
+        { key: 'normal', name: '普通' },
+    ],
+    'resin_mold': [
+        { key: 'normal', name: '普通' },
+    ],
+    'resin_water': [
+        { key: 'normal', name: '普通' },
+    ],
+    'film_alignment': [
+        { key: 'film_transparent', name: '菲林半透明' },
+        { key: 'normal', name: '普通' },
+    ],
+    'film_uv': [
+        { key: 'film_transparent', name: '菲林半透明' },
+        { key: 'normal', name: '普通' },
+    ],
+};
+
+function getEffectButtons(productName, groupId, fileIdx) {
+    if (!productName) {
+        return '<span class="text-muted small">请先选择细分产品以查看效果预览</span>';
+    }
+    const effects = PRODUCT_EFFECT_MAP[productName] || [{ key: 'normal', name: '普通' }];
+    return effects.map((e, i) =>
+        `<button type="button" class="effect-btn ${i === 0 ? 'active' : ''}" data-effect="${e.key}" onclick="switchEffect(${groupId}, ${fileIdx}, '${e.key}', this)">${e.name}</button>`
+    ).join('');
+}
+
+// 每个文件的画布状态
+const pdfCanvasStates = {};
+
+function getCanvasKey(groupId, idx) {
+    return `${groupId}-${idx}`;
+}
+
+function initPdfCanvas(groupId, idx) {
+    const group = specGroups.find(g => g.id === groupId);
+    const f = group.recognizedFiles[idx];
+    const key = getCanvasKey(groupId, idx);
+    const canvas = document.getElementById(`pdfCanvas-${groupId}-${idx}`);
+    const wrapper = document.getElementById(`canvasWrapper-${groupId}-${idx}`);
+    const infoPanel = document.getElementById(`boxInfoPanel-${groupId}-${idx}`);
+
+    if (!canvas || !wrapper) return;
+
+    // 初始化状态
+    pdfCanvasStates[key] = {
+        groupId, idx,
+        boxes: [],
+        imgWidth: 0, imgHeight: 0,
+        scale: 1,
+        isDrawing: false,
+        drawStart: null,
+        hoveredBox: -1,
+        previewUrl: f.preview_url || '',
+        effectUrl: '',
+        currentEffect: '',
+        productName: group.product_name,
+    };
+
+    // 注意：batch_upload_files 返回的 boxes 是 PDF 点坐标，
+    // 而 Canvas 需要基于预览图像素的坐标。这里只保留 mm 尺寸信息，
+    // 像素坐标由 fetchRedBoxes 重新获取。
+    if (f.boxes && f.boxes.length > 0) {
+        pdfCanvasStates[key].boxes = f.boxes.map((b, i) => ({
+            id: i, x: 0, y: 0, width: 0, height: 0,
+            length_mm: b.length_mm || 0, width_mm: b.width_mm || 0,
+            quantity: b.quantity || 1,
+        }));
+    }
+
+    // 加载背景图并识别红框（总是重新获取像素坐标）
+    loadPdfPreview(groupId, idx);
+
+    // 绑定 Canvas 事件
+    bindCanvasEvents(canvas, groupId, idx);
+}
+
+function loadPdfPreview(groupId, idx) {
+    const group = specGroups.find(g => g.id === groupId);
+    const f = group.recognizedFiles[idx];
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    const canvas = document.getElementById(`pdfCanvas-${groupId}-${idx}`);
+    const infoPanel = document.getElementById(`boxInfoPanel-${groupId}-${idx}`);
+
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    // 先尝试用已有的 preview_url
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function() {
+        state.imgWidth = img.width;
+        state.imgHeight = img.height;
+        // 限制最大显示宽度 560px
+        const maxDisplayWidth = 560;
+        const displayWidth = Math.min(img.width, maxDisplayWidth);
+        state.scale = displayWidth / img.width;
+        const displayHeight = img.height * state.scale;
+
+        canvas.width = displayWidth;
+        canvas.height = displayHeight;
+        canvas.style.width = displayWidth + 'px';
+        canvas.style.height = displayHeight + 'px';
+
+        ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+
+        // 总是调用后端获取基于像素的框坐标
+        fetchRedBoxes(groupId, idx);
+
+        // 默认生成第一个效果的预览图
+        setTimeout(() => autoGenerateFirstEffect(groupId, idx), 100);
+    };
+    img.onerror = function() {
+        infoPanel.innerHTML = '<span class="text-danger">预览图加载失败</span>';
+    };
+
+    if (f.preview_url) {
+        img.src = f.preview_url;
+    } else {
+        // 没有 preview_url 时，调用接口生成
+        fetchRedBoxes(groupId, idx, true);
+    }
+}
+
+function fetchRedBoxes(groupId, idx, needImage = false) {
+    const group = specGroups.find(g => g.id === groupId);
+    const f = group.recognizedFiles[idx];
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    const infoPanel = document.getElementById(`boxInfoPanel-${groupId}-${idx}`);
+
+    infoPanel.innerHTML = '<span class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i>正在识别红框...</span>';
+
+    const formData = new FormData();
+    formData.append('file_path', f.file_path);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+    fetch('{% url "api_pdf_red_boxes" %}', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            infoPanel.innerHTML = `<span class="text-danger">识别失败：${data.error || '未知错误'}</span>`;
+            return;
+        }
+
+        // 更新预览图
+        if (data.preview_url && (needImage || !f.preview_url)) {
+            f.preview_url = data.preview_url;
+            state.previewUrl = data.preview_url;
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = function() {
+                state.imgWidth = data.image_width || img.width;
+                state.imgHeight = data.image_height || img.height;
+                const maxDisplayWidth = 560;
+                const displayWidth = Math.min(state.imgWidth, maxDisplayWidth);
+                state.scale = displayWidth / state.imgWidth;
+                const displayHeight = state.imgHeight * state.scale;
+                const canvas = document.getElementById(`pdfCanvas-${groupId}-${idx}`);
+                canvas.width = displayWidth;
+                canvas.height = displayHeight;
+                canvas.style.width = displayWidth + 'px';
+                canvas.style.height = displayHeight + 'px';
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+                drawBoxes(groupId, idx);
+            };
+            img.src = data.preview_url;
+        }
+
+        // 更新 boxes
+        if (data.boxes && data.boxes.length > 0) {
+            state.boxes = data.boxes.map((b, i) => ({
+                id: i, x: b.x, y: b.y,
+                width: b.width, height: b.height,
+                length_mm: b.length_mm, width_mm: b.width_mm,
+                quantity: 1,
+            }));
+            f.boxes = state.boxes;
+            f.box_count = state.boxes.length;
+        } else {
+            state.boxes = [];
+            f.boxes = [];
+            f.box_count = 0;
+        }
+
+        renderBoxInfo(groupId, idx);
+        updateDimensionsFromBoxes(groupId, idx);
+        drawBoxes(groupId, idx);
+
+        // 自动出效果图
+        setTimeout(() => autoGenerateFirstEffect(groupId, idx), 200);
+    })
+    .catch(err => {
+        infoPanel.innerHTML = `<span class="text-danger">识别出错：${err.message}</span>`;
+    });
+}
+
+function bindCanvasEvents(canvas, groupId, idx) {
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+
+    canvas.addEventListener('mousedown', function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+        if (state.isDrawing) {
+            state.drawStart = { x, y };
+            return;
+        }
+
+        // 检查是否点击了某个框（点击删除）
+        const clickedBox = findBoxAt(x, y, state);
+        if (clickedBox >= 0) {
+            if (confirm(`删除框 ${clickedBox + 1}？`)) {
+                state.boxes.splice(clickedBox, 1);
+                // 重新编号
+                state.boxes.forEach((b, i) => b.id = i);
+                renderBoxInfo(groupId, idx);
+                updateDimensionsFromBoxes(groupId, idx);
+                drawBoxes(groupId, idx);
+            }
+        }
+    });
+
+    canvas.addEventListener('mousemove', function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+        if (state.isDrawing && state.drawStart) {
+            drawBoxes(groupId, idx);
+            const ctx = canvas.getContext('2d');
+            const w = x - state.drawStart.x;
+            const h = y - state.drawStart.y;
+            ctx.strokeStyle = '#e74c3c';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 3]);
+            ctx.strokeRect(state.drawStart.x, state.drawStart.y, w, h);
+            ctx.setLineDash([]);
+            return;
+        }
+
+        const hovered = findBoxAt(x, y, state);
+        if (hovered !== state.hoveredBox) {
+            state.hoveredBox = hovered;
+            drawBoxes(groupId, idx);
+        }
+        canvas.style.cursor = hovered >= 0 ? 'pointer' : (state.isDrawing ? 'crosshair' : 'default');
+    });
+
+    canvas.addEventListener('mouseup', function(e) {
+        if (!state.isDrawing || !state.drawStart) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+        const x1 = Math.min(state.drawStart.x, x);
+        const y1 = Math.min(state.drawStart.y, y);
+        const w = Math.abs(x - state.drawStart.x);
+        const h = Math.abs(y - state.drawStart.y);
+
+        // 至少 20x20 像素才认为是有效框
+        if (w > 20 && h > 20 && state.imgWidth > 0) {
+            // 预览图 DPI=150，像素转 mm
+            const pxToMm = 25.4 / 150.0;
+            const widthPx = w / state.scale;
+            const heightPx = h / state.scale;
+            const length_mm = Math.max(widthPx, heightPx) * pxToMm;
+            const width_mm = Math.min(widthPx, heightPx) * pxToMm;
+
+            state.boxes.push({
+                id: state.boxes.length,
+                x: x1 / state.scale,
+                y: y1 / state.scale,
+                width: widthPx,
+                height: heightPx,
+                length_mm: parseFloat(length_mm.toFixed(2)),
+                width_mm: parseFloat(width_mm.toFixed(2)),
+                quantity: 1,
+            });
+            renderBoxInfo(groupId, idx);
+            updateDimensionsFromBoxes(groupId, idx);
+            drawBoxes(groupId, idx);
+        }
+
+        state.drawStart = null;
+    });
+
+    canvas.addEventListener('mouseleave', function() {
+        state.hoveredBox = -1;
+        drawBoxes(groupId, idx);
+    });
+}
+
+function findBoxAt(x, y, state) {
+    // 从后往前找，优先选中上层的框
+    for (let i = state.boxes.length - 1; i >= 0; i--) {
+        const b = state.boxes[i];
+        const bx = b.x * state.scale;
+        const by = b.y * state.scale;
+        const bw = b.width * state.scale;
+        const bh = b.height * state.scale;
+        if (x >= bx - 4 && x <= bx + bw + 4 && y >= by - 4 && y <= by + bh + 4) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function drawBoxes(groupId, idx) {
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    const canvas = document.getElementById(`pdfCanvas-${groupId}-${idx}`);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    // 重绘背景
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (state.previewUrl) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            _drawBoxOverlays(ctx, state);
+        };
+        img.src = state.previewUrl;
+    } else {
+        _drawBoxOverlays(ctx, state);
+    }
+}
+
+function _drawBoxOverlays(ctx, state) {
+    state.boxes.forEach((b, i) => {
+        const x = b.x * state.scale;
+        const y = b.y * state.scale;
+        const w = b.width * state.scale;
+        const h = b.height * state.scale;
+
+        const isHovered = (i === state.hoveredBox);
+        ctx.strokeStyle = isHovered ? '#e74c3c' : '#3498db';
+        ctx.lineWidth = isHovered ? 3 : 2;
+        ctx.strokeRect(x, y, w, h);
+
+        // 填充半透明
+        ctx.fillStyle = isHovered ? 'rgba(231, 76, 60, 0.08)' : 'rgba(52, 152, 219, 0.06)';
+        ctx.fillRect(x, y, w, h);
+
+        // 标签
+        ctx.fillStyle = isHovered ? '#e74c3c' : '#3498db';
+        ctx.font = 'bold 12px sans-serif';
+        const label = `框${i + 1}`;
+        const tm = ctx.measureText(label);
+        ctx.fillRect(x, y - 18, tm.width + 8, 18);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, x + 4, y - 5);
+    });
+}
+
+function renderBoxInfo(groupId, idx) {
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    const panel = document.getElementById(`boxInfoPanel-${groupId}-${idx}`);
+    if (!panel) return;
+
+    if (state.boxes.length === 0) {
+        panel.innerHTML = '<span class="text-muted">未识别到红框，可点击"手动画框"添加</span>';
+        return;
+    }
+
+    const totalArea = state.boxes.reduce((sum, b) => sum + (b.length_mm * b.width_mm), 0);
+    const itemsHtml = state.boxes.map((b, i) => `
+        <span class="box-info-item">
+            <span class="badge bg-info">框${i + 1}</span>
+            ${b.length_mm.toFixed(1)}×${b.width_mm.toFixed(1)} mm
+            (${(b.length_mm * b.width_mm).toFixed(0)} mm²)
+        </span>
+    `).join('');
+
+    panel.innerHTML = `
+        <div>识别到 ${state.boxes.length} 个框，总面积 ${totalArea.toFixed(0)} mm²</div>
+        <div class="mt-1">${itemsHtml}</div>
+        <div class="text-muted mt-1" style="font-size:11px;"><i class="fa-solid fa-hand-pointer me-1"></i>点击框可删除，拖拽可手动画框</div>
+    `;
+}
+
+function updateDimensionsFromBoxes(groupId, idx) {
+    const group = specGroups.find(g => g.id === groupId);
+    const f = group.recognizedFiles[idx];
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    const cardEl = document.querySelector(`.file-result-card[data-group="${groupId}"][data-index="${idx}"]`);
+    if (!cardEl) return;
+
+    if (state.boxes.length > 0) {
+        // 以第一个框作为文件尺寸
+        const first = state.boxes[0];
+        f.length_mm = parseFloat(first.length_mm.toFixed(1));
+        f.width_mm = parseFloat(first.width_mm.toFixed(1));
+        f.boxes = state.boxes.map(b => ({
+            length_mm: b.length_mm,
+            width_mm: b.width_mm,
+            quantity: b.quantity || 1,
+            x: b.x, y: b.y,
+            width: b.width, height: b.height,
+        }));
+        f.box_count = state.boxes.length;
+
+        const lengthInput = cardEl.querySelector('.file-length');
+        const widthInput = cardEl.querySelector('.file-width');
+        if (lengthInput) lengthInput.value = f.length_mm.toFixed(1);
+        if (widthInput) widthInput.value = f.width_mm.toFixed(1);
+    } else {
+        f.boxes = [];
+        f.box_count = 0;
+    }
+    calcTotalPrice();
+}
+
+function toggleDrawMode(groupId, idx) {
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    const wrapper = document.getElementById(`canvasWrapper-${groupId}-${idx}`);
+    state.isDrawing = !state.isDrawing;
+    wrapper.classList.toggle('is-drawing', state.isDrawing);
+    const btn = wrapper.parentElement.querySelector('button[onclick^="toggleDrawMode"]');
+    if (btn) {
+        btn.innerHTML = state.isDrawing
+            ? '<i class="fa-solid fa-check"></i> 完成画框'
+            : '<i class="fa-solid fa-pen"></i> 手动画框';
+        btn.classList.toggle('btn-primary', state.isDrawing);
+        btn.classList.toggle('btn-outline-secondary', !state.isDrawing);
+    }
+}
+
+function clearAllBoxes(groupId, idx) {
+    if (!confirm('确定清空所有识别框？')) return;
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    state.boxes = [];
+    renderBoxInfo(groupId, idx);
+    updateDimensionsFromBoxes(groupId, idx);
+    drawBoxes(groupId, idx);
+}
+
+function reloadRedBoxes(groupId, idx) {
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    state.boxes = [];
+    fetchRedBoxes(groupId, idx, true);
+}
+
+function autoGenerateFirstEffect(groupId, idx) {
+    const group = specGroups.find(g => g.id === groupId);
+    const effects = PRODUCT_EFFECT_MAP[group.product_name];
+    if (effects && effects.length > 0) {
+        const firstBtn = document.querySelector(`#effectBtnGroup-${groupId}-${idx} .effect-btn`);
+        if (firstBtn) {
+            switchEffect(groupId, idx, effects[0].key, firstBtn);
+        }
+    }
+}
+
+function updateFileEffectButtons(groupId) {
+    const group = specGroups.find(g => g.id === groupId);
+    group.recognizedFiles.forEach((f, idx) => {
+        const container = document.getElementById(`effectBtnGroup-${groupId}-${idx}`);
+        const previewArea = document.getElementById(`effectPreviewArea-${groupId}-${idx}`);
+        if (!container) return;
+
+        container.innerHTML = getEffectButtons(group.product_name, groupId, idx);
+
+        const key = getCanvasKey(groupId, idx);
+        const state = pdfCanvasStates[key];
+        if (state) {
+            state.productName = group.product_name;
+        }
+
+        // 如果已选产品，自动生成第一个效果
+        if (group.product_name) {
+            previewArea.innerHTML = '<div class="effect-loading">选择效果后生成预览</div>';
+            setTimeout(() => autoGenerateFirstEffect(groupId, idx), 100);
+        }
+    });
+}
+
+function switchEffect(groupId, idx, effectKey, btnEl) {
+    const group = specGroups.find(g => g.id === groupId);
+    const f = group.recognizedFiles[idx];
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+
+    // 更新按钮状态
+    const container = document.getElementById(`effectBtnGroup-${groupId}-${idx}`);
+    container.querySelectorAll('.effect-btn').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+
+    state.currentEffect = effectKey;
+
+    const previewArea = document.getElementById(`effectPreviewArea-${groupId}-${idx}`);
+    previewArea.innerHTML = '<div class="effect-loading"><i class="fa-solid fa-spinner fa-spin me-1"></i>正在生成效果图...</div>';
+
+    const formData = new FormData();
+    formData.append('file_path', f.file_path);
+    formData.append('product_name', group.product_name);
+    formData.append('effect_type', effectKey);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+    fetch('{% url "api_preview_effect" %}', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            previewArea.innerHTML = `<div class="effect-loading text-danger">生成失败：${data.error || '未知错误'}</div>`;
+            return;
+        }
+        state.effectUrl = data.effect_url;
+        previewArea.innerHTML = `
+            <img src="${data.effect_url}" class="effect-preview-img" alt="${data.effect_name}">
+            <div class="small text-muted mt-1">${data.effect_name}</div>
+        `;
+    })
+    .catch(err => {
+        previewArea.innerHTML = `<div class="effect-loading text-danger">生成出错：${err.message}</div>`;
+    });
+}
 
 // 初始化：创建一个默认规格组
 createSpecGroup();
