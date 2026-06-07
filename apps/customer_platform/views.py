@@ -1494,6 +1494,7 @@ def api_preview_effect(request):
     AJAX：根据产品类型生成版类效果图
     参数：file_path, product_name, effect_type(可选)
     effect_type 直接传入效果函数 key，如 'gold_flat', 'emboss_deboss' 等
+    【修复】针对 runserver + SQLite 测试环境优化：降低DPI、限制并发、快速返回
     """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': '请使用POST请求'})
@@ -1514,7 +1515,6 @@ def api_preview_effect(request):
 
         # 解析 effect_type
         if effect_type:
-            # 前端传入的是效果函数 key（如 'gold_flat'），直接使用
             actual_effect_type = effect_type
         else:
             actual_effect_type = get_effect_type(product_name)
@@ -1534,14 +1534,28 @@ def api_preview_effect(request):
             doc.close()
             return JsonResponse({'success': False, 'error': 'PDF为空'})
         page = doc[0]
-        zoom = 150 / 72
+        # 【修复】降低DPI从150到72，大幅减少处理时间和内存占用
+        # runserver 单线程 + SQLite 环境下，大图处理会导致后续请求全部阻塞
+        zoom = 72 / 72
         mat = fitz.Matrix(zoom, zoom)
         pix = page.get_pixmap(matrix=mat)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         doc.close()
 
+        # 【修复】限制最大处理尺寸，避免超大PDF卡死
+        max_size = 1200
+        if img.width > max_size or img.height > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+
         result = apply_plate_effect(img, actual_effect_type)
         result.save(output_path, "PNG")
+
+        # 清理临时文件
+        if pdf_path != file_path and not pdf_path.startswith(str(settings.MEDIA_ROOT)):
+            try:
+                os.unlink(pdf_path)
+            except:
+                pass
 
         effect_name = get_effect_name(product_name, effect_type or None)
 

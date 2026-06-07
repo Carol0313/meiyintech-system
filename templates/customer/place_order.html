@@ -972,7 +972,7 @@ function renderRecognizedFiles(groupId) {
                         ${effectButtons}
                     </div>
                     <div class="text-center" id="effectPreviewArea-${groupId}-${idx}">
-                        <div class="effect-loading">选择效果后生成预览</div>
+                        <div class="effect-loading text-muted"><i class="fa-solid fa-hand-pointer me-1"></i>点击上方效果按钮生成预览</div>
                     </div>
                 </div>
 
@@ -1340,9 +1340,6 @@ function loadPdfPreview(groupId, idx) {
 
         // 总是调用后端获取基于像素的框坐标
         fetchRedBoxes(groupId, idx);
-
-        // 默认生成第一个效果的预览图
-        setTimeout(() => autoGenerateFirstEffect(groupId, idx), 100);
     };
     img.onerror = function() {
         infoPanel.innerHTML = '<span class="text-danger">预览图加载失败</span>';
@@ -1425,9 +1422,6 @@ function fetchRedBoxes(groupId, idx, needImage = false) {
         renderBoxInfo(groupId, idx);
         updateDimensionsFromBoxes(groupId, idx);
         drawBoxes(groupId, idx);
-
-        // 自动出效果图
-        setTimeout(() => autoGenerateFirstEffect(groupId, idx), 200);
     })
     .catch(err => {
         infoPanel.innerHTML = `<span class="text-danger">识别出错：${err.message}</span>`;
@@ -1715,10 +1709,9 @@ function updateFileEffectButtons(groupId) {
             state.productName = group.product_name;
         }
 
-        // 如果已选产品，自动生成第一个效果
+        // 效果预览需要用户手动点击按钮生成，避免自动触发导致服务器阻塞
         if (group.product_name) {
-            previewArea.innerHTML = '<div class="effect-loading">选择效果后生成预览</div>';
-            setTimeout(() => autoGenerateFirstEffect(groupId, idx), 100);
+            previewArea.innerHTML = '<div class="effect-loading text-muted"><i class="fa-solid fa-hand-pointer me-1"></i>点击上方效果按钮生成预览</div>';
         }
     });
 }

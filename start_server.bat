@@ -45,4 +45,4 @@ echo.
 echo   按 Ctrl+C 可以停止服务器
 echo ==========================================
 
-python manage.py runserver 0.0.0.0:8000
+python manage.py runserver 0.0.0.0:8000 --noreload

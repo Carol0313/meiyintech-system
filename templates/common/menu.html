@@ -36,6 +36,7 @@
         {% endif %}
         {% if role_name == 'customer_service' or role_name == 'admin' %}
             <a class="nav-link {% if request.resolver_match.url_name == 'merchant_orders' %}active{% endif %}" href="{% url 'merchant_orders' %}"><i class="fa-solid fa-clipboard-list"></i> 订单管理</a>
+            <a class="nav-link {% if request.resolver_match.url_name == 'merchant_complaint_list' %}active{% endif %}" href="{% url 'merchant_complaint_list' %}"><i class="fa-solid fa-shield-halved"></i> 投诉管理</a>
         {% endif %}
         {% if role_name == 'production' or role_name == 'admin' %}
             <a class="nav-link {% if request.resolver_match.url_name == 'factory_production_board' %}active{% endif %}" href="{% url 'factory_production_board' %}"><i class="fa-solid fa-gears"></i> 生产看板</a>
