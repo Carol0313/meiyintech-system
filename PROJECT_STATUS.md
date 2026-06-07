@@ -1,6 +1,6 @@
 # 镁印制版下单系统 - 项目状态记录
 
-> 最后更新：2026-06-06 22:00
+> 最后更新：2026-06-07 09:30
 > 此文件用于快速恢复项目上下文，每次对话开始时请将此文件内容发送给AI
 
 ---
@@ -14,7 +14,7 @@
 | 服务器IP | 47.100.212.79 |
 | 技术栈 | Django 4.2, Python 3.8, Bootstrap 5.3, SQLite(开发)/PostgreSQL(生产) |
 | 代码仓库 | https://github.com/Carol0313/meiyintech-system |
-| 部署状态 | 测试阶段，使用 runserver + SQLite + Nginx反向代理 |
+| 部署状态 | 测试阶段，使用 runserver 0.0.0.0:8000 + SQLite + Nginx反向代理 |
 
 ---
 
@@ -28,7 +28,7 @@ cd /home/magnesium/magnesium_order_platform
 source venv/bin/activate
 
 # 启动服务
-nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
+nohup python manage.py runserver 0.0.0.0:8000 > runserver.log 2>&1 &
 
 # Nginx配置
 /etc/nginx/conf.d/magnesium.conf
@@ -66,6 +66,8 @@ nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 | **生产看板精简改版** | **2026-06-06** | 删除KPI统计和底部统计模块，只保留三列看板+可折叠抽屉 |
 | **SLA时效追踪系统** | **2026-06-06** | 客服30分钟处理+工厂30分钟下载时效追踪，订单列表/详情页/生产看板显示 |
 | **商户端数据分析中心** | **2026-06-06** | 8个KPI卡片+6个ECharts图表（趋势/产品/材质/客户/工厂/状态）+SLA统计面板 |
+| **下单页PDF红框Canvas交互+版类效果预览** | **2026-06-07** | Canvas画框、点击删除、手动画框、版类效果实时切换（9种效果），支持OSS文件 |
+| **效果图API支持OSS** | **2026-06-07** | `_get_pdf_local_path` 自动从阿里云OSS下载临时文件处理
 
 ---
 
@@ -102,6 +104,8 @@ orders.0026_alter_orderitem_product_name  - 产品分类名称调整（第二轮
 products.0007_alter_productspec_product_name  - ProductSpec产品分类名称调整（第一轮）
 products.0008_alter_productspec_product_name  - ProductSpec产品分类名称调整（第二轮，去掉空格）
 orders.0028_order_customer_service_processed_at_and_more  - Order新增SLA时效字段（file_uploaded_at/customer_service_processed_at/factory_notified_at/factory_downloaded_at）
+orders.0027_orderitem_preview_image  - OrderItem新增preview_image字段
+orders.0028_order_customer_service_processed_at_and_more  - Order新增SLA时效字段
 ```
 
 ---
@@ -111,7 +115,7 @@ orders.0028_order_customer_service_processed_at_and_more  - Order新增SLA时效
 1. **PostgreSQL已安装但认证配置有问题**（pg_hba.conf需要改为md5认证），当前回退到SQLite
 2. **Python 3.8 弃用警告** - PyMySQL的cryptography库提示Python 3.8不再支持，不影响运行但建议后续升级
 3. **Nginx systemctl重启会失败**（80端口被占用），需要用 `kill -9` 杀掉旧进程后用 `nginx` 命令启动
-4. **GitHub推送间歇性超时** — 需要多次重试
+4. **GitHub推送间歇性超时** — 需要多次重试（已解决：网络恢复后可正常推送）
 
 ---
 
@@ -170,7 +174,7 @@ nginx
 # 8. 重启Django服务
 pkill -9 -f runserver
 sleep 2
-nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
+nohup python manage.py runserver 0.0.0.0:8000 > runserver.log 2>&1 &
 
 # 9. 确认服务状态
 ps aux | grep runserver
@@ -189,6 +193,11 @@ ps aux | grep nginx
 6. **域名备案** — 预计6月8日通过
 7. **SLA时效追踪系统** — 已完成：客服30分钟处理+工厂30分钟下载时效追踪
 8. **商户端数据分析中心** — 已完成：独立数据分析页面，8个KPI+6个图表+SLA面板
+9. **下单页PDF红框识别+版类效果预览** — 已完成：
+   - Canvas交互式红框展示（自动识别、hover高亮、点击删除、手动画框）
+   - 版类效果实时切换（根据产品类型显示2-3个相关效果）
+   - 9种版类效果：普通/烫金光泽/金色平雕/激凸浮雕/压纹凹陷/激凹凹陷/金色浮雕/多层金色浮雕/菲林半透明
+   - 自动识别后生成默认效果图，数据自动回填尺寸字段
 
 ---
 
