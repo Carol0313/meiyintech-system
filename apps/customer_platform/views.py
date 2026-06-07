@@ -306,7 +306,8 @@ def order_step4(request, draft_id):
     os.makedirs(os.path.dirname(preview_path), exist_ok=True)
     try:
         from utils.pdf_processor import generate_pdf_preview
-        preview_url = generate_pdf_preview(draft['file_path'], preview_filename, dpi=150, black_only=True)
+        # 【修复】降低DPI到72，减少处理时间
+        preview_url = generate_pdf_preview(draft['file_path'], preview_filename, dpi=72, black_only=True)
         draft['preview_url'] = preview_url
         request.session[f"draft_{draft_id}"] = draft
     except Exception:
@@ -778,7 +779,8 @@ def quick_order_upload(request):
             preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
             os.makedirs(os.path.dirname(preview_path), exist_ok=True)
             from utils.pdf_processor import generate_pdf_preview
-            preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
+            # 【修复】降低DPI到72，减少处理时间和内存占用
+            preview_url = generate_pdf_preview(local_path, preview_filename, dpi=72, black_only=True)
             print(f"[预览图生成] 结果: {preview_url}, 文件: {file.name}")
         except Exception as e:
             import traceback
@@ -860,7 +862,8 @@ def batch_upload_files(request):
             try:
                 preview_filename = f"previews/{uuid.uuid4().hex}.png"
                 from utils.pdf_processor import generate_pdf_preview
-                preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
+                # 【修复】降低DPI到72，减少处理时间和内存占用
+                preview_url = generate_pdf_preview(local_path, preview_filename, dpi=72, black_only=True)
                 print(f"[预览图生成-批量] 结果: {preview_url}, 文件: {file.name}")
             except Exception as e:
                 import traceback
@@ -1418,7 +1421,8 @@ def api_pdf_red_boxes(request):
         preview_url = None
         preview_filename = f"previews/{uuid.uuid4().hex}.png"
         try:
-            preview_url = generate_pdf_preview(local_path, preview_filename, dpi=150, black_only=True)
+            # 【修复】降低DPI到72，减少处理时间
+            preview_url = generate_pdf_preview(local_path, preview_filename, dpi=72, black_only=True)
         except Exception as e:
             print(f"[api_pdf_red_boxes] 预览图生成失败: {e}")
 
