@@ -1519,14 +1519,11 @@ def api_preview_effect(request):
         else:
             actual_effect_type = get_effect_type(product_name)
 
-        # 生成预览图
-        if not os.path.isabs(file_path):
-            pdf_path = os.path.join(settings.MEDIA_ROOT, file_path)
-        else:
-            pdf_path = file_path
-
-        if not os.path.exists(pdf_path):
-            return JsonResponse({'success': False, 'error': 'PDF文件不存在'})
+        # 获取 PDF 本地路径（支持 OSS 文件自动下载到临时文件）
+        from utils.pdf_processor import _get_pdf_local_path
+        pdf_path = _get_pdf_local_path(file_path)
+        if not pdf_path:
+            return JsonResponse({'success': False, 'error': 'PDF文件不存在或无法读取'})
 
         output_filename = f"customer_previews/{uuid.uuid4().hex}.png"
         output_path = os.path.join(settings.MEDIA_ROOT, output_filename)
