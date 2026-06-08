@@ -861,10 +861,42 @@ def batch_upload_files(request):
             # 生成预览图
             preview_url = None
             preview_filename = f"previews/{uuid.uuid4().hex}.png"
+            img_width, img_height = 0, 0
             try:
                 preview_url = generate_pdf_preview(local_path, preview_filename, dpi=72, black_only=True)
+                # 读取预览图尺寸，用于计算像素坐标
+                from PIL import Image
+                abs_preview = os.path.join(settings.MEDIA_ROOT, preview_filename)
+                if os.path.exists(abs_preview):
+                    with Image.open(abs_preview) as im:
+                        img_width, img_height = im.size
             except Exception as e:
                 print(f"[batch_upload_files] 预览图生成失败: {e}")
+
+            # 【修复】将框的PDF点坐标转换为预览图像素坐标
+            # 必须在清理临时文件前完成，因为需要读取PDF页面尺寸
+            boxes_pixel = []
+            if box_info and box_info.get('boxes'):
+                doc = fitz.open(local_path)
+                page = doc[0]
+                page_pt_width = page.rect.width
+                page_pt_height = page.rect.height
+                doc.close()
+
+                px_scale_x = img_width / page_pt_width if page_pt_width > 0 and img_width > 0 else 1
+                px_scale_y = img_height / page_pt_height if page_pt_height > 0 and img_height > 0 else px_scale_x
+
+                for idx_box, b in enumerate(box_info['boxes']):
+                    boxes_pixel.append({
+                        'id': idx_box,
+                        'x': round(b.get('x', 0) * px_scale_x, 2),
+                        'y': round(b.get('y', 0) * px_scale_y, 2),
+                        'width': round(b.get('width', b.get('length_mm', 0) * 72 / 25.4) * px_scale_x, 2),
+                        'height': round(b.get('height', b.get('width_mm', 0) * 72 / 25.4) * px_scale_y, 2),
+                        'length_mm': b.get('length_mm', 0),
+                        'width_mm': b.get('width_mm', 0),
+                        'quantity': b.get('quantity', 1),
+                    })
 
             # 清理临时文件
             if local_path != os.path.join(settings.MEDIA_ROOT, path):
@@ -886,7 +918,7 @@ def batch_upload_files(request):
                 'first_length': box_info['first_length'] if box_info else 0,
                 'first_width': box_info['first_width'] if box_info else 0,
                 'first_quantity': box_info['first_quantity'] if box_info else 1,
-                'boxes': box_info['boxes'] if box_info else [],
+                'boxes': boxes_pixel,
             }
             results.append(file_result)
         except Exception as e:
