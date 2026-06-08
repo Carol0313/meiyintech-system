@@ -1290,19 +1290,25 @@ function initPdfCanvas(groupId, idx) {
         productName: group.product_name,
     };
 
-    // 注意：batch_upload_files 返回的 boxes 是 PDF 点坐标，
-    // 而 Canvas 需要基于预览图像素的坐标。这里只保留 mm 尺寸信息，
-    // 像素坐标由 fetchRedBoxes 重新获取。
-    if (f.boxes && f.boxes.length > 0) {
+    // 【修复】batch_upload_files 已经返回了完整的像素坐标 boxes，
+    // 直接使用，不再清零。只有没有 boxes 时才调用 fetchRedBoxes。
+    const hasValidBoxes = f.boxes && f.boxes.length > 0;
+    const hasPreview = f.preview_url;
+    if (hasValidBoxes) {
         pdfCanvasStates[key].boxes = f.boxes.map((b, i) => ({
-            id: i, x: 0, y: 0, width: 0, height: 0,
+            id: i, x: b.x || 0, y: b.y || 0,
+            width: b.width || 0, height: b.height || 0,
             length_mm: b.length_mm || 0, width_mm: b.width_mm || 0,
             quantity: b.quantity || 1,
         }));
     }
 
-    // 加载背景图并识别红框（总是重新获取像素坐标）
-    loadPdfPreview(groupId, idx);
+    // 加载背景图。如果已有 preview_url 和 boxes，直接渲染，不再调用 fetchRedBoxes
+    if (hasPreview && hasValidBoxes) {
+        loadPdfPreviewDirect(groupId, idx);
+    } else {
+        loadPdfPreview(groupId, idx);
+    }
 
     // 绑定 Canvas 事件
     bindCanvasEvents(canvas, groupId, idx);
@@ -1351,6 +1357,46 @@ function loadPdfPreview(groupId, idx) {
         // 没有 preview_url 时，调用接口生成
         fetchRedBoxes(groupId, idx, true);
     }
+}
+
+// 【新增】直接加载预览图并渲染已有 boxes，不调用 fetchRedBoxes
+function loadPdfPreviewDirect(groupId, idx) {
+    const group = specGroups.find(g => g.id === groupId);
+    const f = group.recognizedFiles[idx];
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    const canvas = document.getElementById(`pdfCanvas-${groupId}-${idx}`);
+    const infoPanel = document.getElementById(`boxInfoPanel-${groupId}-${idx}`);
+
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function() {
+        state.imgWidth = img.width;
+        state.imgHeight = img.height;
+        const maxDisplayWidth = 560;
+        const displayWidth = Math.min(img.width, maxDisplayWidth);
+        state.scale = displayWidth / img.width;
+        const displayHeight = img.height * state.scale;
+
+        canvas.width = displayWidth;
+        canvas.height = displayHeight;
+        canvas.style.width = displayWidth + 'px';
+        canvas.style.height = displayHeight + 'px';
+
+        ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+
+        // 直接渲染已有的 boxes，不再调用 fetchRedBoxes
+        renderBoxInfo(groupId, idx);
+        updateDimensionsFromBoxes(groupId, idx);
+        drawBoxes(groupId, idx);
+    };
+    img.onerror = function() {
+        infoPanel.innerHTML = '<span class="text-danger">预览图加载失败</span>';
+    };
+    img.src = f.preview_url;
 }
 
 function fetchRedBoxes(groupId, idx, needImage = false) {
