@@ -2,6 +2,8 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+from dotenv import load_dotenv
+load_dotenv()
 import socket
 
 # 自动加载 .env 文件（如果存在）
