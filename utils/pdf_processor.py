@@ -157,8 +157,9 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
         
         if black_only:
             try:
-                # 统一使用 fitz.CS_GRAY 整数枚举，避免 Colorspace 对象兼容问题
-                pix = page.get_pixmap(matrix=mat, colorspace=fitz.CS_GRAY)
+                # 【修复】使用 Colorspace 对象而非整数，解决 'int' object has no attribute 'n' 错误
+                cs = fitz.Colorspace(fitz.CS_GRAY)
+                pix = page.get_pixmap(matrix=mat, colorspace=cs)
                 img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
                 img_bw = img.point(lambda x: 0 if x < 240 else 255, 'L')
                 img_rgb = img_bw.convert("RGB")
