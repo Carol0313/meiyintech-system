@@ -816,7 +816,7 @@ def quick_order_upload(request):
 @customer_required
 def batch_upload_files(request):
     """AJAX：批量上传PDF并返回每个文件的识别结果
-    【优化】极速模式：先快速返回基本信息，预览图和红框异步生成
+    上传时同步完成红框识别和预览图生成，避免前端二次调用失败
     """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': '请使用POST请求'})
@@ -833,23 +833,38 @@ def batch_upload_files(request):
             continue
 
         try:
-            # 【优化】快速保存文件
+            # 保存文件
             filename = f"order_files/{request.user.id}/{uuid.uuid4().hex}{ext}"
             path = default_storage.save(filename, file)
 
             # 获取本地文件路径
-            from utils.pdf_processor import _get_pdf_local_path
+            from utils.pdf_processor import _get_pdf_local_path, generate_pdf_preview
+            from utils.pdf_red_box import smart_extract_boxes_for_order
             local_path = _get_pdf_local_path(path)
             if not local_path:
                 results.append({'success': False, 'error': '文件保存失败', 'file_name': file.name})
                 continue
 
-            # 【优化】极速模式：只获取基本尺寸，不生成预览图和红框
-            # 预览图和红框识别移到前端点击"开始识别"后再处理
+            # 获取PDF页面尺寸
             pdf_w_mm, pdf_h_mm = _get_pdf_page_dimensions(local_path)
-            
-            # 快速计算面积（不识别红框，直接用页面尺寸）
-            area = _calculate_pdf_area(local_path)
+
+            # 红框识别（恢复同步识别，避免前端二次调用失败）
+            box_info = None
+            try:
+                box_info = smart_extract_boxes_for_order(local_path)
+            except Exception as e:
+                print(f"[batch_upload_files] 红框识别失败: {e}")
+
+            # 计算面积（优先使用框尺寸）
+            area = _calculate_pdf_area(local_path, box_info)
+
+            # 生成预览图
+            preview_url = None
+            preview_filename = f"previews/{uuid.uuid4().hex}.png"
+            try:
+                preview_url = generate_pdf_preview(local_path, preview_filename, dpi=72, black_only=True)
+            except Exception as e:
+                print(f"[batch_upload_files] 预览图生成失败: {e}")
 
             # 清理临时文件
             if local_path != os.path.join(settings.MEDIA_ROOT, path):
@@ -858,7 +873,7 @@ def batch_upload_files(request):
                 except:
                     pass
 
-            # 【优化】返回基本信息，预览图和红框后续异步处理
+            # 组装返回结果
             file_result = {
                 'success': True,
                 'file_path': path,
@@ -866,12 +881,12 @@ def batch_upload_files(request):
                 'area': area,
                 'pdf_width_mm': pdf_w_mm,
                 'pdf_height_mm': pdf_h_mm,
-                'preview_url': None,  # 前端点击"开始识别"后再生成
-                'box_count': 0,
-                'first_length': 0,
-                'first_width': 0,
-                'first_quantity': 1,
-                'boxes': [],
+                'preview_url': preview_url,
+                'box_count': box_info['box_count'] if box_info else 0,
+                'first_length': box_info['first_length'] if box_info else 0,
+                'first_width': box_info['first_width'] if box_info else 0,
+                'first_quantity': box_info['first_quantity'] if box_info else 1,
+                'boxes': box_info['boxes'] if box_info else [],
             }
             results.append(file_result)
         except Exception as e:

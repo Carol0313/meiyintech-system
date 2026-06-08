@@ -256,16 +256,16 @@ def find_colored_rectangles(file_path_or_doc):
         filtered.extend(colored_rects[check_count:])
     colored_rects = filtered
 
-    # 【关键】系统只识别红色框，过滤掉所有非红色框
-    # 包括深灰色内容区域、蓝色/黑色备注框、文字注释框等
+    # 【修复】优先识别红色框，但没有红色框时保留其他颜色的框
+    # 避免客户使用黑色/蓝色等非红色标记框时完全无法识别
     red_rects = [r for r in colored_rects if r.get('is_red', False)]
     if red_rects:
         colored_rects = red_rects
         logger.info(f"[红框识别] 检测到红色标记框，过滤其他颜色，保留 {len(red_rects)} 个红色框")
     else:
-        # 没有红色框时，返回空（不识别其他颜色的框）
-        logger.info(f"[红框识别] 未检测到红色标记框，其他颜色框不予识别")
-        colored_rects = []
+        # 没有红色框时，保留所有有颜色的框（不再直接清空）
+        logger.info(f"[红框识别] 未检测到红色标记框，保留 {len(colored_rects)} 个其他颜色框")
+        # colored_rects 保持原样，不清空
     
     # 最多返回5个框
     result = colored_rects[:5]
