@@ -2977,20 +2977,20 @@ def plate_batch_reject(request, batch_id):
     return redirect('plate_batch_list')
 
 
-    # 通过批次关联的订单验证商家权限
-    batch_item = batch.items.first()
-    if not batch_item or batch_item.order.merchant != merchant:
-        messages.error(request, '无权访问该文件')
-        return redirect('merchant_dashboard')
+@login_required
+@merchant_required
+def plate_batch_update_layout(request, batch_id):
+    """AJAX：更新拼版布局坐标（拖拽微调后保存）"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': '仅支持POST'})
 
-    file_field = getattr(batch, field_name, None)
-    if not file_field:
-        messages.error(request, '文件不存在')
-        return redirect('merchant_dashboard')
+    merchant = get_merchant(request)
+    batch = get_object_or_404(PlateBatch, pk=batch_id, merchant=merchant)
 
     try:
-        with file_field.open('rb') as f:
-            # 根据文件类型设置content_type
+        data = json.loads(request.body)
+        rectangles = data.get('rectangles', [])
+
         # 更新 layout_data 中的坐标
         layout_data = {}
         if batch.layout_data:
