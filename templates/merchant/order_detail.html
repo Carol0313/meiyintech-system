@@ -115,8 +115,8 @@
                                 {% if cs_elapsed is not None %}
                                 <span class="{% if cs_elapsed > 30 %}text-danger{% elif cs_elapsed > 15 %}text-warning{% else %}text-success{% endif %}">
                                     <i class="fa-solid fa-clock"></i> 
-                                    {% if cs_elapsed > 30 %}已超{{ cs_elapsed|add:-30|floatformat:0 }}分钟
-                                    {% elif cs_elapsed > 15 %}剩{{ 30|add:-cs_elapsed|floatformat:0 }}分钟
+                                    {% if cs_elapsed > 30 %}已超{{ cs_overdue }}分钟
+                                    {% elif cs_elapsed > 15 %}剩{{ cs_remaining }}分钟
                                     {% else %}正常{% endif %}
                                 </span>
                                 {% else %}
@@ -134,8 +134,8 @@
                                 {% if fd_elapsed is not None %}
                                 <span class="{% if fd_elapsed > 30 %}text-danger{% elif fd_elapsed > 15 %}text-warning{% else %}text-success{% endif %}">
                                     <i class="fa-solid fa-clock"></i> 
-                                    {% if fd_elapsed > 30 %}已超{{ fd_elapsed|add:-30|floatformat:0 }}分钟
-                                    {% elif fd_elapsed > 15 %}剩{{ 30|add:-fd_elapsed|floatformat:0 }}分钟
+                                    {% if fd_elapsed > 30 %}已超{{ fd_overdue }}分钟
+                                    {% elif fd_elapsed > 15 %}剩{{ fd_remaining }}分钟
                                     {% else %}正常{% endif %}
                                 </span>
                                 {% else %}

@@ -1163,11 +1163,23 @@ def merchant_order_detail(request, order_id):
     from django.utils import timezone
     now = timezone.now()
     cs_elapsed = None
+    cs_overdue = None
+    cs_remaining = None
     if order.file_uploaded_at and not order.customer_service_processed_at:
         cs_elapsed = int((now - order.file_uploaded_at).total_seconds() / 60)
+        if cs_elapsed > 30:
+            cs_overdue = cs_elapsed - 30
+        elif cs_elapsed > 15:
+            cs_remaining = 30 - cs_elapsed
     fd_elapsed = None
+    fd_overdue = None
+    fd_remaining = None
     if order.factory_notified_at and not order.factory_downloaded_at:
         fd_elapsed = int((now - order.factory_notified_at).total_seconds() / 60)
+        if fd_elapsed > 30:
+            fd_overdue = fd_elapsed - 30
+        elif fd_elapsed > 15:
+            fd_remaining = 30 - fd_elapsed
 
     return render(request, 'merchant/order_detail.html', {
         'order': order,
@@ -1177,7 +1189,11 @@ def merchant_order_detail(request, order_id):
         'has_file_issues': has_file_issues,
         'tracking_data': tracking_data,
         'cs_elapsed': cs_elapsed,
+        'cs_overdue': cs_overdue,
+        'cs_remaining': cs_remaining,
         'fd_elapsed': fd_elapsed,
+        'fd_overdue': fd_overdue,
+        'fd_remaining': fd_remaining,
     })
 
 
