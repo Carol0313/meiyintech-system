@@ -1823,8 +1823,11 @@ function initThreeJS(groupId, idx, data) {
     
     // 如果已有场景，先销毁
     if (threeScenes[key]) {
-        threeScenes[key].renderer.dispose();
-        container.removeChild(threeScenes[key].renderer.domElement);
+        const oldRenderer = threeScenes[key].renderer;
+        if (oldRenderer && oldRenderer.domElement && oldRenderer.domElement.parentNode) {
+            oldRenderer.domElement.parentNode.removeChild(oldRenderer.domElement);
+        }
+        oldRenderer.dispose();
         delete threeScenes[key];
     }
     
@@ -1876,16 +1879,16 @@ function initThreeJS(groupId, idx, data) {
         // 创建几何体（高细分以支持位移贴图）
         const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight, 128, 128);
         
-        // 材质
+        // 材质 - 增强浮雕效果
         const material = new THREE.MeshStandardMaterial({
             map: colorMap,
             displacementMap: displacementMap,
-            displacementScale: 0.25,
-            displacementBias: -0.05,
+            displacementScale: 0.5,
+            displacementBias: -0.1,
             normalMap: normalMap,
-            normalScale: new THREE.Vector2(1.5, 1.5),
-            roughness: 0.4,
-            metalness: 0.1,
+            normalScale: new THREE.Vector2(2.5, 2.5),
+            roughness: 0.3,
+            metalness: 0.2,
             side: THREE.DoubleSide
         });
         

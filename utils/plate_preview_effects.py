@@ -594,25 +594,33 @@ def generate_displacement_map(img, effect_type='relief', intensity=1.0):
     # 反转：黑色内容=255（高），白色背景=0（低）
     inv = ImageOps.invert(gray)
     
-    # 二值化内容区域
-    mask = inv.point(lambda x: 255 if x > 30 else 0, 'L')
+    # 增强对比度，让内容边缘更明显
+    enhancer = ImageEnhance.Contrast(inv)
+    inv = enhancer.enhance(2.5)
+    
+    # 二值化内容区域（更严格的阈值）
+    mask = inv.point(lambda x: 255 if x > 20 else 0, 'L')
     
     # 根据效果类型调整高度
     if effect_type in ('emboss_deboss', 'deboss_strong'):
         # 凹陷效果：内容区域低
-        height = Image.new('L', img.size, 200)  # 背景较高
+        height = Image.new('L', img.size, 220)  # 背景较高
         # 内容区域降低
-        content_low = mask.point(lambda x: int(x * 0.7))  # 内容区域降低70%
+        content_low = mask.point(lambda x: int(x * 0.8))  # 内容区域降低80%
         height = ImageChops.subtract(height, content_low)
     elif effect_type in ('gold_flat', 'gold_satin'):
         # 烫金：轻微凸起
-        height = mask.point(lambda x: int(x * 0.3))  # 最大30%高度
+        height = mask.point(lambda x: int(x * 0.4))  # 最大40%高度
     else:
-        # 浮雕/激凸：明显凸起
-        height = mask.point(lambda x: int(x * 0.85))  # 最大85%高度
+        # 浮雕/激凸：明显凸起（增强版）
+        height = mask.point(lambda x: int(x * 0.95))  # 最大95%高度
     
-    # 平滑边缘
-    height = height.filter(ImageFilter.GaussianBlur(radius=2))
+    # 轻微平滑边缘（保持细节）
+    height = height.filter(ImageFilter.GaussianBlur(radius=1))
+    
+    # 再次增强对比度
+    enhancer = ImageEnhance.Contrast(height)
+    height = enhancer.enhance(1.5)
     
     # 应用强度
     if intensity != 1.0:
@@ -621,11 +629,12 @@ def generate_displacement_map(img, effect_type='relief', intensity=1.0):
     return height
 
 
-def generate_normal_map(img, effect_type='relief', strength=2.0):
+def generate_normal_map(img, effect_type='relief', strength=3.0):
     """
     生成法线贴图（Normal Map）用于 Three.js 3D 渲染
     
     法线贴图可以让平面产生凹凸感，配合光照实现逼真3D效果
+    增强版：使用Sobel算子计算更精确的法线，增强浮雕立体感
     """
     displacement = generate_displacement_map(img, effect_type, intensity=1.0)
     
@@ -638,20 +647,28 @@ def generate_normal_map(img, effect_type='relief', strength=2.0):
     
     for y in range(h):
         for x in range(w):
-            # 采样周围像素计算梯度
-            left = disp_data[max(0, x-1), y]
-            right = disp_data[min(w-1, x+1), y]
-            up = disp_data[x, max(0, y-1)]
-            down = disp_data[x, min(h-1, y+1)]
+            # Sobel算子采样周围像素计算梯度（更精确）
+            # 水平方向
+            left2 = disp_data[max(0, x-2), y]
+            left1 = disp_data[max(0, x-1), y]
+            right1 = disp_data[min(w-1, x+1), y]
+            right2 = disp_data[min(w-1, x+2), y]
             
-            # 计算法线
-            dx = (right - left) * strength / 255.0
-            dy = (down - up) * strength / 255.0
+            # 垂直方向
+            up2 = disp_data[x, max(0, y-2)]
+            up1 = disp_data[x, max(0, y-1)]
+            down1 = disp_data[x, min(h-1, y+1)]
+            down2 = disp_data[x, min(h-1, y+2)]
+            
+            # Sobel梯度计算
+            dx = (-right2 + left2 - 2*right1 + 2*left1) * strength / 255.0
+            dy = (-down2 + up2 - 2*down1 + 2*up1) * strength / 255.0
             dz = 1.0
             
             # 归一化
             length = (dx*dx + dy*dy + dz*dz) ** 0.5
-            dx, dy, dz = dx/length, dy/length, dz/length
+            if length > 0:
+                dx, dy, dz = dx/length, dy/length, dz/length
             
             # 转换到RGB [0, 255]
             r = int((dx * 0.5 + 0.5) * 255)
