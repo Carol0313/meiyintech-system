@@ -1,6 +1,6 @@
 # 镁印制版下单系统 - 项目状态记录
 
-> 最后更新：2026-06-07 09:30
+> 最后更新：2026-06-09 13:40
 > 此文件用于快速恢复项目上下文，每次对话开始时请将此文件内容发送给AI
 
 ---
@@ -14,7 +14,8 @@
 | 服务器IP | 47.100.212.79 |
 | 技术栈 | Django 4.2, Python 3.8, Bootstrap 5.3, SQLite(开发)/PostgreSQL(生产) |
 | 代码仓库 | https://github.com/Carol0313/meiyintech-system |
-| 部署状态 | 测试阶段，使用 runserver 0.0.0.0:8000 + SQLite + Nginx反向代理 |
+| 部署状态 | 生产阶段，使用 runserver 127.0.0.1:8000 + SQLite + Nginx反向代理 |
+| 服务器配置 | 阿里云轻量应用服务器（建议升级至ECS 4GB内存） |
 
 ---
 
@@ -28,7 +29,7 @@ cd /home/magnesium/magnesium_order_platform
 source venv/bin/activate
 
 # 启动服务
-nohup python manage.py runserver 0.0.0.0:8000 > runserver.log 2>&1 &
+nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 
 # Nginx配置
 /etc/nginx/conf.d/magnesium.conf
@@ -67,13 +68,19 @@ nohup python manage.py runserver 0.0.0.0:8000 > runserver.log 2>&1 &
 | **SLA时效追踪系统** | **2026-06-06** | 客服30分钟处理+工厂30分钟下载时效追踪，订单列表/详情页/生产看板显示 |
 | **商户端数据分析中心** | **2026-06-06** | 8个KPI卡片+6个ECharts图表（趋势/产品/材质/客户/工厂/状态）+SLA统计面板 |
 | **下单页PDF红框Canvas交互+版类效果预览** | **2026-06-07** | Canvas画框、点击删除、手动画框、版类效果实时切换（9种效果），支持OSS文件 |
-| **效果图API支持OSS** | **2026-06-07** | `_get_pdf_local_path` 自动从阿里云OSS下载临时文件处理
+| **效果图API支持OSS** | **2026-06-07** | `_get_pdf_local_path` 自动从阿里云OSS下载临时文件处理 |
+| **多框计价修复** | **2026-06-08** | 所有产品类型统一遍历f.boxes，根据类型使用不同版边（腐蚀版5mm/其他20mm） |
+| **Three.js 3D浮雕预览** | **2026-06-08** | 后端生成高度图/法线贴图，前端Three.js渲染，支持鼠标拖拽旋转和滚轮缩放 |
+| **3D预览效果增强** | **2026-06-09** | 径向金色渐变、多层阴影系统、Sobel法线贴图、四灯照明系统、金属质感增强 |
+| **部署文档** | **2026-06-09** | 新增 `deploy/DEPLOY_GUIDE.md` 完整部署指南
 
 ---
 
-## 四、进行中功能（0项）
+## 四、进行中功能（1项）
 
-暂无
+| 任务 | 时间 | 备注 |
+|------|------|------|
+| 服务器内存升级 | 2026-06-09 | 轻量应用服务器2GB → ECS 4GB/8GB，解决3D贴图生成内存不足问题 |
 
 ---
 
@@ -81,8 +88,9 @@ nohup python manage.py runserver 0.0.0.0:8000 > runserver.log 2>&1 &
 
 | 任务 | 时间 | 备注 |
 |------|------|------|
-| PostgreSQL数据库迁移 | 6月10日-11日 | SQLite数据迁移 |
-| Gunicorn+Nginx生产部署 | 6月12日-13日 | systemd服务配置 |
+| PostgreSQL数据库迁移 | 待定 | 服务器升级后进行 |
+| Gunicorn+Nginx生产部署 | 待定 | systemd服务配置 |
+| 3D浮雕效果持续优化 | 待定 | 参考专业浮雕效果继续改进算法 |
 
 ---
 
@@ -90,7 +98,7 @@ nohup python manage.py runserver 0.0.0.0:8000 > runserver.log 2>&1 &
 
 | 事项 | 预计时间 | 状态 |
 |------|---------|------|
-| 域名备案 | 6月8日 | 审核中 |
+| 域名备案 | 已完成 | 已上线 www.zhibanhome.com |
 
 ---
 
@@ -115,7 +123,8 @@ orders.0028_order_customer_service_processed_at_and_more  - Order新增SLA时效
 1. **PostgreSQL已安装但认证配置有问题**（pg_hba.conf需要改为md5认证），当前回退到SQLite
 2. **Python 3.8 弃用警告** - PyMySQL的cryptography库提示Python 3.8不再支持，不影响运行但建议后续升级
 3. **Nginx systemctl重启会失败**（80端口被占用），需要用 `kill -9` 杀掉旧进程后用 `nginx` 命令启动
-4. **GitHub推送间歇性超时** — 需要多次重试（已解决：网络恢复后可正常推送）
+4. **服务器内存不足** — 轻量应用服务器2GB内存，生成3D贴图时可能OOM，计划升级至ECS 4GB/8GB
+5. **GitHub推送间歇性超时** — 国内网络不稳定，需要多次重试或等待网络恢复
 
 ---
 
@@ -159,24 +168,28 @@ source venv/bin/activate
 # 4. 拉取最新代码
 git pull origin master
 
-# 5. 执行迁移
+# 5. 恢复Secret（GitHub上是占位符）
+sed -i "s/OSS_ACCESS_KEY_ID = 'YOUR_ACCESS_KEY_ID'/OSS_ACCESS_KEY_ID = '<YOUR_ACCESS_KEY_ID>'/" magnesium_order_platform/settings.py
+sed -i "s/OSS_ACCESS_KEY_SECRET = 'YOUR_ACCESS_KEY_SECRET'/OSS_ACCESS_KEY_SECRET = '<YOUR_ACCESS_KEY_SECRET>'/" magnesium_order_platform/settings.py
+
+# 6. 执行迁移
 python manage.py migrate
 
-# 6. 收集静态文件
+# 7. 收集静态文件
 python manage.py collectstatic --noinput
 
-# 7. 重启Nginx（如果失败用kill方式）
+# 8. 重启Nginx（如果失败用kill方式）
 nginx -s reload
 # 或
 kill -9 $(pgrep nginx)
 nginx
 
-# 8. 重启Django服务
-pkill -9 -f runserver
+# 9. 重启Django服务
+pkill -f runserver
 sleep 2
-nohup python manage.py runserver 0.0.0.0:8000 > runserver.log 2>&1 &
+nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 
-# 9. 确认服务状态
+# 10. 确认服务状态
 ps aux | grep runserver
 ps aux | grep nginx
 ```
@@ -198,6 +211,13 @@ ps aux | grep nginx
    - 版类效果实时切换（根据产品类型显示2-3个相关效果）
    - 9种版类效果：普通/烫金光泽/金色平雕/激凸浮雕/压纹凹陷/激凹凹陷/金色浮雕/多层金色浮雕/菲林半透明
    - 自动识别后生成默认效果图，数据自动回填尺寸字段
+10. **Three.js 3D浮雕预览** — 已完成：
+    - 后端：generate_3d_preview_maps() 生成color/displacement/normal贴图
+    - 后端：scipy距离变换生成圆润浮雕形状，Sobel算子生成精确法线贴图
+    - 前端：Three.js场景，PlaneGeometry+displacementMap+normalMap
+    - 前端：鼠标拖拽旋转、滚轮缩放、触摸支持、自动旋转
+    - 灯光系统：环境光+主光+补光+轮廓光四灯照明
+    - 材质参数：displacementScale 0.8, metalness 0.6, normalScale 3.0
 
 ---
 
