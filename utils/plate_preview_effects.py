@@ -384,71 +384,87 @@ def effect_deboss_strong(img):
 
 def effect_relief_gold(img):
     """
-    金色浮雕效果（浮雕版）- 3D增强版
-    白底 + 金色内容 + 立体投影 + 高光 + 金属光泽 + 斜面效果
+    金色浮雕效果（浮雕版）- 专业级3D浮雕
+    模拟真实金属浮雕：圆润边缘、强烈高光、金属光泽、立体阴影
     """
     img = _ensure_rgb(img)
     gray = img.convert('L')
     w, h = img.size
 
-    bg = Image.new('RGBA', (w, h), (255, 255, 255, 255))
+    # 使用暖白色背景（模拟金色底板）
+    bg = Image.new('RGBA', (w, h), (250, 245, 230, 255))
 
-    # 金色内容层（带渐变）
+    # 内容掩码
     mask = _get_content_mask(gray)
     
-    # 创建金色渐变（从左上到右下，模拟光照）
-    gold_gradient = Image.new('RGB', (w, h), (0, 0, 0))
-    draw = ImageDraw.Draw(gold_gradient)
-    for y in range(h):
-        for x in range(0, w, 10):  # 步进10像素加速
-            ratio_x = x / w if w > 0 else 0
-            ratio_y = y / h if h > 0 else 0
-            ratio = (ratio_x + ratio_y) / 2
-            # 亮金 (255, 223, 80) → 暗金 (184, 134, 11)
-            r = int(255 - ratio * 71)
-            g = int(223 - ratio * 89)
-            b = int(80 - ratio * 69)
-            draw.rectangle([x, y, x+10, y+1], fill=(r, g, b))
+    # 创建专业金色渐变（径向渐变模拟球面高光）
+    gold_base = Image.new('RGB', (w, h), (0, 0, 0))
+    draw = ImageDraw.Draw(gold_base)
+    
+    # 计算内容区域的边界框用于局部渐变
+    bbox = mask.getbbox()
+    if bbox:
+        cx, cy = (bbox[0] + bbox[2]) // 2, (bbox[1] + bbox[3]) // 2
+    else:
+        cx, cy = w // 2, h // 2
+    
+    max_dist = ((w//2)**2 + (h//2)**2) ** 0.5
+    
+    for y in range(0, h, 4):  # 步进4像素加速
+        for x in range(0, w, 4):
+            # 计算到中心的距离（用于径向渐变）
+            dist = ((x - cx)**2 + (y - cy)**2) ** 0.5
+            ratio = min(dist / max_dist, 1.0)
+            
+            # 金色渐变：中心亮 → 边缘暗
+            # 亮金 (255, 230, 120) → 暗金 (180, 140, 30)
+            r = int(255 - ratio * 75)
+            g = int(230 - ratio * 90)
+            b = int(120 - ratio * 90)
+            
+            draw.rectangle([x, y, x+4, y+4], fill=(r, g, b))
     
     # 应用mask到金色渐变
-    gold_rgba = gold_gradient.convert('RGBA')
+    gold_rgba = gold_base.convert('RGBA')
     gold_rgba.putalpha(mask)
 
-    # 3D斜面效果
-    bevel_hl, bevel_sh = _bevel_effect(gray, direction='up')
+    # 专业3D浮雕效果 - 多层阴影系统
+    # 1. 主阴影（模拟光源从左上45度）
+    shadow_main = _drop_shadow(gray, offset=(6, 6), blur=6, shadow_color=80)
+    # 2. 接触阴影（内容底部更暗）
+    shadow_contact = _drop_shadow(gray, offset=(3, 3), blur=3, shadow_color=120)
+    # 3. 环境阴影（更柔和）
+    shadow_ambient = _drop_shadow(gray, offset=(10, 10), blur=12, shadow_color=40)
+    
+    # 专业高光系统
+    # 1. 主高光（左上强高光，模拟金属反光）
+    highlight_main = _highlight(gray, offset=(-4, -4), blur=4, highlight_color=255)
+    # 2. 次高光（更小更亮）
+    highlight_sub = _highlight(gray, offset=(-2, -2), blur=2, highlight_color=255)
+    # 3. 边缘高光（模拟圆润边缘的反光）
+    highlight_edge = _highlight(gray, offset=(-1, -3), blur=3, highlight_color=220)
+    
+    # 金属光泽层（模拟金属表面的镜面反射）
+    metal_shine = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    shine_draw = ImageDraw.Draw(metal_shine)
+    
+    # 创建斜向光泽条
+    for i in range(-h, w+h, 15):
+        alpha = int(40 * (1 - abs(i) / (w+h)))
+        shine_draw.line([(i, 0), (i+h, h)], fill=(255, 255, 240, alpha), width=3)
+    
+    shine_mask = mask.copy()
+    metal_shine.putalpha(shine_mask)
 
-    # 多层阴影增强立体感
-    shadow1 = _drop_shadow(gray, offset=(4, 4), blur=4, shadow_color=100)
-    shadow2 = _drop_shadow(gray, offset=(8, 8), blur=8, shadow_color=50)
-    shadow3 = _drop_shadow(gray, offset=(2, 2), blur=2, shadow_color=120)
-    
-    # 多层高光
-    highlight1 = _highlight(gray, offset=(-3, -3), blur=3, highlight_color=200)
-    highlight2 = _highlight(gray, offset=(-1, -1), blur=1, highlight_color=255)
-    
-    # 边缘光（模拟金属边缘反射）
-    edge_light = _highlight(gray, offset=(0, -2), blur=2, highlight_color=150)
-    
-    # 金属反光条（模拟金属表面反射）
-    reflection = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-    refl_draw = ImageDraw.Draw(reflection)
-    for i in range(0, h, 20):
-        alpha = int(30 * (1 - abs(i - h/2) / (h/2)))
-        refl_draw.line([(0, i), (w, i+2)], fill=(255, 255, 255, alpha))
-    reflection_mask = mask.copy()
-    reflection.putalpha(reflection_mask)
-
-    # 合成：白底 → 远阴影 → 近阴影 → 接触阴影 → 斜面阴影 → 金色内容 → 斜面高光 → 边缘光 → 主高光 → 次高光 → 反光
-    result = Image.alpha_composite(bg, shadow2)
-    result = Image.alpha_composite(result, shadow1)
-    result = Image.alpha_composite(result, shadow3)
-    result = Image.alpha_composite(result, bevel_sh)
+    # 合成顺序（从底到顶）
+    result = Image.alpha_composite(bg, shadow_ambient)
+    result = Image.alpha_composite(result, shadow_main)
+    result = Image.alpha_composite(result, shadow_contact)
     result = Image.alpha_composite(result, gold_rgba)
-    result = Image.alpha_composite(result, bevel_hl)
-    result = Image.alpha_composite(result, edge_light)
-    result = Image.alpha_composite(result, highlight1)
-    result = Image.alpha_composite(result, reflection)
-    result = Image.alpha_composite(result, highlight2)
+    result = Image.alpha_composite(result, metal_shine)
+    result = Image.alpha_composite(result, highlight_main)
+    result = Image.alpha_composite(result, highlight_edge)
+    result = Image.alpha_composite(result, highlight_sub)
 
     return result.convert('RGB')
 
@@ -581,10 +597,10 @@ def generate_displacement_map(img, effect_type='relief', intensity=1.0):
     """
     生成高度图（Displacement Map）用于 Three.js 3D 渲染
     
-    根据效果类型生成不同的高度图：
-    - relief/凸起: 内容区域高，背景低
-    - deboss/凹陷: 内容区域低，背景高
-    - gold_flat: 轻微凸起（烫金厚度）
+    专业浮雕高度图：模拟圆润的浮雕边缘过渡
+    - 内容中心最高
+    - 边缘逐渐降低（圆润过渡）
+    - 背景最低
     
     返回: PIL Image (L模式，灰度图)
     """
@@ -594,33 +610,43 @@ def generate_displacement_map(img, effect_type='relief', intensity=1.0):
     # 反转：黑色内容=255（高），白色背景=0（低）
     inv = ImageOps.invert(gray)
     
-    # 增强对比度，让内容边缘更明显
+    # 增强对比度
     enhancer = ImageEnhance.Contrast(inv)
-    inv = enhancer.enhance(2.5)
+    inv = enhancer.enhance(3.0)
     
-    # 二值化内容区域（更严格的阈值）
-    mask = inv.point(lambda x: 255 if x > 20 else 0, 'L')
+    # 获取内容掩码
+    mask = inv.point(lambda x: 255 if x > 15 else 0, 'L')
     
-    # 根据效果类型调整高度
+    # 计算距离变换：内容内部距离边缘的距离
+    # 距离边缘越远 = 越高（中心最高）
+    from scipy import ndimage
+    mask_np = np.array(mask)
+    
+    # 距离变换：每个像素到最近背景像素的距离
+    distance = ndimage.distance_transform_edt(mask_np)
+    
+    # 归一化到0-255
+    if distance.max() > 0:
+        distance = (distance / distance.max()) * 255
+    
+    # 应用圆滑曲线（让顶部更平，边缘更陡）
+    distance = np.power(distance / 255.0, 0.7) * 255
+    
+    height = Image.fromarray(distance.astype(np.uint8), 'L')
+    
+    # 根据效果类型调整
     if effect_type in ('emboss_deboss', 'deboss_strong'):
-        # 凹陷效果：内容区域低
-        height = Image.new('L', img.size, 220)  # 背景较高
-        # 内容区域降低
-        content_low = mask.point(lambda x: int(x * 0.8))  # 内容区域降低80%
-        height = ImageChops.subtract(height, content_low)
+        # 凹陷：反转高度
+        height = ImageOps.invert(height)
     elif effect_type in ('gold_flat', 'gold_satin'):
-        # 烫金：轻微凸起
-        height = mask.point(lambda x: int(x * 0.4))  # 最大40%高度
+        # 烫金：降低高度
+        height = height.point(lambda x: int(x * 0.3))
     else:
-        # 浮雕/激凸：明显凸起（增强版）
-        height = mask.point(lambda x: int(x * 0.95))  # 最大95%高度
+        # 浮雕：保持高度，轻微增强
+        height = height.point(lambda x: int(x * 0.9))
     
-    # 轻微平滑边缘（保持细节）
-    height = height.filter(ImageFilter.GaussianBlur(radius=1))
-    
-    # 再次增强对比度
-    enhancer = ImageEnhance.Contrast(height)
-    height = enhancer.enhance(1.5)
+    # 轻微平滑（保持圆润边缘）
+    height = height.filter(ImageFilter.GaussianBlur(radius=2))
     
     # 应用强度
     if intensity != 1.0:
