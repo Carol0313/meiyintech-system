@@ -158,20 +158,93 @@ def _drop_shadow(img_gray, offset=(3, 3), blur=3, shadow_color=80):
     """
     mask = _get_content_mask(img_gray)
     # 阴影层
-    shadow = Image.new('RGBA', img_gray.size, (0, 0, 0, 0))
-    shadow_draw = ImageDraw.Draw(shadow)
-    # 将mask转为阴影色
     shadow_mask = mask.point(lambda x: int(x * shadow_color / 255) if x > 0 else 0)
     shadow_r = Image.new('L', img_gray.size, 0)
     shadow_g = Image.new('L', img_gray.size, 0)
     shadow_b = Image.new('L', img_gray.size, 0)
-    shadow_a = shadow_mask
-    shadow = Image.merge('RGBA', (shadow_r, shadow_g, shadow_b, shadow_a))
+    shadow = Image.merge('RGBA', (shadow_r, shadow_g, shadow_b, shadow_mask))
     # 模糊
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=blur))
     # 偏移
     shadow = ImageChops.offset(shadow, offset[0], offset[1])
     return shadow
+
+
+def _bevel_effect(img_gray, direction='up'):
+    """
+    生成斜面/倒角效果，模拟3D厚度
+    direction: 'up' = 凸起, 'down' = 凹陷
+    """
+    mask = _get_content_mask(img_gray)
+    w, h = img_gray.size
+    
+    # 创建斜面效果
+    bevel = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    
+    # 使用边缘检测创建斜面
+    edges = mask.filter(ImageFilter.FIND_EDGES)
+    edges = edges.filter(ImageFilter.GaussianBlur(radius=1))
+    
+    if direction == 'up':
+        # 凸起：左上亮，右下暗
+        highlight = edges.point(lambda x: int(x * 0.8) if x > 30 else 0)
+        shadow = edges.point(lambda x: int(x * 0.6) if x > 30 else 0)
+        
+        # 高光层（左上）
+        hl = Image.merge('RGBA', (
+            Image.new('L', (w, h), 255),
+            Image.new('L', (w, h), 255),
+            Image.new('L', (w, h), 255),
+            highlight
+        ))
+        hl = ImageChops.offset(hl, -1, -1)
+        
+        # 阴影层（右下）
+        sh = Image.merge('RGBA', (
+            Image.new('L', (w, h), 0),
+            Image.new('L', (w, h), 0),
+            Image.new('L', (w, h), 0),
+            shadow
+        ))
+        sh = ImageChops.offset(sh, 1, 1)
+        
+        return hl, sh
+    else:
+        # 凹陷：左上暗，右下亮
+        shadow = edges.point(lambda x: int(x * 0.8) if x > 30 else 0)
+        highlight = edges.point(lambda x: int(x * 0.6) if x > 30 else 0)
+        
+        # 阴影层（左上）
+        sh = Image.merge('RGBA', (
+            Image.new('L', (w, h), 0),
+            Image.new('L', (w, h), 0),
+            Image.new('L', (w, h), 0),
+            shadow
+        ))
+        sh = ImageChops.offset(sh, -1, -1)
+        
+        # 高光层（右下）
+        hl = Image.merge('RGBA', (
+            Image.new('L', (w, h), 255),
+            Image.new('L', (w, h), 255),
+            Image.new('L', (w, h), 255),
+            highlight
+        ))
+        hl = ImageChops.offset(hl, 1, 1)
+        
+        return hl, sh
+
+
+def _emboss_3d(img_gray, depth=3):
+    """
+    生成3D浮雕效果（使用PIL的EMBOSS滤镜增强）
+    """
+    # 使用EMBOSS滤镜
+    embossed = img_gray.filter(ImageFilter.EMBOSS)
+    # 增强对比度
+    enhancer = ImageEnhance.Contrast(embossed)
+    embossed = enhancer.enhance(1.5)
+    return embossed
 
 
 def _inner_shadow(img_gray, offset=(-2, -2), blur=2, shadow_color=120):
@@ -209,8 +282,8 @@ def _highlight(img_gray, offset=(-2, -2), blur=2, highlight_color=200):
 
 def effect_relief_strong(img):
     """
-    强浮雕凸起效果（激凸版）
-    白底 + 内容有立体投影 + 顶部高光
+    强浮雕凸起效果（激凸版）- 3D增强版
+    白底 + 内容有立体投影 + 顶部高光 + 边缘立体感 + 斜面效果
     直观体现"凸起"感
     """
     img = _ensure_rgb(img)
@@ -220,21 +293,40 @@ def effect_relief_strong(img):
     # 白底
     bg = Image.new('RGBA', (w, h), (255, 255, 255, 255))
 
-    # 内容层（黑字）
+    # 内容层（深灰色，模拟凸起部分的顶面）
     mask = _get_content_mask(gray)
-    content = Image.new('RGBA', (w, h), (0, 0, 0, 255))
+    content = Image.new('RGBA', (w, h), (80, 80, 80, 255))
     content.putalpha(mask)
 
-    # 阴影（右下偏移，模拟光源从左上来）
-    shadow = _drop_shadow(gray, offset=(4, 4), blur=4, shadow_color=100)
+    # 3D斜面效果（边缘高光和阴影）
+    bevel_hl, bevel_sh = _bevel_effect(gray, direction='up')
 
-    # 高光（左上偏移）
-    highlight = _highlight(gray, offset=(-3, -3), blur=3, highlight_color=160)
+    # 多层阴影增强立体感
+    # 主阴影（右下偏移，模拟光源从左上来）
+    shadow1 = _drop_shadow(gray, offset=(4, 4), blur=4, shadow_color=100)
+    # 次阴影（更远更淡）
+    shadow2 = _drop_shadow(gray, offset=(8, 8), blur=8, shadow_color=50)
+    # 接触阴影（模拟与底面接触处的暗部）
+    shadow3 = _drop_shadow(gray, offset=(2, 2), blur=2, shadow_color=150)
 
-    # 合成：白底 → 阴影 → 内容 → 高光
-    result = Image.alpha_composite(bg, shadow)
+    # 多层高光
+    # 主高光（左上偏移）
+    highlight1 = _highlight(gray, offset=(-3, -3), blur=3, highlight_color=220)
+    # 次高光（更亮更小）
+    highlight2 = _highlight(gray, offset=(-1, -1), blur=1, highlight_color=255)
+    # 边缘反光（模拟金属/塑料边缘）
+    edge_light = _highlight(gray, offset=(0, -2), blur=2, highlight_color=180)
+
+    # 合成：白底 → 远阴影 → 近阴影 → 斜面阴影 → 内容 → 斜面高光 → 主高光 → 次高光 → 边缘光
+    result = Image.alpha_composite(bg, shadow2)
+    result = Image.alpha_composite(result, shadow1)
+    result = Image.alpha_composite(result, shadow3)
+    result = Image.alpha_composite(result, bevel_sh)
     result = Image.alpha_composite(result, content)
-    result = Image.alpha_composite(result, highlight)
+    result = Image.alpha_composite(result, bevel_hl)
+    result = Image.alpha_composite(result, highlight1)
+    result = Image.alpha_composite(result, edge_light)
+    result = Image.alpha_composite(result, highlight2)
 
     return result.convert('RGB')
 
@@ -292,8 +384,8 @@ def effect_deboss_strong(img):
 
 def effect_relief_gold(img):
     """
-    金色浮雕效果（浮雕版）
-    白底 + 金色内容 + 立体投影 + 高光
+    金色浮雕效果（浮雕版）- 3D增强版
+    白底 + 金色内容 + 立体投影 + 高光 + 金属光泽 + 斜面效果
     """
     img = _ensure_rgb(img)
     gray = img.convert('L')
@@ -301,20 +393,62 @@ def effect_relief_gold(img):
 
     bg = Image.new('RGBA', (w, h), (255, 255, 255, 255))
 
-    # 金色内容层
+    # 金色内容层（带渐变）
     mask = _get_content_mask(gray)
-    gold_content = Image.new('RGB', (w, h), (218, 165, 32))  # 金色 #DAA520
-    gold_content_rgba = gold_content.convert('RGBA')
-    gold_content_rgba.putalpha(mask)
+    
+    # 创建金色渐变（从左上到右下，模拟光照）
+    gold_gradient = Image.new('RGB', (w, h), (0, 0, 0))
+    draw = ImageDraw.Draw(gold_gradient)
+    for y in range(h):
+        for x in range(0, w, 10):  # 步进10像素加速
+            ratio_x = x / w if w > 0 else 0
+            ratio_y = y / h if h > 0 else 0
+            ratio = (ratio_x + ratio_y) / 2
+            # 亮金 (255, 223, 80) → 暗金 (184, 134, 11)
+            r = int(255 - ratio * 71)
+            g = int(223 - ratio * 89)
+            b = int(80 - ratio * 69)
+            draw.rectangle([x, y, x+10, y+1], fill=(r, g, b))
+    
+    # 应用mask到金色渐变
+    gold_rgba = gold_gradient.convert('RGBA')
+    gold_rgba.putalpha(mask)
 
-    # 阴影
-    shadow = _drop_shadow(gray, offset=(4, 4), blur=4, shadow_color=90)
-    # 高光
-    highlight = _highlight(gray, offset=(-3, -3), blur=3, highlight_color=140)
+    # 3D斜面效果
+    bevel_hl, bevel_sh = _bevel_effect(gray, direction='up')
 
-    result = Image.alpha_composite(bg, shadow)
-    result = Image.alpha_composite(result, gold_content_rgba)
-    result = Image.alpha_composite(result, highlight)
+    # 多层阴影增强立体感
+    shadow1 = _drop_shadow(gray, offset=(4, 4), blur=4, shadow_color=100)
+    shadow2 = _drop_shadow(gray, offset=(8, 8), blur=8, shadow_color=50)
+    shadow3 = _drop_shadow(gray, offset=(2, 2), blur=2, shadow_color=120)
+    
+    # 多层高光
+    highlight1 = _highlight(gray, offset=(-3, -3), blur=3, highlight_color=200)
+    highlight2 = _highlight(gray, offset=(-1, -1), blur=1, highlight_color=255)
+    
+    # 边缘光（模拟金属边缘反射）
+    edge_light = _highlight(gray, offset=(0, -2), blur=2, highlight_color=150)
+    
+    # 金属反光条（模拟金属表面反射）
+    reflection = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    refl_draw = ImageDraw.Draw(reflection)
+    for i in range(0, h, 20):
+        alpha = int(30 * (1 - abs(i - h/2) / (h/2)))
+        refl_draw.line([(0, i), (w, i+2)], fill=(255, 255, 255, alpha))
+    reflection_mask = mask.copy()
+    reflection.putalpha(reflection_mask)
+
+    # 合成：白底 → 远阴影 → 近阴影 → 接触阴影 → 斜面阴影 → 金色内容 → 斜面高光 → 边缘光 → 主高光 → 次高光 → 反光
+    result = Image.alpha_composite(bg, shadow2)
+    result = Image.alpha_composite(result, shadow1)
+    result = Image.alpha_composite(result, shadow3)
+    result = Image.alpha_composite(result, bevel_sh)
+    result = Image.alpha_composite(result, gold_rgba)
+    result = Image.alpha_composite(result, bevel_hl)
+    result = Image.alpha_composite(result, edge_light)
+    result = Image.alpha_composite(result, highlight1)
+    result = Image.alpha_composite(result, reflection)
+    result = Image.alpha_composite(result, highlight2)
 
     return result.convert('RGB')
 
@@ -439,3 +573,168 @@ def get_effect_name(product_name, plate_type_key=None):
         'film_transparent': '菲林半透明',
     }
     return names.get(effect_type, '普通')
+
+
+# ========== 3D 渲染辅助函数 ==========
+
+def generate_displacement_map(img, effect_type='relief', intensity=1.0):
+    """
+    生成高度图（Displacement Map）用于 Three.js 3D 渲染
+    
+    根据效果类型生成不同的高度图：
+    - relief/凸起: 内容区域高，背景低
+    - deboss/凹陷: 内容区域低，背景高
+    - gold_flat: 轻微凸起（烫金厚度）
+    
+    返回: PIL Image (L模式，灰度图)
+    """
+    img = _ensure_rgb(img)
+    gray = img.convert('L')
+    
+    # 反转：黑色内容=255（高），白色背景=0（低）
+    inv = ImageOps.invert(gray)
+    
+    # 二值化内容区域
+    mask = inv.point(lambda x: 255 if x > 30 else 0, 'L')
+    
+    # 根据效果类型调整高度
+    if effect_type in ('emboss_deboss', 'deboss_strong'):
+        # 凹陷效果：内容区域低
+        height = Image.new('L', img.size, 200)  # 背景较高
+        # 内容区域降低
+        content_low = mask.point(lambda x: int(x * 0.7))  # 内容区域降低70%
+        height = ImageChops.subtract(height, content_low)
+    elif effect_type in ('gold_flat', 'gold_satin'):
+        # 烫金：轻微凸起
+        height = mask.point(lambda x: int(x * 0.3))  # 最大30%高度
+    else:
+        # 浮雕/激凸：明显凸起
+        height = mask.point(lambda x: int(x * 0.85))  # 最大85%高度
+    
+    # 平滑边缘
+    height = height.filter(ImageFilter.GaussianBlur(radius=2))
+    
+    # 应用强度
+    if intensity != 1.0:
+        height = height.point(lambda x: int(x * intensity))
+    
+    return height
+
+
+def generate_normal_map(img, effect_type='relief', strength=2.0):
+    """
+    生成法线贴图（Normal Map）用于 Three.js 3D 渲染
+    
+    法线贴图可以让平面产生凹凸感，配合光照实现逼真3D效果
+    """
+    displacement = generate_displacement_map(img, effect_type, intensity=1.0)
+    
+    # 将灰度高度图转换为法线贴图
+    w, h = displacement.size
+    disp_data = displacement.load()
+    
+    normal = Image.new('RGB', (w, h))
+    normal_data = normal.load()
+    
+    for y in range(h):
+        for x in range(w):
+            # 采样周围像素计算梯度
+            left = disp_data[max(0, x-1), y]
+            right = disp_data[min(w-1, x+1), y]
+            up = disp_data[x, max(0, y-1)]
+            down = disp_data[x, min(h-1, y+1)]
+            
+            # 计算法线
+            dx = (right - left) * strength / 255.0
+            dy = (down - up) * strength / 255.0
+            dz = 1.0
+            
+            # 归一化
+            length = (dx*dx + dy*dy + dz*dz) ** 0.5
+            dx, dy, dz = dx/length, dy/length, dz/length
+            
+            # 转换到RGB [0, 255]
+            r = int((dx * 0.5 + 0.5) * 255)
+            g = int((dy * 0.5 + 0.5) * 255)
+            b = int(dz * 255)
+            
+            normal_data[x, y] = (r, g, b)
+    
+    return normal
+
+
+def generate_3d_preview_maps(pdf_path, output_dir, product_name, plate_type_key=None, dpi=72):
+    """
+    生成 Three.js 3D 预览所需的贴图：
+    - color_map.png: 彩色纹理（带版类效果）
+    - displacement_map.png: 高度图
+    - normal_map.png: 法线贴图
+    
+    返回: {
+        'color_url': '...',
+        'displacement_url': '...',
+        'normal_url': '...',
+        'width': w,
+        'height': h,
+    }
+    """
+    try:
+        if not os.path.isabs(pdf_path):
+            pdf_path = os.path.join(settings.MEDIA_ROOT, pdf_path)
+        if not os.path.isabs(output_dir):
+            output_dir = os.path.join(settings.MEDIA_ROOT, output_dir)
+        
+        if not os.path.exists(pdf_path):
+            return None
+        
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # 打开PDF
+        doc = fitz.open(pdf_path)
+        if len(doc) == 0:
+            doc.close()
+            return None
+        page = doc[0]
+        zoom = dpi / 72
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        doc.close()
+        
+        # 限制尺寸
+        max_size = 1200
+        if img.width > max_size or img.height > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+        
+        # 获取效果类型
+        effect_type = plate_type_key or get_effect_type(product_name)
+        
+        # 生成彩色效果图
+        color_img = apply_plate_effect(img, effect_type)
+        
+        # 生成高度图和法线贴图
+        displacement = generate_displacement_map(img, effect_type)
+        normal = generate_normal_map(img, effect_type)
+        
+        # 保存文件
+        base_name = os.urandom(8).hex()
+        color_path = os.path.join(output_dir, f"{base_name}_color.png")
+        disp_path = os.path.join(output_dir, f"{base_name}_disp.png")
+        normal_path = os.path.join(output_dir, f"{base_name}_normal.png")
+        
+        color_img.save(color_path, "PNG")
+        displacement.save(disp_path, "PNG")
+        normal.save(normal_path, "PNG")
+        
+        return {
+            'color_url': settings.MEDIA_URL + f"customer_previews/{base_name}_color.png",
+            'displacement_url': settings.MEDIA_URL + f"customer_previews/{base_name}_disp.png",
+            'normal_url': settings.MEDIA_URL + f"customer_previews/{base_name}_normal.png",
+            'width': img.width,
+            'height': img.height,
+        }
+    except Exception as e:
+        print(f"[generate_3d_preview_maps] 生成失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return None

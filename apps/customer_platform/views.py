@@ -1600,3 +1600,51 @@ def api_preview_effect(request):
         import traceback
         traceback.print_exc()
         return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+@customer_required
+def api_preview_3d(request):
+    """
+    AJAX：生成 Three.js 3D 预览所需的贴图
+    参数：file_path, product_name, effect_type(可选)
+    返回：color_url, displacement_url, normal_url, width, height
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': '请使用POST请求'})
+
+    file_path = request.POST.get('file_path', '')
+    product_name = request.POST.get('product_name', '')
+    effect_type = request.POST.get('effect_type', '')
+
+    if not file_path:
+        return JsonResponse({'success': False, 'error': '缺少文件路径'})
+    if not product_name:
+        return JsonResponse({'success': False, 'error': '缺少产品类型'})
+
+    try:
+        from utils.plate_preview_effects import generate_3d_preview_maps
+
+        maps = generate_3d_preview_maps(
+            file_path,
+            'customer_previews',
+            product_name,
+            effect_type or None,
+            dpi=72
+        )
+
+        if not maps:
+            return JsonResponse({'success': False, 'error': '3D贴图生成失败'})
+
+        return JsonResponse({
+            'success': True,
+            'color_url': maps['color_url'],
+            'displacement_url': maps['displacement_url'],
+            'normal_url': maps['normal_url'],
+            'width': maps['width'],
+            'height': maps['height'],
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)})
