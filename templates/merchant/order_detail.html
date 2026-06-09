@@ -112,14 +112,16 @@
                             {% if order.customer_service_processed_at %}
                                 <span class="text-success"><i class="fa-solid fa-check"></i> 已处理（{{ order.file_uploaded_at|timesince:order.customer_service_processed_at }}）</span>
                             {% else %}
-                                {% with cs_elapsed=(now - order.file_uploaded_at).total_seconds / 60 %}
+                                {% if cs_elapsed is not None %}
                                 <span class="{% if cs_elapsed > 30 %}text-danger{% elif cs_elapsed > 15 %}text-warning{% else %}text-success{% endif %}">
                                     <i class="fa-solid fa-clock"></i> 
                                     {% if cs_elapsed > 30 %}已超{{ cs_elapsed|add:-30|floatformat:0 }}分钟
                                     {% elif cs_elapsed > 15 %}剩{{ 30|add:-cs_elapsed|floatformat:0 }}分钟
                                     {% else %}正常{% endif %}
                                 </span>
-                                {% endwith %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
                             {% endif %}
                         </div>
                         {% endif %}
@@ -129,14 +131,16 @@
                             {% if order.factory_downloaded_at %}
                                 <span class="text-success"><i class="fa-solid fa-check"></i> 已下载（{{ order.factory_notified_at|timesince:order.factory_downloaded_at }}）</span>
                             {% else %}
-                                {% with fd_elapsed=(now - order.factory_notified_at).total_seconds / 60 %}
+                                {% if fd_elapsed is not None %}
                                 <span class="{% if fd_elapsed > 30 %}text-danger{% elif fd_elapsed > 15 %}text-warning{% else %}text-success{% endif %}">
                                     <i class="fa-solid fa-clock"></i> 
                                     {% if fd_elapsed > 30 %}已超{{ fd_elapsed|add:-30|floatformat:0 }}分钟
                                     {% elif fd_elapsed > 15 %}剩{{ 30|add:-fd_elapsed|floatformat:0 }}分钟
                                     {% else %}正常{% endif %}
                                 </span>
-                                {% endwith %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
                             {% endif %}
                         </div>
                         {% endif %}
@@ -654,4 +658,4 @@ function updateBoxNumbers(container) {
     });
 }
 </script>
-{% endblock %}
+{% endblock %

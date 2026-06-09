@@ -1159,6 +1159,16 @@ def merchant_order_detail(request, order_id):
         if result['success']:
             tracking_data = format_tracking_data(result['data'])
 
+    # 计算时效追踪数据（分钟）
+    from django.utils import timezone
+    now = timezone.now()
+    cs_elapsed = None
+    if order.file_uploaded_at and not order.customer_service_processed_at:
+        cs_elapsed = int((now - order.file_uploaded_at).total_seconds() / 60)
+    fd_elapsed = None
+    if order.factory_notified_at and not order.factory_downloaded_at:
+        fd_elapsed = int((now - order.factory_notified_at).total_seconds() / 60)
+
     return render(request, 'merchant/order_detail.html', {
         'order': order,
         'factories': factories,
@@ -1166,6 +1176,8 @@ def merchant_order_detail(request, order_id):
         'preflight_reports': preflight_reports,
         'has_file_issues': has_file_issues,
         'tracking_data': tracking_data,
+        'cs_elapsed': cs_elapsed,
+        'fd_elapsed': fd_elapsed,
     })
 
 
@@ -2965,20 +2977,20 @@ def plate_batch_reject(request, batch_id):
     return redirect('plate_batch_list')
 
 
-@login_required
-@merchant_required
-def plate_batch_update_layout(request, batch_id):
-    """AJAX：更新拼版布局坐标（拖拽微调后保存）"""
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': '仅支持POST'})
+    # 通过批次关联的订单验证商家权限
+    batch_item = batch.items.first()
+    if not batch_item or batch_item.order.merchant != merchant:
+        messages.error(request, '无权访问该文件')
+        return redirect('merchant_dashboard')
 
-    merchant = get_merchant(request)
-    batch = get_object_or_404(PlateBatch, pk=batch_id, merchant=merchant)
+    file_field = getattr(batch, field_name, None)
+    if not file_field:
+        messages.error(request, '文件不存在')
+        return redirect('merchant_dashboard')
 
     try:
-        data = json.loads(request.body)
-        rectangles = data.get('rectangles', [])
-
+        with file_field.open('rb') as f:
+            # 根据文件类型设置content_type
         # 更新 layout_data 中的坐标
         layout_data = {}
         if batch.layout_data:
