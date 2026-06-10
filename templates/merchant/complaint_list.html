@@ -3,7 +3,134 @@
 {% block page_title %}投诉管理{% endblock %}
 {% block page_subtitle %}处理客户投诉与售后问题{% endblock %}
 
+{% block extra_css %}
+<style>
+    .complaint-stat-card {
+        background: #fff;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        transition: all 0.15s;
+    }
+    .complaint-stat-card:hover {
+        border-color: var(--primary);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .complaint-stat-icon {
+        width: 44px; height: 44px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; flex-shrink: 0;
+    }
+    .complaint-stat-icon.warning { background: #FFF3E0; color: #F57C00; }
+    .complaint-stat-icon.primary { background: #E3F2FD; color: #1976D2; }
+    .complaint-stat-icon.success { background: #E8F5E9; color: #388E3C; }
+    .complaint-stat-icon.secondary { background: #F5F5F5; color: #757575; }
+    .complaint-stat-value { font-size: 22px; font-weight: 700; color: var(--text-main); line-height: 1.2; }
+    .complaint-stat-label { font-size: 13px; color: var(--text-muted); }
+    
+    .type-badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 10px; border-radius: 16px; font-size: 12px;
+        background: #f5f5f5; border: 1px solid #e0e0e0;
+        margin-right: 6px; margin-bottom: 4px;
+    }
+    .type-badge.file { background: #FFF3E0; border-color: #FFE082; color: #E65100; }
+    .type-badge.prod { background: #E3F2FD; border-color: #90CAF9; color: #1565C0; }
+    .type-badge.shipping { background: #E8F5E9; border-color: #A5D6A7; color: #2E7D32; }
+    .type-badge.other { background: #F3E5F5; border-color: #CE93D8; color: #7B1FA2; }
+</style>
+{% endblock %}
+
 {% block content %}
+
+<!-- 统计看板 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-sm-6">
+        <div class="complaint-stat-card">
+            <div class="complaint-stat-icon warning"><i class="fa-solid fa-clock"></i></div>
+            <div>
+                <div class="complaint-stat-value">{{ pending_count }}</div>
+                <div class="complaint-stat-label">待处理</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="complaint-stat-card">
+            <div class="complaint-stat-icon primary"><i class="fa-solid fa-spinner"></i></div>
+            <div>
+                <div class="complaint-stat-value">{{ processing_count }}</div>
+                <div class="complaint-stat-label">处理中</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="complaint-stat-card">
+            <div class="complaint-stat-icon success"><i class="fa-solid fa-circle-check"></i></div>
+            <div>
+                <div class="complaint-stat-value">{{ resolved_count }}</div>
+                <div class="complaint-stat-label">已解决</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="complaint-stat-card">
+            <div class="complaint-stat-icon secondary"><i class="fa-solid fa-list"></i></div>
+            <div>
+                <div class="complaint-stat-value">{{ total_count }}</div>
+                <div class="complaint-stat-label">投诉总数</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 分类统计 -->
+{% if type_stats %}
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="fa-solid fa-chart-pie"></i> 活跃投诉分类统计（待处理+处理中）
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <div class="d-flex flex-wrap">
+                        {% for stat in type_stats %}
+                        <span class="type-badge {% if stat.code.startswith 'file_' %}file{% elif stat.code.startswith 'prod_' %}prod{% elif stat.code.startswith 'shipping_' %}shipping{% else %}other{% endif %}">
+                            {{ stat.label }} <strong>{{ stat.count }}</strong>
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="row text-center">
+                    <div class="col-3">
+                        <div class="small text-muted">文件问题</div>
+                        <div class="fw-bold text-warning">{{ file_count }}</div>
+                    </div>
+                    <div class="col-3">
+                        <div class="small text-muted">生产问题</div>
+                        <div class="fw-bold text-primary">{{ prod_count }}</div>
+                    </div>
+                    <div class="col-3">
+                        <div class="small text-muted">物流问题</div>
+                        <div class="fw-bold text-success">{{ shipping_count }}</div>
+                    </div>
+                    <div class="col-3">
+                        <div class="small text-muted">其他</div>
+                        <div class="fw-bold text-secondary">{{ other_count }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 投诉列表 -->
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span><i class="fa-solid fa-triangle-exclamation"></i> 投诉列表</span>
@@ -33,7 +160,15 @@
                         </a>
                     </td>
                     <td>{{ complaint.customer.phone }}</td>
-                    <td>{{ complaint.get_complaint_type_display|default:"质量问题" }}</td>
+                    <td>
+                        <span class="badge 
+                            {% if complaint.complaint_type.startswith 'file_' %}bg-warning text-dark
+                            {% elif complaint.complaint_type.startswith 'prod_' %}bg-info text-dark
+                            {% elif complaint.complaint_type.startswith 'shipping_' %}bg-success
+                            {% else %}bg-secondary{% endif %}">
+                            {{ complaint.get_complaint_type_display|default:"其他" }}
+                        </span>
+                    </td>
                     <td>
                         <span class="badge 
                             {% if complaint.status == 'pending' %}bg-warning text-dark

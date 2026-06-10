@@ -1340,18 +1340,13 @@ def download_customer_file(request, order_id, item_id):
 def complaint_create(request, order_id):
     """
     创建投诉
-    订单状态为 shipped 或 received 时可投诉
+    所有已提交订单均可投诉
     """
     if request.user.user_type != 'customer':
         messages.error(request, '无权访问')
         return redirect('login')
 
-    order = get_object_or_404(Order, id=order_id, customer=request.user)
-
-    # 检查订单状态
-    if order.status not in ['shipped', 'received']:
-        messages.error(request, '当前订单状态不可投诉')
-        return redirect('order_detail', order_id=order.id)
+    order = get_object_or_404(Order, id=order_id, customer=request.user, is_submitted=True)
 
     # 检查是否已投诉
     if order.complaints.exists():

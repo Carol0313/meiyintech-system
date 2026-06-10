@@ -109,6 +109,28 @@
     </div>
 </div>
 
+{% if complaint_total > 0 %}
+<!-- 投诉预警 -->
+<div class="card mb-4" style="border:1px dashed var(--danger);background:linear-gradient(135deg,#fef2f2,#fff);">
+    <div class="card-body d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-3">
+            <div style="width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,#dc2626,#b91c1c);display:flex;align-items:center;justify-content:center;color:white;font-size:20px;">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div>
+                <div style="font-weight:600;color:var(--text-main);">投诉管理</div>
+                <div style="font-size:12px;color:var(--text-muted);">
+                    待处理 <strong style="color:var(--danger);">{{ complaint_pending }}</strong> 条 / 处理中 <strong style="color:var(--primary);">{{ complaint_processing }}</strong> 条 / 累计 <strong>{{ complaint_total }}</strong> 条
+                </div>
+            </div>
+        </div>
+        <a href="{% url 'merchant_complaint_list' %}" class="btn btn-danger btn-sm">
+            <i class="fa-solid fa-arrow-right"></i> 立即处理
+        </a>
+    </div>
+</div>
+{% endif %}
+
 <!-- 数据分析快捷入口 -->
 <div class="card mb-4" style="border:1px dashed var(--primary);background:linear-gradient(135deg,#eff6ff,#fff);">
     <div class="card-body d-flex align-items-center justify-content-between">

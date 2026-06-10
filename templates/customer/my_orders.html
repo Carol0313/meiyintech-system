@@ -377,16 +377,14 @@
             {% if order.status == 'shipped' %}
             <a href="{% url 'confirm_receipt' order.id %}" class="btn btn-sm btn-success" onclick="return confirm('确认已收到该订单的货物吗？')">确认收货</a>
             {% endif %}
-            {% if order.status in 'shipped,received' %}
-                {% if order.complaints.exists %}
-                <a href="{% url 'complaint_detail' order.complaints.first.id %}" class="btn btn-sm btn-warning">
-                    <i class="fa-solid fa-triangle-exclamation"></i> 查看投诉
-                </a>
-                {% else %}
-                <a href="{% url 'complaint_create' order.id %}" class="btn btn-sm btn-outline-warning">
-                    <i class="fa-solid fa-triangle-exclamation"></i> 投诉
-                </a>
-                {% endif %}
+            {% if order.complaints.exists %}
+            <a href="{% url 'complaint_detail' order.complaints.first.id %}" class="btn btn-sm btn-warning">
+                <i class="fa-solid fa-triangle-exclamation"></i> 查看投诉
+            </a>
+            {% else %}
+            <a href="{% url 'complaint_create' order.id %}" class="btn btn-sm btn-outline-warning">
+                <i class="fa-solid fa-triangle-exclamation"></i> 投诉
+            </a>
             {% endif %}
         </div>
     </div>

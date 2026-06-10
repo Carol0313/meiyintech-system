@@ -634,13 +634,54 @@ class Statement(models.Model):
 class OrderComplaint(models.Model):
     """
     订单投诉
-    客户在订单完成后（已派送/已收货）可发起投诉
+    客户在订单任何环节均可发起投诉
     """
     STATUS_CHOICES = [
         ('pending', '待处理'),
         ('processing', '处理中'),
         ('resolved', '已解决'),
         ('rejected', '已驳回'),
+    ]
+    COMPLAINT_TYPE_CHOICES = [
+        # 文件/设计问题
+        ('file_blur', '糊版'),
+        ('file_broken', '断线'),
+        ('file_type_confusion', '版类混淆'),
+        ('file_scale_missing', '扩缩遗漏'),
+        ('file_thickness_wrong', '厚度错误'),
+        ('file_material_wrong', '材料错误'),
+        ('file_direction_wrong', '方向/镜像错误'),
+        ('file_content_missing', '内容缺失'),
+        ('file_size_wrong', '尺寸错误'),
+        ('file_line_width', '线宽不足'),
+        ('file_color_mode', '颜色模式错误'),
+        ('file_layout_wrong', '拼版错误'),
+        ('file_version_wrong', '版本错误'),
+        ('file_note_missing', '注释遗漏'),
+        # 生产问题
+        ('prod_blur', '糊版（生产）'),
+        ('prod_broken', '断线（生产）'),
+        ('prod_film_issue', '菲林问题'),
+        ('prod_depth_uneven', '深度不均'),
+        ('prod_resin_residual', '树脂残留'),
+        ('prod_surface_scratch', '版面划痕/剐蹭'),
+        ('prod_surface_uneven', '版面不平'),
+        ('prod_oxidation', '版面氧化/生锈'),
+        ('prod_exposure_under', '曝光不足'),
+        ('prod_exposure_over', '曝光过度'),
+        ('prod_edge_chipping', '雕刻崩边'),
+        ('prod_pattern_rough', '图案坡度锯齿'),
+        ('prod_demolding', '去膜不净'),
+        ('prod_cleaning_damage', '清洗损伤'),
+        ('prod_machine_fault', '机器故障'),
+        ('prod_temp_humidity', '温湿度异常'),
+        # 物流/时效
+        ('shipping_delay', '发货延迟'),
+        ('shipping_damage', '运输损坏'),
+        ('shipping_lost', '物流丢失'),
+        ('shipping_wrong', '发错货物'),
+        # 其他
+        ('other', '其他问题'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -653,7 +694,7 @@ class OrderComplaint(models.Model):
         related_name='complaints', verbose_name='投诉客户'
     )
     # 投诉内容
-    complaint_type = models.CharField('投诉类型', max_length=50, default='quality')
+    complaint_type = models.CharField('投诉类型', max_length=50, choices=COMPLAINT_TYPE_CHOICES, default='other')
     description = models.TextField('投诉描述')
     # 投诉图片（最多3张）
     image1 = models.ImageField('投诉图片1', upload_to='complaints/%Y%m/', blank=True, null=True)

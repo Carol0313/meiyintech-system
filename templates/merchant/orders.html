@@ -169,6 +169,11 @@
                     <td>
                         <a href="{% url 'merchant_order_detail' o.id %}" class="fw-semibold" style="color:var(--primary);">{{ o.sn }}</a>
                         {% if o.order_type == 'remake' %}<span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;">补版</span>{% endif %}
+                        {% if o.complaints.exists %}
+                        <a href="{% url 'merchant_complaint_detail' o.complaints.first.id %}" class="badge bg-danger ms-1" style="font-size:0.65rem;" title="该订单有客户投诉">
+                            <i class="fa-solid fa-triangle-exclamation"></i> 投诉
+                        </a>
+                        {% endif %}
                     </td>
                     <td style="color:var(--text-muted);">
                         {% if o.customer.customer_profile.company_name %}

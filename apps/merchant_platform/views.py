@@ -121,6 +121,13 @@ def merchant_dashboard(request):
     in_production = merchant.orders.filter(status='in_production').count()
     recent_orders = merchant.orders.order_by('-created_at')[:5]
     customer_count = merchant.customers.filter(registration_status='approved').count()
+    
+    # 投诉统计
+    merchant_complaints = OrderComplaint.objects.filter(order__merchant=merchant)
+    complaint_pending = merchant_complaints.filter(status='pending').count()
+    complaint_processing = merchant_complaints.filter(status='processing').count()
+    complaint_total = merchant_complaints.count()
+    
     ctx = {
         'merchant': merchant,
         'pending_orders': pending_orders,
@@ -128,6 +135,9 @@ def merchant_dashboard(request):
         'customer_count': customer_count,
         'recent_orders': recent_orders,
         'daily_tip': get_daily_tip(),
+        'complaint_pending': complaint_pending,
+        'complaint_processing': complaint_processing,
+        'complaint_total': complaint_total,
     }
     return render(request, 'merchant/dashboard.html', ctx)
 
@@ -861,7 +871,7 @@ def merchant_orders(request):
     date_to = request.GET.get('date_to')
     customer_query = request.GET.get('customer')
     statement_status = request.GET.get('statement_status', '')
-    orders = merchant.orders.filter(is_submitted=True).select_related('customer__customer_profile').prefetch_related('items', 'plate_layout', 'statement')
+    orders = merchant.orders.filter(is_submitted=True).select_related('customer__customer_profile').prefetch_related('items', 'plate_layout', 'statement', 'complaints')
     if status_filter:
         orders = orders.filter(status=status_filter)
     if date_from:
@@ -3493,7 +3503,7 @@ def create_plate_batch(request):
 def complaint_list(request):
     """
     商户投诉列表
-    显示当前商户的所有客户投诉
+    显示当前商户的所有客户投诉，含分类统计
     """
     try:
         merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
@@ -3506,13 +3516,61 @@ def complaint_list(request):
         order__merchant=merchant
     ).select_related('order', 'customer').order_by('-created_at')
 
+    # 状态统计
     pending_count = complaints.filter(status='pending').count()
     processing_count = complaints.filter(status='processing').count()
+    resolved_count = complaints.filter(status='resolved').count()
+    rejected_count = complaints.filter(status='rejected').count()
+    total_count = complaints.count()
+
+    # 按投诉类型统计（只统计待处理和处理中的）
+    from django.db.models import Count
+    active_complaints = complaints.filter(status__in=['pending', 'processing'])
+    type_stats = []
+    type_counts = active_complaints.values('complaint_type').annotate(
+        count=Count('id')
+    ).order_by('-count')
+    
+    # 类型分组统计
+    file_count = 0
+    prod_count = 0
+    shipping_count = 0
+    other_count = 0
+    
+    type_map = dict(OrderComplaint.COMPLAINT_TYPE_CHOICES)
+    for tc in type_counts:
+        ctype = tc['complaint_type'] or 'other'
+        label = type_map.get(ctype, ctype)
+        type_stats.append({'label': label, 'count': tc['count'], 'code': ctype})
+        if ctype.startswith('file_'):
+            file_count += tc['count']
+        elif ctype.startswith('prod_'):
+            prod_count += tc['count']
+        elif ctype.startswith('shipping_'):
+            shipping_count += tc['count']
+        else:
+            other_count += tc['count']
+
+    # 近30天投诉趋势
+    from django.utils import timezone
+    from datetime import timedelta
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    recent_complaints = complaints.filter(created_at__gte=thirty_days_ago)
+    recent_count = recent_complaints.count()
 
     return render(request, 'merchant/complaint_list.html', {
         'complaints': complaints,
         'pending_count': pending_count,
         'processing_count': processing_count,
+        'resolved_count': resolved_count,
+        'rejected_count': rejected_count,
+        'total_count': total_count,
+        'recent_count': recent_count,
+        'type_stats': type_stats,
+        'file_count': file_count,
+        'prod_count': prod_count,
+        'shipping_count': shipping_count,
+        'other_count': other_count,
     })
 
 
