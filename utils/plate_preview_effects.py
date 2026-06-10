@@ -86,6 +86,90 @@ def _get_content_mask_soft(img_gray):
     return inv
 
 
+def _emboss_metal(img_gray, direction='up', metal_color=None, strength=2.0):
+    """
+    通用金属浮雕效果生成器 - 基于高度图光照模拟
+    
+    原理：
+    1. 从mask生成高度图（内容=高，背景=低）
+    2. 模糊高度图创建斜坡边缘
+    3. 计算高度图梯度（法线）
+    4. 与光源方向点乘得到光照强度
+    5. 映射到金属色调
+    
+    direction: 'up' 凸起 / 'down' 凹陷
+    metal_color: 金属基础色 (r, g, b)，None=银灰
+    strength: 浮雕强度（对比度增强倍数）
+    """
+    import numpy as np
+    w, h = img_gray.size
+    
+    # 获取内容掩码
+    mask = _get_content_mask_soft(img_gray)
+    
+    # 1. 生成高度图并模糊（创建斜坡过渡）
+    height = mask.filter(ImageFilter.GaussianBlur(radius=2))
+    
+    # 2. 使用 numpy 计算梯度
+    height_arr = np.array(height, dtype=np.float32)
+    
+    grad_x = np.zeros_like(height_arr)
+    grad_y = np.zeros_like(height_arr)
+    # 差分计算梯度，大倍数放大让浮雕更明显
+    grad_x[1:-1, :] = (height_arr[2:, :] - height_arr[:-2, :]) * 8 * strength
+    grad_y[:, 1:-1] = (height_arr[:, 2:] - height_arr[:, :-2]) * 8 * strength
+    
+    # 3. 光照计算（光源从左上方45度）
+    lx, ly, lz = -0.7, -0.7, 1.0
+    norm = np.sqrt(lx*lx + ly*ly + lz*lz)
+    lx, ly, lz = lx/norm, ly/norm, lz/norm
+    
+    # 法线向量 - 减小nz让梯度影响更大
+    nx = grad_x
+    ny = grad_y
+    nz = np.ones_like(height_arr) * 80
+    
+    # 归一化法线
+    norm_n = np.sqrt(nx*nx + ny*ny + nz*nz)
+    norm_n[norm_n == 0] = 1
+    nx, ny, nz = nx/norm_n, ny/norm_n, nz/norm_n
+    
+    # 点乘得到光照强度
+    lighting = lx * nx + ly * ny + lz * nz
+    lighting = (lighting + 1) / 2 * 255
+    lighting = np.clip(lighting, 0, 255).astype(np.uint8)
+    
+    # 转回PIL
+    light_img = Image.fromarray(lighting, mode='L')
+    
+    # 4. 凹陷时反相（交换高光和阴影）
+    if direction == 'down':
+        light_img = light_img.point(lambda x: 255 - x)
+    
+    # 5. 增强对比度
+    light_img = ImageEnhance.Contrast(light_img).enhance(3.0)
+    
+    # 6. 色调映射到金属色
+    if metal_color:
+        r_base, g_base, b_base = metal_color
+        r = light_img.point(lambda x: max(0, min(255, int(r_base + (x - 128) * 1.5))))
+        g = light_img.point(lambda x: max(0, min(255, int(g_base + (x - 128) * 1.5))))
+        b = light_img.point(lambda x: max(0, min(255, int(b_base + (x - 128) * 1.5))))
+        result = Image.merge('RGB', (r, g, b))
+    else:
+        # 银灰色映射：中性灰190，暗部可降到约100，亮部可到255
+        r = light_img.point(lambda x: int(180 + (x - 128) * 1.8))
+        g = light_img.point(lambda x: int(180 + (x - 128) * 1.8))
+        b = light_img.point(lambda x: int(185 + (x - 128) * 1.7))
+        result = Image.merge('RGB', (r, g, b))
+    
+    # 7. 将效果限制在内容区域内（背景白色）
+    bg = Image.new('RGB', (w, h), (255, 255, 255))
+    result = Image.composite(result, bg, mask)
+    
+    return result
+
+
 # ========== 核心视觉效果函数 ==========
 
 def effect_normal(img):
@@ -100,54 +184,49 @@ def effect_normal(img):
 
 def effect_gold_flat(img):
     """
-    金色平面效果（烫金版）
-    白底 + 金色内容，带金属光泽渐变
+    金色平面效果（烫金版）- 基于EMBOSS的真实金属烫金
+    金色底色 + 金属浮雕高光 + 颗粒质感
     """
     img = _ensure_rgba(img)
     gray = img.convert('L')
-    mask = _get_content_mask(gray)
-
     w, h = img.size
-    # 亮金色到暗金色的垂直渐变
-    gold = Image.new('RGB', (w, h), (0, 0, 0))
-    draw = ImageDraw.Draw(gold)
-    for y in range(h):
-        ratio = y / h if h > 0 else 0
-        # 金色 RGB: 亮金 (255, 215, 0) → 暗金 (184, 134, 11)
-        r = int(255 - ratio * 71)
-        g = int(215 - ratio * 81)
-        b = int(0 + ratio * 11)
-        draw.line([(0, y), (w, y)], fill=(r, g, b))
-
+    
+    mask = _get_content_mask(gray)
+    
+    # 使用金属浮雕生成器，金色基础色
+    metal = _emboss_metal(gray, direction='up', metal_color=(230, 190, 40), strength=2.5)
+    
+    # 添加额外的高光层（模拟镜面反射）
+    emboss = gray.filter(ImageFilter.EMBOSS)
+    hl_mask = emboss.point(lambda x: 255 if x > 150 else 0).filter(ImageFilter.GaussianBlur(radius=2))
+    highlight = Image.new('RGB', (w, h), (255, 250, 200))
+    metal = Image.composite(highlight, metal, hl_mask)
+    
+    # 白底合成
     bg = Image.new('RGB', (w, h), (255, 255, 255))
-    result = Image.composite(gold, bg, mask)
-    result = result.filter(ImageFilter.SHARPEN)
+    result = Image.composite(metal, bg, mask)
+    
     return result
 
 
 def effect_gold_satin(img):
     """
-    金色 satin 效果（平雕版-烫金/击凸）
+    金色 satin 效果（平雕版-烫金/击凸）- 香槟金金属浮雕
     比 gold_flat 更柔和，偏香槟金
     """
     img = _ensure_rgba(img)
     gray = img.convert('L')
-    mask = _get_content_mask(gray)
-
     w, h = img.size
-    satin = Image.new('RGB', (w, h), (0, 0, 0))
-    draw = ImageDraw.Draw(satin)
-    for y in range(h):
-        ratio = y / h if h > 0 else 0
-        # 香槟金 (250, 230, 160) → (200, 170, 80)
-        r = int(250 - ratio * 50)
-        g = int(230 - ratio * 60)
-        b = int(160 - ratio * 80)
-        draw.line([(0, y), (w, y)], fill=(r, g, b))
-
+    
+    mask = _get_content_mask(gray)
+    
+    # 香槟金金属浮雕
+    metal = _emboss_metal(gray, direction='up', metal_color=(220, 200, 120), strength=2.2)
+    
+    # 白底合成
     bg = Image.new('RGB', (w, h), (255, 255, 255))
-    result = Image.composite(satin, bg, mask)
-    result = result.filter(ImageFilter.SHARPEN)
+    result = Image.composite(metal, bg, mask)
+    
     return result
 
 
@@ -282,221 +361,122 @@ def _highlight(img_gray, offset=(-2, -2), blur=2, highlight_color=200):
 
 def effect_relief_strong(img):
     """
-    强浮雕凸起效果（激凸版）- 3D增强版
-    白底 + 内容有立体投影 + 顶部高光 + 边缘立体感 + 斜面效果
-    直观体现"凸起"感
+    强浮雕凸起效果（激凸版）- 基于EMBOSS的专业级银灰金属浮雕
+    模拟真实金属凸起：EMBOSS滤镜 + 银灰色调 + 高光增强
     """
     img = _ensure_rgb(img)
     gray = img.convert('L')
     w, h = img.size
-
-    # 白底
-    bg = Image.new('RGBA', (w, h), (255, 255, 255, 255))
-
-    # 内容层（深灰色，模拟凸起部分的顶面）
+    
     mask = _get_content_mask(gray)
-    content = Image.new('RGBA', (w, h), (80, 80, 80, 255))
-    content.putalpha(mask)
-
-    # 3D斜面效果（边缘高光和阴影）
-    bevel_hl, bevel_sh = _bevel_effect(gray, direction='up')
-
-    # 多层阴影增强立体感
-    # 主阴影（右下偏移，模拟光源从左上来）
-    shadow1 = _drop_shadow(gray, offset=(4, 4), blur=4, shadow_color=100)
-    # 次阴影（更远更淡）
-    shadow2 = _drop_shadow(gray, offset=(8, 8), blur=8, shadow_color=50)
-    # 接触阴影（模拟与底面接触处的暗部）
-    shadow3 = _drop_shadow(gray, offset=(2, 2), blur=2, shadow_color=150)
-
-    # 多层高光
-    # 主高光（左上偏移）
-    highlight1 = _highlight(gray, offset=(-3, -3), blur=3, highlight_color=220)
-    # 次高光（更亮更小）
-    highlight2 = _highlight(gray, offset=(-1, -1), blur=1, highlight_color=255)
-    # 边缘反光（模拟金属/塑料边缘）
-    edge_light = _highlight(gray, offset=(0, -2), blur=2, highlight_color=180)
-
-    # 合成：白底 → 远阴影 → 近阴影 → 斜面阴影 → 内容 → 斜面高光 → 主高光 → 次高光 → 边缘光
-    result = Image.alpha_composite(bg, shadow2)
-    result = Image.alpha_composite(result, shadow1)
-    result = Image.alpha_composite(result, shadow3)
-    result = Image.alpha_composite(result, bevel_sh)
-    result = Image.alpha_composite(result, content)
-    result = Image.alpha_composite(result, bevel_hl)
-    result = Image.alpha_composite(result, highlight1)
-    result = Image.alpha_composite(result, edge_light)
-    result = Image.alpha_composite(result, highlight2)
-
-    return result.convert('RGB')
+    
+    # 银灰金属浮雕（凸起）
+    metal = _emboss_metal(gray, direction='up', metal_color=None, strength=2.5)
+    
+    # 添加边缘高光增强立体感
+    edges = mask.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.GaussianBlur(radius=1))
+    edge_hl = Image.new('RGB', (w, h), (255, 255, 255))
+    metal = Image.composite(edge_hl, metal, edges.point(lambda x: int(x * 0.2)))
+    
+    # 白底合成
+    bg = Image.new('RGB', (w, h), (255, 255, 255))
+    result = Image.composite(metal, bg, mask)
+    
+    return result
 
 
 def effect_emboss_deboss(img):
     """
-    压纹凹陷效果（压纹版）
-    白底 + 内容有内阴影（凹陷感）
-    直观体现"压下去"的感觉
+    压纹凹陷效果（压纹版）- 基于EMBOSS的专业级凹陷
+    模拟真实压痕：EMBOSS滤镜 + 银灰色调 + 凹陷方向
     """
     img = _ensure_rgb(img)
     gray = img.convert('L')
     w, h = img.size
-
-    bg = Image.new('RGBA', (w, h), (255, 255, 255, 255))
-
-    # 内容层（深灰色，模拟凹陷区的底部）
+    
     mask = _get_content_mask(gray)
-    content = Image.new('RGBA', (w, h), (60, 60, 60, 255))
-    content.putalpha(mask)
-
-    # 内阴影（左上阴影 = 凹陷边缘）
-    inner_shadow = _inner_shadow(gray, offset=(-3, -3), blur=3, shadow_color=140)
-
-    # 底部微光（右下微亮 = 凹陷底部反光）
-    bottom_glow = _highlight(gray, offset=(2, 2), blur=4, highlight_color=80)
-
-    result = Image.alpha_composite(bg, inner_shadow)
-    result = Image.alpha_composite(result, content)
-    result = Image.alpha_composite(result, bottom_glow)
-
-    return result.convert('RGB')
+    
+    # 银灰金属浮雕（凹陷）
+    metal = _emboss_metal(gray, direction='down', metal_color=None, strength=2.0)
+    
+    # 白底合成
+    bg = Image.new('RGB', (w, h), (255, 255, 255))
+    result = Image.composite(metal, bg, mask)
+    
+    return result
 
 
 def effect_deboss_strong(img):
-    """强凹陷效果（激凹版）- 更深的凹陷"""
+    """
+    强凹陷效果（激凹版）- 基于EMBOSS的深凹陷
+    更强的凹陷感和立体感
+    """
     img = _ensure_rgb(img)
     gray = img.convert('L')
     w, h = img.size
-
-    bg = Image.new('RGBA', (w, h), (255, 255, 255, 255))
+    
     mask = _get_content_mask(gray)
-    content = Image.new('RGBA', (w, h), (40, 40, 40, 255))
-    content.putalpha(mask)
-
-    inner_shadow = _inner_shadow(gray, offset=(-4, -4), blur=4, shadow_color=180)
-    bottom_glow = _highlight(gray, offset=(3, 3), blur=5, highlight_color=60)
-
-    result = Image.alpha_composite(bg, inner_shadow)
-    result = Image.alpha_composite(result, content)
-    result = Image.alpha_composite(result, bottom_glow)
-
-    return result.convert('RGB')
+    
+    # 银灰金属浮雕（强凹陷）
+    metal = _emboss_metal(gray, direction='down', metal_color=None, strength=2.5)
+    
+    # 白底合成
+    bg = Image.new('RGB', (w, h), (255, 255, 255))
+    result = Image.composite(metal, bg, mask)
+    
+    return result
 
 
 def effect_relief_gold(img):
     """
-    金色浮雕效果（浮雕版）- 专业级3D浮雕
-    模拟真实金属浮雕：圆润边缘、强烈高光、金属光泽、立体阴影
+    金色浮雕效果（浮雕版）- 基于EMBOSS的专业级金色浮雕
+    模拟真实金属浮雕：EMBOSE滤镜 + 金色调 + 高光增强
     """
     img = _ensure_rgb(img)
     gray = img.convert('L')
     w, h = img.size
-
-    # 使用暖白色背景（模拟金色底板）
-    bg = Image.new('RGBA', (w, h), (250, 245, 230, 255))
-
-    # 内容掩码
+    
     mask = _get_content_mask(gray)
     
-    # 创建专业金色渐变（径向渐变模拟球面高光）
-    gold_base = Image.new('RGB', (w, h), (0, 0, 0))
-    draw = ImageDraw.Draw(gold_base)
+    # 金色金属浮雕（凸起）
+    metal = _emboss_metal(gray, direction='up', metal_color=(255, 215, 0), strength=2.5)
     
-    # 计算内容区域的边界框用于局部渐变
-    bbox = mask.getbbox()
-    if bbox:
-        cx, cy = (bbox[0] + bbox[2]) // 2, (bbox[1] + bbox[3]) // 2
-    else:
-        cx, cy = w // 2, h // 2
+    # 添加边缘高光增强立体感
+    edges = mask.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.GaussianBlur(radius=1))
+    edge_hl = Image.new('RGB', (w, h), (255, 250, 220))
+    metal = Image.composite(edge_hl, metal, edges.point(lambda x: int(x * 0.15)))
     
-    max_dist = ((w//2)**2 + (h//2)**2) ** 0.5
+    # 暖白底合成
+    bg = Image.new('RGB', (w, h), (250, 245, 230))
+    result = Image.composite(metal, bg, mask)
     
-    for y in range(0, h, 4):  # 步进4像素加速
-        for x in range(0, w, 4):
-            # 计算到中心的距离（用于径向渐变）
-            dist = ((x - cx)**2 + (y - cy)**2) ** 0.5
-            ratio = min(dist / max_dist, 1.0)
-            
-            # 金色渐变：中心亮 → 边缘暗
-            # 亮金 (255, 230, 120) → 暗金 (180, 140, 30)
-            r = int(255 - ratio * 75)
-            g = int(230 - ratio * 90)
-            b = int(120 - ratio * 90)
-            
-            draw.rectangle([x, y, x+4, y+4], fill=(r, g, b))
-    
-    # 应用mask到金色渐变
-    gold_rgba = gold_base.convert('RGBA')
-    gold_rgba.putalpha(mask)
-
-    # 专业3D浮雕效果 - 多层阴影系统
-    # 1. 主阴影（模拟光源从左上45度）
-    shadow_main = _drop_shadow(gray, offset=(6, 6), blur=6, shadow_color=80)
-    # 2. 接触阴影（内容底部更暗）
-    shadow_contact = _drop_shadow(gray, offset=(3, 3), blur=3, shadow_color=120)
-    # 3. 环境阴影（更柔和）
-    shadow_ambient = _drop_shadow(gray, offset=(10, 10), blur=12, shadow_color=40)
-    
-    # 专业高光系统
-    # 1. 主高光（左上强高光，模拟金属反光）
-    highlight_main = _highlight(gray, offset=(-4, -4), blur=4, highlight_color=255)
-    # 2. 次高光（更小更亮）
-    highlight_sub = _highlight(gray, offset=(-2, -2), blur=2, highlight_color=255)
-    # 3. 边缘高光（模拟圆润边缘的反光）
-    highlight_edge = _highlight(gray, offset=(-1, -3), blur=3, highlight_color=220)
-    
-    # 金属光泽层（模拟金属表面的镜面反射）
-    metal_shine = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-    shine_draw = ImageDraw.Draw(metal_shine)
-    
-    # 创建斜向光泽条
-    for i in range(-h, w+h, 15):
-        alpha = int(40 * (1 - abs(i) / (w+h)))
-        shine_draw.line([(i, 0), (i+h, h)], fill=(255, 255, 240, alpha), width=3)
-    
-    shine_mask = mask.copy()
-    metal_shine.putalpha(shine_mask)
-
-    # 合成顺序（从底到顶）
-    result = Image.alpha_composite(bg, shadow_ambient)
-    result = Image.alpha_composite(result, shadow_main)
-    result = Image.alpha_composite(result, shadow_contact)
-    result = Image.alpha_composite(result, gold_rgba)
-    result = Image.alpha_composite(result, metal_shine)
-    result = Image.alpha_composite(result, highlight_main)
-    result = Image.alpha_composite(result, highlight_edge)
-    result = Image.alpha_composite(result, highlight_sub)
-
-    return result.convert('RGB')
+    return result
 
 
 def effect_relief_gold_multi(img):
     """
-    多层金色浮雕效果（多层次浮雕版）
-    更强的立体感 + 更亮的金色
+    多层金色浮雕效果（多层次浮雕版）- 基于EMBOSE的增强金色浮雕
+    更强的浮雕感和金色金属光泽
     """
     img = _ensure_rgb(img)
     gray = img.convert('L')
     w, h = img.size
-
-    bg = Image.new('RGBA', (w, h), (255, 255, 255, 255))
-
+    
     mask = _get_content_mask(gray)
-    # 更亮的金色
-    gold_content = Image.new('RGB', (w, h), (255, 215, 0))  # 亮金 #FFD700
-    gold_content_rgba = gold_content.convert('RGBA')
-    gold_content_rgba.putalpha(mask)
-
-    # 双层阴影
-    shadow1 = _drop_shadow(gray, offset=(3, 3), blur=3, shadow_color=70)
-    shadow2 = _drop_shadow(gray, offset=(6, 6), blur=6, shadow_color=40)
-    highlight = _highlight(gray, offset=(-3, -3), blur=2, highlight_color=180)
-
-    result = Image.alpha_composite(bg, shadow2)
-    result = Image.alpha_composite(result, shadow1)
-    result = Image.alpha_composite(result, gold_content_rgba)
-    result = Image.alpha_composite(result, highlight)
-
-    return result.convert('RGB')
+    
+    # 强金色金属浮雕（凸起，更高强度）
+    metal = _emboss_metal(gray, direction='up', metal_color=(255, 215, 0), strength=3.0)
+    
+    # 添加强边缘高光
+    edges = mask.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.GaussianBlur(radius=1))
+    edge_hl = Image.new('RGB', (w, h), (255, 250, 220))
+    metal = Image.composite(edge_hl, metal, edges.point(lambda x: int(x * 0.2)))
+    
+    # 白底合成
+    bg = Image.new('RGB', (w, h), (255, 255, 255))
+    result = Image.composite(metal, bg, mask)
+    
+    return result
 
 
 def effect_film_transparent(img):
