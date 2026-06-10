@@ -1355,7 +1355,6 @@ def complaint_create(request, order_id):
 
     if request.method == 'POST':
         description = request.POST.get('description', '').strip()
-        complaint_type = request.POST.get('complaint_type', 'quality')
 
         if not description:
             messages.error(request, '请填写投诉描述')
@@ -1371,11 +1370,11 @@ def complaint_create(request, order_id):
                     return render(request, 'customer/complaint_form.html', {'order': order})
                 images.append(img)
 
-        # 创建投诉
+        # 创建投诉（投诉类型由商户端后续处理时标记）
         complaint = OrderComplaint.objects.create(
             order=order,
             customer=request.user,
-            complaint_type=complaint_type,
+            complaint_type='other',
             description=description,
         )
 
