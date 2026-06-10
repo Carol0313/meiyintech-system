@@ -367,8 +367,22 @@
             </div>
         </div>
 
-        <!-- 右侧：确认信息与价格 -->
+        <!-- 右侧：预览图 + 确认信息 -->
         <div class="col-lg-4">
+            <!-- 预览图/效果图 -->
+            <div class="card mb-3" id="previewCard">
+                <div class="card-body">
+                    <div class="section-title"><i class="fa-solid fa-eye"></i> 预览图</div>
+                    <div id="previewPlaceholder" class="text-center py-4 text-muted">
+                        <i class="fa-solid fa-image fa-2x mb-2"></i>
+                        <div class="small">选择规格后可预览效果图</div>
+                    </div>
+                    <div id="previewImageContainer" class="text-center" style="display:none;">
+                        <img id="previewImage" src="" alt="效果图" class="img-fluid rounded" style="max-height:220px;">
+                    </div>
+                </div>
+            </div>
+
             <div class="card sticky-top" style="top:20px;z-index:100;">
                 <div class="card-body">
                     <div class="section-title"><i class="fa-solid fa-cart-check"></i> 订单确认</div>
