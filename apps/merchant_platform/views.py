@@ -1074,43 +1074,8 @@ def merchant_order_detail(request, order_id):
             else:
                 messages.error(request, '请选择PDF文件')
         elif action == 'update_red_box':
-            # 修改红框尺寸
-            item_id = request.POST.get('item_id')
-            item = get_object_or_404(OrderItem, pk=item_id, order=order)
-            box_count = int(request.POST.get('box_count', 0))
-            if box_count > 0:
-                import json
-                boxes = []
-                for i in range(box_count):
-                    length = request.POST.get(f'box_length_{i}', '0')
-                    width = request.POST.get(f'box_width_{i}', '0')
-                    qty = request.POST.get(f'box_qty_{i}', '1')
-                    try:
-                        length_val = float(length) if length else 0
-                        width_val = float(width) if width else 0
-                        qty_val = int(qty) if qty else 1
-                        if length_val > 0 and width_val > 0:
-                            boxes.append({
-                                'length_mm': length_val,
-                                'width_mm': width_val,
-                                'quantity': qty_val,
-                            })
-                    except (ValueError, TypeError):
-                        continue
-                if boxes:
-                    item.red_box_data = json.dumps(boxes)
-                    # 更新主尺寸为第一个框的尺寸
-                    item.length_mm = Decimal(str(boxes[0]['length_mm']))
-                    item.width_mm = Decimal(str(boxes[0]['width_mm']))
-                    item.quantity = boxes[0]['quantity']
-                    item.save(update_fields=['red_box_data', 'length_mm', 'width_mm', 'quantity'])
-                    # 重新计算订单金额
-                    order.update_total()
-                    messages.success(request, '红框尺寸已更新，订单金额已重新计算')
-                else:
-                    messages.error(request, '请填写有效的红框尺寸')
-            else:
-                messages.error(request, '请至少填写一个红框')
+            messages.error(request, '商户无权修改客户红框尺寸')
+            return redirect('merchant_order_detail', order_id=order_id)
         return redirect('merchant_order_detail', order_id=order_id)
 
     # GET: 生成预检报告供商户/设计师参考
