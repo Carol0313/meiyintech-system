@@ -169,8 +169,8 @@ OSS_BASE_DIR = 'magnesium/'      # 文件在 Bucket 中的根目录
 OSS_INTERNAL = os.environ.get('OSS_INTERNAL', 'false' if DEBUG else 'true').lower() in ('true', '1', 'yes')  # ECS同区域部署默认True，本地开发/非阿里云服务器设 OSS_INTERNAL=false
 OSS_CUSTOM_DOMAIN = ''           # CDN 加速域名（可选）
 
-# 启用 OSS：取消下面一行的注释，所有上传文件将自动存入阿里云 OSS
-# DEFAULT_FILE_STORAGE = 'utils.oss_storage.AliyunOSSMediaStorage'
+# 启用 OSS：所有上传文件将自动存入阿里云 OSS
+DEFAULT_FILE_STORAGE = 'utils.oss_storage.AliyunOSSMediaStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

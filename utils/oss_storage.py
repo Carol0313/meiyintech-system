@@ -100,16 +100,24 @@ class AliyunOSSStorage(Storage):
             pass
 
     def url(self, name):
-        """获取文件的访问 URL"""
+        """获取文件的访问 URL
+        私有Bucket下返回带签名的临时URL（默认1小时有效）
+        """
         object_name = self._get_object_name(name)
 
-        # 如果配置了自定义 CDN 域名
+        # 如果配置了自定义 CDN 域名（且CDN本身有鉴权或Bucket为公共读）
         if self.custom_domain:
             domain = self.custom_domain.rstrip('/')
             return f"{domain}/{object_name}"
 
-        # 否则使用 OSS 默认 URL
-        return f"https://{self.bucket_name}.{self.endpoint}/{object_name}"
+        # 私有Bucket：返回带签名的临时URL（1小时有效）
+        # 签名URL支持内网Endpoint，ECS同区域访问流量免费
+        return self.bucket.sign_url('GET', object_name, 3600)
+
+    def get_signed_url(self, name, expires=3600):
+        """获取自定义有效期的签名URL"""
+        object_name = self._get_object_name(name)
+        return self.bucket.sign_url('GET', object_name, expires)
 
     def size(self, name):
         """获取文件大小"""
