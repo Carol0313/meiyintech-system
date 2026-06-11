@@ -81,6 +81,29 @@
         color: var(--text-muted);
     }
 
+    .login-tabs {
+        display: flex;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .login-tab {
+        flex: 1;
+        padding: 10px;
+        text-align: center;
+        font-size: 14px;
+        color: var(--text-muted);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+    }
+
+    .login-tab.active {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+        font-weight: 500;
+    }
+
     .login-form .form-group {
         margin-bottom: 18px;
     }
@@ -121,6 +144,11 @@
 
     .login-btn:hover {
         background: var(--primary-hover);
+    }
+
+    .login-btn:disabled {
+        background: #a5d6a7;
+        cursor: not-allowed;
     }
 
     .login-links {
@@ -175,6 +203,38 @@
         text-decoration: underline;
     }
 
+    .code-input-group {
+        display: flex;
+        gap: 10px;
+    }
+
+    .code-input-group .form-control {
+        flex: 1;
+    }
+
+    .code-btn {
+        padding: 0.65rem 1rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--primary);
+        background: #fff;
+        color: var(--primary);
+        font-size: 14px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .code-btn:hover {
+        background: var(--primary);
+        color: #fff;
+    }
+
+    .code-btn:disabled {
+        border-color: #ccc;
+        color: #999;
+        cursor: not-allowed;
+        background: #f5f5f5;
+    }
+
     @media (max-width: 576px) {
         .login-card-body { padding: 28px 24px 24px; }
     }
@@ -194,7 +254,14 @@
                 <div class="login-brand-subtitle">千厂资源一键触达，制版从未如此简单</div>
             </div>
 
-            <form method="post" novalidate class="login-form">
+            <!-- 登录方式切换 -->
+            <div class="login-tabs">
+                <div class="login-tab {% if login_mode != 'phone' %}active{% endif %}" onclick="switchTab('password')" id="tab-password">账号密码登录</div>
+                <div class="login-tab {% if login_mode == 'phone' %}active{% endif %}" onclick="switchTab('phone')" id="tab-phone">手机号登录</div>
+            </div>
+
+            <!-- 账号密码登录表单 -->
+            <form method="post" novalidate class="login-form" id="passwordForm" {% if login_mode == 'phone' %}style="display:none;"{% endif %}>
                 {% csrf_token %}
                 <div class="form-group">
                     <label class="form-label" for="id_username">手机号</label>
@@ -205,6 +272,23 @@
                     <input type="password" name="password" id="id_password" class="form-control" placeholder="请输入密码" required>
                 </div>
                 <button type="submit" class="login-btn">登录</button>
+            </form>
+
+            <!-- 手机号验证码登录表单 -->
+            <form method="post" action="{% url 'phone_code_login' %}" novalidate class="login-form" id="phoneForm" {% if login_mode != 'phone' %}style="display:none;"{% endif %}>
+                {% csrf_token %}
+                <div class="form-group">
+                    <label class="form-label" for="phone">手机号</label>
+                    <input type="text" name="phone" id="phone" class="form-control" placeholder="请输入手机号" maxlength="11" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="code">验证码</label>
+                    <div class="code-input-group">
+                        <input type="text" name="code" id="code" class="form-control" placeholder="请输入6位验证码" maxlength="6" required>
+                        <button type="button" class="code-btn" id="sendCodeBtn" onclick="sendCode()">获取验证码</button>
+                    </div>
+                </div>
+                <button type="submit" class="login-btn">确定</button>
             </form>
 
             <div class="login-links">
@@ -220,4 +304,74 @@
         </div>
     </div>
 </div>
+
+<script>
+function switchTab(mode) {
+    const passwordForm = document.getElementById('passwordForm');
+    const phoneForm = document.getElementById('phoneForm');
+    const tabPassword = document.getElementById('tab-password');
+    const tabPhone = document.getElementById('tab-phone');
+
+    if (mode === 'password') {
+        passwordForm.style.display = 'block';
+        phoneForm.style.display = 'none';
+        tabPassword.classList.add('active');
+        tabPhone.classList.remove('active');
+    } else {
+        passwordForm.style.display = 'none';
+        phoneForm.style.display = 'block';
+        tabPassword.classList.remove('active');
+        tabPhone.classList.add('active');
+    }
+}
+
+function sendCode() {
+    const phone = document.getElementById('phone').value.trim();
+    const btn = document.getElementById('sendCodeBtn');
+
+    if (!phone || phone.length !== 11) {
+        alert('请输入正确的11位手机号');
+        return;
+    }
+
+    btn.disabled = true;
+
+    fetch('/accounts/api/send-verify-code/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'phone=' + encodeURIComponent(phone)
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert(data.message);
+        if (data.success) {
+            startCountdown(btn);
+        } else {
+            btn.disabled = false;
+        }
+    })
+    .catch(err => {
+        alert('请求失败，请重试');
+        btn.disabled = false;
+    });
+}
+
+function startCountdown(btn) {
+    let sec = 60;
+    btn.textContent = sec + '秒后重试';
+    const timer = setInterval(function() {
+        sec--;
+        if (sec > 0) {
+            btn.textContent = sec + '秒后重试';
+        } else {
+            clearInterval(timer);
+            btn.disabled = false;
+            btn.textContent = '获取验证码';
+        }
+    }, 1000);
+}
+</script>
 {% endblock %}

@@ -1,30 +1,20 @@
 [Unit]
-Description=Magnesium Order Platform Gunicorn Daemon
+Description=Magnesium Order Platform Gunicorn Service
 After=network.target
 
 [Service]
+Type=simple
 User=root
 Group=root
 WorkingDirectory=/home/magnesium/magnesium_order_platform
 Environment="PATH=/home/magnesium/magnesium_order_platform/venv/bin"
-Environment="DJANGO_DEBUG=False"
-Environment="DJANGO_ALLOWED_HOSTS=www.zhibanhome.com,zhibanhome.com"
-Environment="DJANGO_SECRET_KEY=your-production-secret-key-here-change-it"
-Environment="DB_ENGINE=postgresql"
-Environment="DB_NAME=magnesium_order_db"
-Environment="DB_USER=magnesium_user"
-Environment="DB_PASSWORD=your-db-password"
-Environment="DB_HOST=localhost"
-Environment="DB_PORT=5432"
-Environment="KUAIDI100_KEY=your-kuaidi100-key"
-Environment="KUAIDI100_CUSTOMER=your-kuaidi100-customer"
-ExecStart=/home/magnesium/magnesium_order_platform/venv/bin/gunicorn -c deploy/gunicorn.conf.py magnesium_order_platform.wsgi:application
+EnvironmentFile=/home/magnesium/magnesium_order_platform/.env
+ExecStart=/home/magnesium/magnesium_order_platform/venv/bin/gunicorn magnesium_order_platform.wsgi:application -c deploy/gunicorn.conf.py
 ExecReload=/bin/kill -s HUP $MAINPID
-KillMode=mixed
-TimeoutStopSec=5
-PrivateTmp=true
 Restart=on-failure
 RestartSec=5s
+KillMode=mixed
+TimeoutStopSec=5
 
 [Install]
 WantedBy=multi-user.target

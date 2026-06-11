@@ -195,6 +195,67 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
 # 2. 在"我的接口"中获取：授权Key 和 Customer ID
 # 3. 将下面的空字符串替换为你的真实值
 # 4. 可选：调整 KUAIDI100_CACHE_SECONDS（物流缓存秒数，默认300秒）
-KUAIDI100_KEY = ''           # 快递100授权Key
-KUAIDI100_CUSTOMER = ''      # 快递100 Customer ID
+KUAIDI100_KEY = os.environ.get('KUAIDI100_KEY', '')           # 快递100授权Key
+KUAIDI100_CUSTOMER = os.environ.get('KUAIDI100_CUSTOMER', '')      # 快递100 Customer ID
 KUAIDI100_CACHE_SECONDS = 300  # 物流数据缓存时间（秒）
+
+# ==================== 阿里云短信配置（手机号验证码登录） ====================
+SMS_ACCESS_KEY_ID = os.environ.get('SMS_ACCESS_KEY_ID', '')
+SMS_ACCESS_KEY_SECRET = os.environ.get('SMS_ACCESS_KEY_SECRET', '')
+SMS_SIGN_NAME = os.environ.get('SMS_SIGN_NAME', '')          # 短信签名，如：闪电制版
+SMS_TEMPLATE_CODE = os.environ.get('SMS_TEMPLATE_CODE', '')  # 验证码模板CODE，如：SMS_xxxxxxx
+
+# ==================== 日志配置 ====================
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'django.log',
+            'maxBytes': 10485760,  # 10MB
+            'backupCount': 10,
+            'formatter': 'verbose',
+        },
+        'error_file': {
+            'level': 'ERROR',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'error.log',
+            'maxBytes': 10485760,  # 10MB
+            'backupCount': 10,
+            'formatter': 'verbose',
+        },
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file', 'error_file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file', 'error_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['error_file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}

@@ -217,3 +217,48 @@ def address_delete(request, pk):
     addr.delete()
     messages.success(request, '地址已删除')
     return redirect('my_addresses')
+
+
+# ==================== 手机号验证码登录 ====================
+
+def api_send_verify_code(request):
+    """AJAX：发送短信验证码"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': '请使用POST请求'})
+    phone = request.POST.get('phone', '').strip()
+    if not phone or len(phone) != 11:
+        return JsonResponse({'success': False, 'error': '请输入正确的11位手机号'})
+    from utils.sms import send_verify_code
+    success, msg = send_verify_code(phone)
+    return JsonResponse({'success': success, 'message': msg})
+
+
+def phone_code_login(request):
+    """手机号验证码登录"""
+    if request.user.is_authenticated:
+        return _redirect_by_user_type(request.user)
+
+    if request.method == 'POST':
+        phone = request.POST.get('phone', '').strip()
+        code = request.POST.get('code', '').strip()
+
+        if not phone or not code:
+            messages.error(request, '请输入手机号和验证码')
+            return render(request, 'registration/login.html', {'login_mode': 'phone'})
+
+        from utils.sms import verify_sms_code
+        if not verify_sms_code(phone, code):
+            messages.error(request, '验证码错误或已过期')
+            return render(request, 'registration/login.html', {'login_mode': 'phone'})
+
+        try:
+            user = User.objects.get(phone=phone)
+            login(request, user)
+            messages.success(request, f'登录成功，{user.username or user.phone}')
+            return _redirect_by_user_type(user)
+        except User.DoesNotExist:
+            messages.error(request, '该手机号未注册')
+            return render(request, 'registration/login.html', {'login_mode': 'phone'})
+
+    return render(request, 'registration/login.html', {'login_mode': 'phone'})
+    return redirect('my_addresses')
