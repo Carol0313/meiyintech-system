@@ -1563,6 +1563,11 @@ def api_preview_effect(request):
         if len(doc) == 0:
             doc.close()
             return JsonResponse({'success': False, 'error': 'PDF为空'})
+
+        # 去除红框标记线：红框仅用于计价，不应出现在效果预览图中
+        from utils.plate_preview_effects import remove_red_boxes_from_pdf
+        remove_red_boxes_from_pdf(doc)
+
         page = doc[0]
         # 【修复】降低DPI从150到72，大幅减少处理时间和内存占用
         # runserver 单线程 + SQLite 环境下，大图处理会导致后续请求全部阻塞
