@@ -73,10 +73,11 @@ def _ensure_rgba(img):
     return img
 
 
-def _remove_red_boxes_from_page(page, boxes):
+def _remove_red_box_borders(page, boxes, border_width=3):
     """
     根据识别到的红框/标记框坐标，在 PDF 页面上应用 redaction，
-    将框线区域填为白色。红框仅用于计价，不应出现在效果预览图中。
+    仅将框的边框线条填为白色，保留框内内容。
+    红框仅用于计价，不应出现在效果预览图中。
     """
     for box in boxes:
         if box.get('page', 0) != page.number:
@@ -85,15 +86,22 @@ def _remove_red_boxes_from_page(page, boxes):
         y0 = box['y']
         x1 = x0 + box['width']
         y1 = y0 + box['height']
-        # 稍微外扩 2pt，确保框线被完整覆盖
-        rect = fitz.Rect(x0 - 2, y0 - 2, x1 + 2, y1 + 2)
-        page.add_redact_annot(rect, fill=(1, 1, 1))
+
+        # 只去除四周边框，内部内容保留
+        # 上边框
+        page.add_redact_annot(fitz.Rect(x0, y0, x1, y0 + border_width), fill=(1, 1, 1))
+        # 下边框
+        page.add_redact_annot(fitz.Rect(x0, y1 - border_width, x1, y1), fill=(1, 1, 1))
+        # 左边框（避开上下边框已覆盖的角）
+        page.add_redact_annot(fitz.Rect(x0, y0 + border_width, x0 + border_width, y1 - border_width), fill=(1, 1, 1))
+        # 右边框
+        page.add_redact_annot(fitz.Rect(x1 - border_width, y0 + border_width, x1, y1 - border_width), fill=(1, 1, 1))
     page.apply_redactions()
 
 
 def remove_red_boxes_from_pdf(doc):
     """
-    对 PDF 文档的每一页识别红框并去除。返回被去除的框列表。
+    对 PDF 文档的每一页识别红框边框并去除。返回被去除的框列表。
     支持传入已打开的 fitz.Document 对象。
     """
     from utils.pdf_red_box import find_colored_rectangles
@@ -102,7 +110,7 @@ def remove_red_boxes_from_pdf(doc):
         page = doc[page_num]
         page_boxes = [b for b in boxes if b.get('page', 0) == page_num]
         if page_boxes:
-            _remove_red_boxes_from_page(page, page_boxes)
+            _remove_red_box_borders(page, page_boxes)
     return boxes
 
 
