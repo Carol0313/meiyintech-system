@@ -103,6 +103,9 @@ def place_order(request):
     spec_data = {}
     for s in specs:
         category = get_product_category(s.product_name)
+        # 腐蚀版只保留"镁"材质
+        if category == '腐蚀版' and s.material != 'magnesium':
+            continue
         if category not in spec_data:
             spec_data[category] = {'label': category, 'products': {}}
         prod_key = s.product_name
@@ -169,6 +172,9 @@ def order_step1(request):
     spec_data = {}
     for s in specs:
         category = get_product_category(s.product_name)
+        # 腐蚀版只保留"镁"材质
+        if category == '腐蚀版' and s.material != 'magnesium':
+            continue
         if category not in spec_data:
             spec_data[category] = {'label': category, 'products': {}}
         prod_key = s.product_name
