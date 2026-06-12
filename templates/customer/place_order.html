@@ -2076,7 +2076,18 @@ function switchEffect(groupId, idx, effectKey, btnEl) {
             <img src="${data.effect_url}" class="effect-preview-img" alt="${data.effect_name}">
             <div class="small text-muted mt-1">${data.effect_name}</div>
         `;
-        
+
+        // 同步显示到右侧统一预览图面板
+        const previewPlaceholder = document.getElementById('previewPlaceholder');
+        const previewImageContainer = document.getElementById('previewImageContainer');
+        const previewImage = document.getElementById('previewImage');
+        if (previewPlaceholder && previewImageContainer && previewImage) {
+            previewPlaceholder.style.display = 'none';
+            previewImageContainer.style.display = 'block';
+            previewImage.src = data.effect_url;
+            previewImage.alt = data.effect_name;
+        }
+
         // 同时生成3D预览（仅对浮雕/凹陷/烫金效果启用）
         if (['relief_strong', 'emboss_deboss', 'deboss_strong', 'relief_gold', 'relief_gold_multi', 'gold_flat', 'gold_satin'].includes(effectKey)) {
             generate3DPreview(groupId, idx, effectKey);
