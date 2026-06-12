@@ -1,6 +1,6 @@
 # 镁印制版下单系统 - 项目状态记录
 
-> 最后更新：2026-06-09 13:40
+> 最后更新：2026-06-13 12:45
 > 此文件用于快速恢复项目上下文，每次对话开始时请将此文件内容发送给AI
 
 ---
@@ -10,12 +10,12 @@
 | 项目 | 内容 |
 |------|------|
 | 项目名称 | 镁印制版下单系统（闪电制版 / 制版家） |
-| 域名 | www.zhibanhome.com（备案中） |
+| 域名 | www.zhibanhome.com（管局审核中，预计10个工作日） |
 | 服务器IP | 47.100.212.79 |
 | 技术栈 | Django 4.2, Python 3.8, Bootstrap 5.3, SQLite(开发)/PostgreSQL(生产) |
 | 代码仓库 | https://github.com/Carol0313/meiyintech-system |
-| 部署状态 | 生产阶段，使用 runserver 127.0.0.1:8000 + SQLite + Nginx反向代理 |
-| 服务器配置 | 阿里云轻量应用服务器（建议升级至ECS 4GB内存） |
+| 部署状态 | 生产阶段，使用 Gunicorn 127.0.0.1:8000 + PostgreSQL 13 + Nginx反向代理；服务器 ECS 4核8G；OSS 100G/年 已启用；systemd 自启动已配置 |
+| 服务器配置 | 阿里云 ECS 4核8G（已升级并验证，原轻量应用服务器2GB） |
 
 ---
 
@@ -28,8 +28,13 @@ cd /home/magnesium/magnesium_order_platform
 # 虚拟环境
 source venv/bin/activate
 
-# 启动服务
-nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
+# 启动/重启服务
+sudo systemctl restart magnesium
+sudo systemctl restart nginx
+
+# 查看服务状态
+sudo systemctl status magnesium
+sudo systemctl status nginx
 
 # Nginx配置
 /etc/nginx/conf.d/magnesium.conf
@@ -50,7 +55,7 @@ nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 | 拼版工具（单订单/跨订单） | 2026-05 | 4种算法，版类效果预览 |
 | 生产看板与工厂管理 | 2026-05 | 工厂状态、设备监控 |
 | 对账单与信用额度 | 2026-05 | 月度对账、额度管理 |
-| 阿里云OSS文件存储 | 2026-06-05 | 内网Endpoint配置完成 |
+| 阿里云OSS文件存储 | 2026-06-05 | 内网Endpoint配置完成；Bucket: zbhomefiles；100G/年套餐；私有Bucket，通过签名URL访问 |
 | 商户端订单详情页优化 | 2026-06-05 | 移除操作面板，丰富内容 |
 | 客户投诉功能 | 2026-06-05 | 客户提交投诉，支持描述+图片 |
 | SSL证书申请 | 2026-06-05 | Certbot证书已申请 |
@@ -80,7 +85,7 @@ nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 
 | 任务 | 时间 | 备注 |
 |------|------|------|
-| 服务器内存升级 | 2026-06-09 | 轻量应用服务器2GB → ECS 4GB/8GB，解决3D贴图生成内存不足问题 |
+| 服务器安全加固 | 2026-06-13 | 修改SSH端口、禁用密码登录、安装fail2ban、优化安全组 |
 
 ---
 
@@ -88,17 +93,16 @@ nohup python manage.py runserver 127.0.0.1:8000 > server.log 2>&1 &
 
 | 任务 | 时间 | 备注 |
 |------|------|------|
-| PostgreSQL数据库迁移 | 待定 | 服务器升级后进行 |
-| Gunicorn+Nginx生产部署 | 待定 | systemd服务配置 |
-| 3D浮雕效果持续优化 | 待定 | 参考专业浮雕效果继续改进算法 |
+| 性能测试与优化 | 2026-06-16 | 并发下单、大文件上传、数据库查询优化 |
+| 3D浮雕效果持续优化 | 待定 | 参考专业浮雕效果继续改进算法，优先级较低 |
 
 ---
 
-## 六、等待审核（1项）
+## 六、等待审核（0项）
 
 | 事项 | 预计时间 | 状态 |
 |------|---------|------|
-| 域名备案 | 已完成 | 已上线 www.zhibanhome.com |
+| 域名备案 | 2026-06-02 | 管局审核中（第5步），预计10个工作日；当前通过IP 47.100.212.79 访问 |
 
 ---
 
@@ -120,11 +124,11 @@ orders.0028_order_customer_service_processed_at_and_more  - Order新增SLA时效
 
 ## 八、已知问题
 
-1. **PostgreSQL已安装但认证配置有问题**（pg_hba.conf需要改为md5认证），当前回退到SQLite
-2. **Python 3.8 弃用警告** - PyMySQL的cryptography库提示Python 3.8不再支持，不影响运行但建议后续升级
-3. **Nginx systemctl重启会失败**（80端口被占用），需要用 `kill -9` 杀掉旧进程后用 `nginx` 命令启动
-4. **服务器内存不足** — 轻量应用服务器2GB内存，生成3D贴图时可能OOM，计划升级至ECS 4GB/8GB
-5. **GitHub推送间歇性超时** — 国内网络不稳定，需要多次重试或等待网络恢复
+1. **Python 3.8 弃用警告** - PyMySQL的cryptography库提示Python 3.8不再支持，不影响运行但建议后续升级
+2. **GitHub推送间歇性超时** — 国内网络不稳定，需要多次重试或等待网络恢复
+3. **域名备案审核中** — 管局审核预计10个工作日，期间通过IP访问
+4. **DEBUG模式未关闭** — 当前 `DEBUG=True`，生产环境建议关闭并配置自定义404/500页面
+5. **服务器安全加固待完成** — SSH端口/密码登录/fail2ban等需要尽快加固
 
 ---
 
@@ -136,7 +140,11 @@ orders.0028_order_customer_service_processed_at_and_more  - Order新增SLA时效
 
 # 关键配置
 OSS_INTERNAL=true  # ECS内网访问OSS
-DB_ENGINE=sqlite3  # 当前使用SQLite
+DB_ENGINE=postgresql  # 已切换PostgreSQL
+DB_NAME=magnesium_db
+DB_USER=magnesium_user
+DB_HOST=localhost
+DB_PORT=5432
 ```
 
 ---

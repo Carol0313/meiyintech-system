@@ -67,6 +67,17 @@ Thumbs.db
 # Backup files
 *.bak
 *.backup
+*_备份_*.xlsx
+*.patch
+
+# Temp scripts
+generate_progress_excel.py
+
+# Sensitive business data
+投诉*.xlsx
+
+# Test generated files
+media/test_effects/
 media/test_red_box.pdf
 test_red_box.pdf
 demo.mp4
