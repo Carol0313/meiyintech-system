@@ -989,6 +989,20 @@ function renderRecognizedFiles(groupId) {
                     <div class="effect-btn-group" id="effectBtnGroup-${groupId}-${idx}">
                         ${effectButtons}
                     </div>
+                    <div class="emboss-controls mt-2 p-2 bg-light rounded" id="embossControls-${groupId}-${idx}" style="display:none;">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <label class="small mb-0" style="white-space:nowrap;">浮雕模式：</label>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-secondary emboss-direction active" data-direction="up" onclick="setEmbossDirection(${groupId}, ${idx}, 'up', this)">凸起</button>
+                                <button type="button" class="btn btn-outline-secondary emboss-direction" data-direction="down" onclick="setEmbossDirection(${groupId}, ${idx}, 'down', this)">凹陷</button>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="small mb-0" style="white-space:nowrap;">深度强度：</label>
+                            <input type="range" class="form-range emboss-strength" min="0.5" max="3.0" step="0.1" value="1.5" style="flex:1;" oninput="setEmbossStrength(${groupId}, ${idx}, this.value)">
+                            <span class="small emboss-strength-value" style="min-width:28px;">1.5</span>
+                        </div>
+                    </div>
                     <div class="text-center" id="effectPreviewArea-${groupId}-${idx}">
                         <div class="effect-loading text-muted"><i class="fa-solid fa-hand-pointer me-1"></i>点击上方效果按钮生成预览</div>
                     </div>
@@ -1354,6 +1368,8 @@ function initPdfCanvas(groupId, idx) {
         effectUrl: '',
         currentEffect: '',
         productName: group.product_name,
+        embossDirection: 'up',
+        embossStrength: 1.5,
     };
 
     // 【修复】batch_upload_files 已经返回了完整的像素坐标 boxes，
@@ -1834,6 +1850,8 @@ const threeScenes = {}; // 存储已创建的3D场景 { key: { scene, camera, re
 function generate3DPreview(groupId, idx, effectKey) {
     const group = specGroups.find(g => g.id === groupId);
     const f = group.recognizedFiles[idx];
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
     const panel = document.getElementById(`preview3DPanel-${groupId}-${idx}`);
     const container = document.getElementById(`threePreviewContainer-${groupId}-${idx}`);
     
@@ -1846,6 +1864,8 @@ function generate3DPreview(groupId, idx, effectKey) {
     formData.append('file_path', f.file_path);
     formData.append('product_name', group.product_name);
     formData.append('effect_type', effectKey);
+    formData.append('emboss_direction', state.embossDirection);
+    formData.append('emboss_strength', state.embossStrength);
     formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
     
     fetch('{% url "api_preview_3d" %}', {
@@ -2071,6 +2091,8 @@ function addMouseInteraction(container, mesh, key) {
     });
 }
 
+const EMBOSS_EFFECT_KEYS = ['gold_flat', 'gold_satin', 'emboss_deboss', 'relief_strong', 'deboss_strong', 'relief_gold', 'relief_gold_multi'];
+
 function switchEffect(groupId, idx, effectKey, btnEl) {
     const group = specGroups.find(g => g.id === groupId);
     const f = group.recognizedFiles[idx];
@@ -2084,6 +2106,12 @@ function switchEffect(groupId, idx, effectKey, btnEl) {
 
     state.currentEffect = effectKey;
 
+    // 显示/隐藏浮雕控制面板
+    const embossControls = document.getElementById(`embossControls-${groupId}-${idx}`);
+    if (embossControls) {
+        embossControls.style.display = EMBOSS_EFFECT_KEYS.includes(effectKey) ? 'block' : 'none';
+    }
+
     const previewArea = document.getElementById(`effectPreviewArea-${groupId}-${idx}`);
     previewArea.innerHTML = '<div class="effect-loading"><i class="fa-solid fa-spinner fa-spin me-1"></i>正在生成效果图...</div>';
 
@@ -2091,6 +2119,8 @@ function switchEffect(groupId, idx, effectKey, btnEl) {
     formData.append('file_path', f.file_path);
     formData.append('product_name', group.product_name);
     formData.append('effect_type', effectKey);
+    formData.append('emboss_direction', state.embossDirection);
+    formData.append('emboss_strength', state.embossStrength);
     formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
 
     fetch('{% url "api_preview_effect" %}', {
@@ -2129,6 +2159,48 @@ function switchEffect(groupId, idx, effectKey, btnEl) {
     .catch(err => {
         previewArea.innerHTML = `<div class="effect-loading text-danger">生成出错：${err.message}</div>`;
     });
+}
+
+function setEmbossDirection(groupId, idx, direction, btnEl) {
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    state.embossDirection = direction;
+
+    const controls = document.getElementById(`embossControls-${groupId}-${idx}`);
+    if (controls) {
+        controls.querySelectorAll('.emboss-direction').forEach(b => b.classList.remove('active'));
+        btnEl.classList.add('active');
+    }
+
+    // 如果当前已有浮雕效果图，自动重新生成
+    if (state.currentEffect && EMBOSS_EFFECT_KEYS.includes(state.currentEffect)) {
+        const container = document.getElementById(`effectBtnGroup-${groupId}-${idx}`);
+        const activeBtn = container.querySelector('.effect-btn.active');
+        if (activeBtn) {
+            switchEffect(groupId, idx, state.currentEffect, activeBtn);
+        }
+    }
+}
+
+function setEmbossStrength(groupId, idx, value) {
+    const key = getCanvasKey(groupId, idx);
+    const state = pdfCanvasStates[key];
+    state.embossStrength = parseFloat(value);
+
+    const controls = document.getElementById(`embossControls-${groupId}-${idx}`);
+    if (controls) {
+        const valueEl = controls.querySelector('.emboss-strength-value');
+        if (valueEl) valueEl.textContent = value;
+    }
+
+    // 如果当前已有浮雕效果图，自动重新生成
+    if (state.currentEffect && EMBOSS_EFFECT_KEYS.includes(state.currentEffect)) {
+        const container = document.getElementById(`effectBtnGroup-${groupId}-${idx}`);
+        const activeBtn = container.querySelector('.effect-btn.active');
+        if (activeBtn) {
+            switchEffect(groupId, idx, state.currentEffect, activeBtn);
+        }
+    }
 }
 
 // 初始化：创建一个默认规格组

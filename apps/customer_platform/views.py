@@ -1532,6 +1532,8 @@ def api_preview_effect(request):
     file_path = request.POST.get('file_path', '')
     product_name = request.POST.get('product_name', '')
     effect_type = request.POST.get('effect_type', '')
+    emboss_direction = request.POST.get('emboss_direction', 'up')
+    emboss_strength = float(request.POST.get('emboss_strength', '1.5'))
 
     if not file_path:
         return JsonResponse({'success': False, 'error': '缺少文件路径'})
@@ -1582,7 +1584,9 @@ def api_preview_effect(request):
         if img.width > max_size or img.height > max_size:
             img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
 
-        result = apply_plate_effect(img, actual_effect_type)
+        result = apply_plate_effect(img, actual_effect_type,
+                                    emboss_direction=emboss_direction,
+                                    emboss_strength=emboss_strength)
         result.save(output_path, "PNG")
 
         # 清理临时文件
@@ -1621,6 +1625,8 @@ def api_preview_3d(request):
     file_path = request.POST.get('file_path', '')
     product_name = request.POST.get('product_name', '')
     effect_type = request.POST.get('effect_type', '')
+    emboss_direction = request.POST.get('emboss_direction', 'up')
+    emboss_strength = float(request.POST.get('emboss_strength', '1.5'))
 
     if not file_path:
         return JsonResponse({'success': False, 'error': '缺少文件路径'})
@@ -1635,7 +1641,9 @@ def api_preview_3d(request):
             'customer_previews',
             product_name,
             effect_type or None,
-            dpi=72
+            dpi=72,
+            emboss_direction=emboss_direction,
+            emboss_strength=emboss_strength
         )
 
         if not maps:

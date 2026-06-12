@@ -225,7 +225,7 @@ def effect_normal(img):
     return gray.convert('RGB')
 
 
-def effect_gold_flat(img):
+def effect_gold_flat(img, direction='up', strength=1.5):
     """
     金色平面效果（烫金版）- 基于EMBOSS的真实金属烫金
     金色底色 + 金属浮雕高光 + 颗粒质感
@@ -237,7 +237,7 @@ def effect_gold_flat(img):
     mask = _get_content_mask(gray)
     
     # 使用金属浮雕生成器，金色基础色
-    metal = _emboss_metal(gray, direction='up', metal_color=(230, 190, 40), strength=2.5)
+    metal = _emboss_metal(gray, direction=direction, metal_color=(230, 190, 40), strength=strength)
     
     # 添加额外的高光层（模拟镜面反射）
     emboss = gray.filter(ImageFilter.EMBOSS)
@@ -252,7 +252,7 @@ def effect_gold_flat(img):
     return result
 
 
-def effect_gold_satin(img):
+def effect_gold_satin(img, direction='up', strength=1.5):
     """
     金色 satin 效果（平雕版-烫金/击凸）- 香槟金金属浮雕
     比 gold_flat 更柔和，偏香槟金
@@ -264,7 +264,7 @@ def effect_gold_satin(img):
     mask = _get_content_mask(gray)
     
     # 香槟金金属浮雕
-    metal = _emboss_metal(gray, direction='up', metal_color=(220, 200, 120), strength=2.2)
+    metal = _emboss_metal(gray, direction=direction, metal_color=(220, 200, 120), strength=strength)
     
     # 白底合成
     bg = Image.new('RGB', (w, h), (255, 255, 255))
@@ -402,7 +402,7 @@ def _highlight(img_gray, offset=(-2, -2), blur=2, highlight_color=200):
     return highlight
 
 
-def effect_relief_strong(img):
+def effect_relief_strong(img, direction='up', strength=1.5):
     """
     强浮雕凸起效果（激凸版）- 基于EMBOSS的专业级银灰金属浮雕
     模拟真实金属凸起：EMBOSS滤镜 + 银灰色调 + 高光增强
@@ -414,7 +414,7 @@ def effect_relief_strong(img):
     mask = _get_content_mask(gray)
     
     # 银灰金属浮雕（凸起）
-    metal = _emboss_metal(gray, direction='up', metal_color=None, strength=2.5)
+    metal = _emboss_metal(gray, direction=direction, metal_color=None, strength=strength)
     
     # 添加边缘高光增强立体感
     edges = mask.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.GaussianBlur(radius=1))
@@ -428,7 +428,7 @@ def effect_relief_strong(img):
     return result
 
 
-def effect_emboss_deboss(img):
+def effect_emboss_deboss(img, direction='down', strength=1.5):
     """
     压纹凹陷效果（压纹版）- 基于EMBOSS的专业级凹陷
     模拟真实压痕：EMBOSS滤镜 + 银灰色调 + 凹陷方向
@@ -440,7 +440,7 @@ def effect_emboss_deboss(img):
     mask = _get_content_mask(gray)
     
     # 银灰金属浮雕（凹陷）
-    metal = _emboss_metal(gray, direction='down', metal_color=None, strength=2.0)
+    metal = _emboss_metal(gray, direction=direction, metal_color=None, strength=strength)
     
     # 白底合成
     bg = Image.new('RGB', (w, h), (255, 255, 255))
@@ -449,7 +449,7 @@ def effect_emboss_deboss(img):
     return result
 
 
-def effect_deboss_strong(img):
+def effect_deboss_strong(img, direction='down', strength=1.5):
     """
     强凹陷效果（激凹版）- 基于EMBOSS的深凹陷
     更强的凹陷感和立体感
@@ -461,7 +461,7 @@ def effect_deboss_strong(img):
     mask = _get_content_mask(gray)
     
     # 银灰金属浮雕（强凹陷）
-    metal = _emboss_metal(gray, direction='down', metal_color=None, strength=2.5)
+    metal = _emboss_metal(gray, direction=direction, metal_color=None, strength=strength)
     
     # 白底合成
     bg = Image.new('RGB', (w, h), (255, 255, 255))
@@ -470,7 +470,7 @@ def effect_deboss_strong(img):
     return result
 
 
-def effect_relief_gold(img):
+def effect_relief_gold(img, direction='up', strength=1.5):
     """
     金色浮雕效果（浮雕版）- 基于EMBOSS的专业级金色浮雕
     模拟真实金属浮雕：EMBOSE滤镜 + 金色调 + 高光增强
@@ -482,7 +482,7 @@ def effect_relief_gold(img):
     mask = _get_content_mask(gray)
     
     # 金色金属浮雕（凸起）
-    metal = _emboss_metal(gray, direction='up', metal_color=(255, 215, 0), strength=2.5)
+    metal = _emboss_metal(gray, direction=direction, metal_color=(255, 215, 0), strength=strength)
     
     # 添加边缘高光增强立体感
     edges = mask.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.GaussianBlur(radius=1))
@@ -496,7 +496,7 @@ def effect_relief_gold(img):
     return result
 
 
-def effect_relief_gold_multi(img):
+def effect_relief_gold_multi(img, direction='up', strength=1.5):
     """
     多层金色浮雕效果（多层次浮雕版）- 基于EMBOSE的增强金色浮雕
     更强的浮雕感和金色金属光泽
@@ -508,7 +508,7 @@ def effect_relief_gold_multi(img):
     mask = _get_content_mask(gray)
     
     # 强金色金属浮雕（凸起，更高强度）
-    metal = _emboss_metal(gray, direction='up', metal_color=(255, 215, 0), strength=3.0)
+    metal = _emboss_metal(gray, direction=direction, metal_color=(255, 215, 0), strength=strength)
     
     # 添加强边缘高光
     edges = mask.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.GaussianBlur(radius=1))
@@ -555,16 +555,20 @@ EFFECT_FUNCTIONS = {
 }
 
 
-def apply_plate_effect(img, effect_type):
+def apply_plate_effect(img, effect_type, emboss_direction='up', emboss_strength=1.5):
     func = EFFECT_FUNCTIONS.get(effect_type, effect_normal)
     try:
+        if effect_type in ('gold_flat', 'gold_satin', 'relief_strong', 'emboss_deboss',
+                           'deboss_strong', 'relief_gold', 'relief_gold_multi'):
+            return func(img, direction=emboss_direction, strength=emboss_strength)
         return func(img)
     except Exception as e:
         print(f"[plate_preview_effects] 效果处理失败 ({effect_type}): {e}")
         return effect_normal(img)
 
 
-def generate_effect_preview(pdf_path, output_path, product_name, plate_type_key=None, dpi=150):
+def generate_effect_preview(pdf_path, output_path, product_name, plate_type_key=None,
+                            dpi=150, emboss_direction='up', emboss_strength=1.5):
     """从PDF文件生成带版类视觉效果的预览图"""
     try:
         if not os.path.isabs(pdf_path):
@@ -591,7 +595,9 @@ def generate_effect_preview(pdf_path, output_path, product_name, plate_type_key=
         doc.close()
 
         effect_type = get_effect_type(product_name, plate_type_key)
-        result = apply_plate_effect(img, effect_type)
+        result = apply_plate_effect(img, effect_type,
+                                    emboss_direction=emboss_direction,
+                                    emboss_strength=emboss_strength)
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         result.save(output_path, "PNG")
@@ -732,7 +738,8 @@ def generate_normal_map(img, effect_type='relief', strength=3.0):
     return normal
 
 
-def generate_3d_preview_maps(pdf_path, output_dir, product_name, plate_type_key=None, dpi=72):
+def generate_3d_preview_maps(pdf_path, output_dir, product_name, plate_type_key=None,
+                             dpi=72, emboss_direction='up', emboss_strength=1.5):
     """
     生成 Three.js 3D 预览所需的贴图：
     - color_map.png: 彩色纹理（带版类效果）
@@ -783,10 +790,13 @@ def generate_3d_preview_maps(pdf_path, output_dir, product_name, plate_type_key=
         effect_type = plate_type_key or get_effect_type(product_name)
         
         # 生成彩色效果图
-        color_img = apply_plate_effect(img, effect_type)
+        color_img = apply_plate_effect(img, effect_type,
+                                       emboss_direction=emboss_direction,
+                                       emboss_strength=emboss_strength)
         
         # 生成高度图和法线贴图
-        displacement = generate_displacement_map(img, effect_type)
+        displacement = generate_displacement_map(img, effect_type,
+                                                 intensity=emboss_strength / 1.5)
         normal = generate_normal_map(img, effect_type)
         
         # 保存文件
