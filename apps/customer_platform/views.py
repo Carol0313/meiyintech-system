@@ -99,7 +99,7 @@ def place_order(request):
         return _handle_quick_order_post(request, profile, tier)
 
     # GET: 构建规格数据
-    specs = ProductSpec.objects.filter(is_platform_preset=True, is_active=True)
+    specs = ProductSpec.objects.filter(is_platform_preset=True, is_active=True).order_by('product_name', 'material', 'thickness')
     spec_data = {}
     for s in specs:
         category = get_product_category(s.product_name)
@@ -168,7 +168,7 @@ def order_step1(request):
     from utils.pricing_tiers import get_customer_price, is_etching_product, get_product_category
     profile = request.user.get_effective_customer_profile()
     tier = profile.pricing_tier
-    specs = ProductSpec.objects.filter(is_platform_preset=True, is_active=True)
+    specs = ProductSpec.objects.filter(is_platform_preset=True, is_active=True).order_by('product_name', 'material', 'thickness')
     spec_data = {}
     for s in specs:
         category = get_product_category(s.product_name)

@@ -323,6 +323,9 @@ class OrderItem(models.Model):
 
         if is_etching_product(self.product_name):
             # ===== 腐蚀版计价逻辑 =====
+            # 厚度>=3.0mm时单边+10mm版边，否则+5mm
+            border = Decimal('10.0') if self.thickness and Decimal(self.thickness) >= Decimal('3.0') else Decimal('5.0')
+
             # 检查是否有红框识别数据（多框）
             boxes = []
             if self.red_box_data:
@@ -334,20 +337,20 @@ class OrderItem(models.Model):
                     pass
 
             if boxes:
-                # 多框：遍历所有框，每个框单边+5mm版边，分别乘数量后求和
+                # 多框：遍历所有框，每个框按厚度确定版边，分别乘数量后求和
                 total_area = Decimal('0')
                 for box in boxes:
                     bl = Decimal(str(box.get('length_mm', 0)))
                     bw = Decimal(str(box.get('width_mm', 0)))
                     bq = int(box.get('quantity', 1))
                     if bl > 0 and bw > 0:
-                        box_area = ((bl + Decimal('5.0')) * (bw + Decimal('5.0'))) / Decimal('100.0') * bq
+                        box_area = ((bl + border) * (bw + border)) / Decimal('100.0') * bq
                         total_area += box_area
                 self.area = total_area.quantize(Decimal('0.01'))
             else:
-                # 单框或无框：单边+5mm版边
-                length_with_border = self.length_mm + Decimal('5.0')
-                width_with_border = self.width_mm + Decimal('5.0')
+                # 单框或无框：按厚度确定版边
+                length_with_border = self.length_mm + border
+                width_with_border = self.width_mm + border
                 single_area = (length_with_border * width_with_border) / Decimal('100.0')
                 self.area = (single_area * self.quantity).quantize(Decimal('0.01'))
         else:

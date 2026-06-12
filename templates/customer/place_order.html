@@ -739,6 +739,7 @@ function bindSpecEvents(groupId) {
         group.unit_price = parseFloat(price);
         priceValue.textContent = group.unit_price.toFixed(2);
         priceDisplay.style.display = 'inline-block';
+        updateBorderTip(groupId, group.product_name);
         calcTotalPrice();
 
         thicknessGrid.querySelectorAll('.spec-option').forEach(el => {
@@ -758,9 +759,12 @@ function updateBorderTip(groupId, prodKey) {
         tipBox.style.display = 'none';
         return;
     }
+    const g = specGroups.find(x => x.id === groupId);
+    const thickness = g && g.thickness ? parseFloat(g.thickness) : 0;
     let msg = '';
     if (prodKey.startsWith('etching_')) {
-        msg = '腐蚀版：红框识别后，单边自动 +5mm 版边计算面积';
+        const border = thickness >= 3.0 ? 10 : 5;
+        msg = `腐蚀版：红框识别后，单边自动 +${border}mm 版边计算面积`;
     } else if (prodKey.startsWith('carving_')) {
         msg = '雕刻版：红框识别后，单边自动 +10mm 版边计算面积';
     } else if (prodKey.startsWith('resin_')) {
@@ -1073,8 +1077,8 @@ function calcTotalPrice() {
                         const bw = parseFloat(box.width_mm) || 0;
                         const bq = parseInt(box.quantity) || 1;
                         if (bl > 0 && bw > 0) {
-                            // 根据产品类型确定版边大小
-                            const border = isEtching ? 5 : 20;
+                            // 根据产品类型确定版边大小（腐蚀版≥3.0mm按+10mm，其他+5mm）
+                            const border = isEtching ? (parseFloat(g.thickness) >= 3.0 ? 10 : 5) : 20;
                             return sum + ((bl + border) * (bw + border) / 100.0 * bq);
                         }
                         return sum;
@@ -1085,7 +1089,8 @@ function calcTotalPrice() {
                     const w = parseFloat(f.width_mm) || 0;
                     const q = parseInt(f.quantity) || 1;
                     if (l > 0 && w > 0) {
-                        const border = isEtching ? 5 : 20;
+                        // 腐蚀版≥3.0mm按+10mm，其他+5mm
+                        const border = isEtching ? (parseFloat(g.thickness) >= 3.0 ? 10 : 5) : 20;
                         fileArea = ((l + border) * (w + border)) / 100.0 * q;
                     }
                 }
