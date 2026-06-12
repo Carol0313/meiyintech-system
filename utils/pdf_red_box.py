@@ -36,6 +36,12 @@ MAX_PAGES = 3           # 最多处理3页
 MAX_DRAWINGS_PER_PAGE = 200  # 每页最多处理200个绘图元素
 MAX_CANDIDATES = 50     # 最多保留50个候选框进入文字过滤阶段
 
+# 红框后处理过滤参数
+PT_TO_MM = 25.4 / 72.0
+MIN_BOX_AREA_MM2 = 250          # 绝对最小面积（mm²），低于此值且远小于主框的视为噪声
+MIN_BOX_RELATIVE_AREA = 0.08    # 相对最大框面积比例阈值
+NESTED_SMALL_RATIO = 0.30       # 嵌套在大框内部且面积小于 outer*0.3 的视为内容/噪声
+
 
 def find_colored_rectangles(file_path_or_doc):
     """
@@ -50,8 +56,9 @@ def find_colored_rectangles(file_path_or_doc):
     3. 排除极端细长条（宽高比>20）和路径过于复杂的图形（>25个items）
     4. 排除嵌套在内的大面积内边框（面积>外层60%的内嵌框）
     5. 排除与文字块高度重叠的区域（阈值从75%放宽到90%，避免误删含文字的有效框）
-    6. 【新增】排除纯填充（fill-only）的小图形（<28pt/10mm），避免文字/装饰被误认为框
-    7. 最多返回5个框
+    6. 排除纯填充（fill-only）的图形（文字转曲/小图标/装饰）
+    7. 基于面积相对关系和嵌套关系二次过滤，剔除文字/小图形误识别
+    8. 最多返回5个框
     """
     start_time = time.time()
     
@@ -128,15 +135,13 @@ def find_colored_rectangles(file_path_or_doc):
                     abs(rect.y1 - page_rect.y1) < 5):
                     continue
                 
-                # 【新增】过滤6：排除纯填充的小图形（文字转曲/装饰元素）
+                # 过滤6：排除纯填充（fill-only）的图形（文字转曲/小图标/装饰元素）
                 # 真正的制版框是空心描边（stroke有颜色，fill=None）
                 # 文字转曲后是实心填充（stroke=None，fill有颜色）
                 has_stroke = _is_colored_box(color)
                 has_fill = _is_colored_box(fill)
                 if not has_stroke and has_fill:
-                    # 纯填充图形，如果尺寸较小（<28pt ≈ 10mm），更可能是文字/装饰
-                    if rect.width < 28 or rect.height < 28:
-                        continue
+                    continue
                 
                 colored_rects.append({
                     'page': page_num,
@@ -223,7 +228,10 @@ def find_colored_rectangles(file_path_or_doc):
 
     # 去重：合并坐标相近的矩形
     colored_rects = _dedup_rects(colored_rects)
-    
+
+    # 新增：基于面积相对关系和嵌套关系二次过滤，剔除文字/小图形误识别
+    colored_rects = _filter_noise_boxes(colored_rects)
+
     # 【修复】优先按红色框排序，然后按面积排序
     # 红色框通常是客户明确标记的制版区域，应优先
     colored_rects.sort(key=lambda r: (not r.get('is_red', False), -r['area']))
@@ -329,6 +337,71 @@ def _is_red_box(color):
 
 # 保留旧函数名作为别名
 _is_red = _is_colored_box
+
+
+def _filter_nested_small_boxes(rects):
+    """
+    剔除完全嵌套在大框内部且面积极小的小框。
+    这些小框通常是框内文字、图标或装饰，不是独立的制版区域。
+    """
+    if len(rects) < 2:
+        return rects
+
+    # 按面积从大到小排序，确保外层一定先出现
+    sorted_by_area = sorted(rects, key=lambda r: -r['area'])
+    filtered = []
+
+    for i, r in enumerate(sorted_by_area):
+        is_nested_noise = False
+        for j in range(i):
+            outer = sorted_by_area[j]
+            # 判断 r 是否几乎完全在 outer 内部
+            if (r['x'] >= outer['x'] - 2 and
+                r['y'] >= outer['y'] - 2 and
+                r['x'] + r['width'] <= outer['x'] + outer['width'] + 2 and
+                r['y'] + r['height'] <= outer['y'] + outer['height'] + 2):
+                # 面积明显小于外层，则视为框内内容/噪声
+                if r['area'] < outer['area'] * NESTED_SMALL_RATIO:
+                    is_nested_noise = True
+                    logger.info(
+                        f"[红框识别] 过滤嵌套小框：{r['area']:.0f} pt² "
+                        f"在 {outer['area']:.0f} pt² 内部"
+                    )
+                    break
+        if not is_nested_noise:
+            filtered.append(r)
+
+    return filtered
+
+
+def _filter_noise_boxes(rects):
+    """
+    后处理：基于面积相对关系剔除文字/小图标/装饰等噪声框。
+    规则：
+      1. 若某框面积既小于绝对阈值，又远小于最大框，视为噪声；
+      2. 若某框完全位于另一个更大框内部且面积极小，视为框内内容。
+    当所有框都比较小时（没有大框做参照），相对条件不会误杀。
+    """
+    if len(rects) < 2:
+        return rects
+
+    sorted_rects = sorted(rects, key=lambda r: -r['area'])
+    max_area_mm2 = sorted_rects[0]['area'] * PT_TO_MM * PT_TO_MM
+
+    filtered = []
+    for r in sorted_rects:
+        area_mm2 = r['area'] * PT_TO_MM * PT_TO_MM
+        # 面积同时满足“绝对很小”和“相对最大框很小”才过滤
+        if (area_mm2 < MIN_BOX_AREA_MM2 and
+                area_mm2 < max_area_mm2 * MIN_BOX_RELATIVE_AREA):
+            logger.info(
+                f"[红框识别] 过滤噪声框：面积 {area_mm2:.0f} mm² "
+                f"远小于主框"
+            )
+            continue
+        filtered.append(r)
+
+    return _filter_nested_small_boxes(filtered)
 
 
 def _dedup_rects(rects, tolerance=2.0):
