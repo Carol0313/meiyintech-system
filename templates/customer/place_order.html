@@ -1003,8 +1003,24 @@ function renderRecognizedFiles(groupId) {
                     </div>
                 </div>
 
-                <!-- 尺寸和数量 -->
+                <!-- 尺寸和数量：多框时显示每个框的尺寸 -->
                 <div class="mt-2 pt-2 border-top" id="dimensionsArea-${groupId}-${idx}">
+                    ${f.boxes && f.boxes.length > 0 ? f.boxes.map((box, bidx) => `
+                    <div class="row g-2 mt-1 box-dimension-row" data-box-index="${bidx}">
+                        <div class="col-4">
+                            <label class="form-label small mb-0">框${bidx + 1} 长(mm)</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm box-length" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.length_mm ? parseFloat(box.length_mm).toFixed(1) : ''}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small mb-0">框${bidx + 1} 宽(mm)</label>
+                            <input type="number" step="0.01" class="form-control form-control-sm box-width" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.width_mm ? parseFloat(box.width_mm).toFixed(1) : ''}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small mb-0">框${bidx + 1} 数量</label>
+                            <input type="number" min="1" class="form-control form-control-sm box-qty" data-group="${groupId}" data-index="${idx}" data-box-index="${bidx}" value="${box.quantity || 1}">
+                        </div>
+                    </div>
+                    `).join('') : `
                     <div class="row g-2 mt-1">
                         <div class="col-4">
                             <label class="form-label small mb-0">长(mm)</label>
@@ -1019,6 +1035,7 @@ function renderRecognizedFiles(groupId) {
                             <input type="number" min="1" class="form-control form-control-sm file-qty" data-group="${groupId}" data-index="${idx}" value="${f.quantity}">
                         </div>
                     </div>
+                    `}
                 </div>
             </div>
         </div>`;
@@ -1034,6 +1051,22 @@ function renderRecognizedFiles(groupId) {
             g.recognizedFiles[idx].length_mm = parseFloat(cardEl.querySelector('.file-length').value) || 0;
             g.recognizedFiles[idx].width_mm = parseFloat(cardEl.querySelector('.file-width').value) || 0;
             g.recognizedFiles[idx].quantity = parseInt(cardEl.querySelector('.file-qty').value) || 1;
+            calcTotalPrice();
+        });
+    });
+
+    // 绑定多框尺寸输入事件
+    resultArea.querySelectorAll('.box-length, .box-width, .box-qty').forEach(input => {
+        input.addEventListener('input', () => {
+            const gid = parseInt(input.dataset.group);
+            const idx = parseInt(input.dataset.index);
+            const bidx = parseInt(input.dataset.boxIndex);
+            const g = specGroups.find(x => x.id === gid);
+            const cardEl = resultArea.querySelector(`.file-result-card[data-index="${idx}"]`);
+            const boxRow = cardEl.querySelector(`.box-dimension-row[data-box-index="${bidx}"]`);
+            g.recognizedFiles[idx].boxes[bidx].length_mm = parseFloat(boxRow.querySelector('.box-length').value) || 0;
+            g.recognizedFiles[idx].boxes[bidx].width_mm = parseFloat(boxRow.querySelector('.box-width').value) || 0;
+            g.recognizedFiles[idx].boxes[bidx].quantity = parseInt(boxRow.querySelector('.box-qty').value) || 1;
             calcTotalPrice();
         });
     });
