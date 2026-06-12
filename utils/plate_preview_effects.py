@@ -129,84 +129,86 @@ def _get_content_mask_soft(img_gray):
     return inv
 
 
-def _emboss_metal(img_gray, direction='up', metal_color=None, strength=2.0):
+def _emboss_metal(img_gray, direction='up', metal_color=None, strength=1.5):
     """
-    通用金属浮雕效果生成器 - 基于高度图光照模拟
+    通用金属浮雕效果生成器 - 基于距离变换 + EMBOSS 滤镜
     
-    原理：
-    1. 从mask生成高度图（内容=高，背景=低）
-    2. 模糊高度图创建斜坡边缘
-    3. 计算高度图梯度（法线）
-    4. 与光源方向点乘得到光照强度
-    5. 映射到金属色调
+    特点：
+    - 使用 scipy 距离变换生成圆润的高度图
+    - 使用 PIL EMBOSS 滤镜产生强烈明暗对比
+    - 高对比度金属色调映射，效果更接近 demo
     
     direction: 'up' 凸起 / 'down' 凹陷
     metal_color: 金属基础色 (r, g, b)，None=银灰
-    strength: 浮雕强度（对比度增强倍数）
+    strength: 浮雕强度（1.0=轻柔，3.0=强烈）
     """
     import numpy as np
+    from scipy import ndimage
+    
     w, h = img_gray.size
     
-    # 获取内容掩码
-    mask = _get_content_mask_soft(img_gray)
+    # 硬内容掩码：黑色内容=255，白色背景=0
+    mask = _get_content_mask(img_gray)
+    mask_np = np.array(mask)
     
-    # 1. 生成高度图并模糊（创建斜坡过渡）
-    height = mask.filter(ImageFilter.GaussianBlur(radius=2))
+    # 1. 距离变换：内容内部距离边缘越远越高
+    distance = ndimage.distance_transform_edt(mask_np)
+    if distance.max() > 0:
+        distance = distance / distance.max() * 255
     
-    # 2. 使用 numpy 计算梯度
-    height_arr = np.array(height, dtype=np.float32)
+    # 2. 形状调整：让中心更平、边缘更陡，增强立体感
+    gamma = 0.5 / max(strength, 0.3)
+    distance = np.power(distance / 255.0, gamma) * 255
     
-    grad_x = np.zeros_like(height_arr)
-    grad_y = np.zeros_like(height_arr)
-    # 差分计算梯度，大倍数放大让浮雕更明显
-    grad_x[1:-1, :] = (height_arr[2:, :] - height_arr[:-2, :]) * 8 * strength
-    grad_y[:, 1:-1] = (height_arr[:, 2:] - height_arr[:, :-2]) * 8 * strength
-    
-    # 3. 光照计算（光源从左上方45度）
-    lx, ly, lz = -0.7, -0.7, 1.0
-    norm = np.sqrt(lx*lx + ly*ly + lz*lz)
-    lx, ly, lz = lx/norm, ly/norm, lz/norm
-    
-    # 法线向量 - 减小nz让梯度影响更大
-    nx = grad_x
-    ny = grad_y
-    nz = np.ones_like(height_arr) * 80
-    
-    # 归一化法线
-    norm_n = np.sqrt(nx*nx + ny*ny + nz*nz)
-    norm_n[norm_n == 0] = 1
-    nx, ny, nz = nx/norm_n, ny/norm_n, nz/norm_n
-    
-    # 点乘得到光照强度
-    lighting = lx * nx + ly * ny + lz * nz
-    lighting = (lighting + 1) / 2 * 255
-    lighting = np.clip(lighting, 0, 255).astype(np.uint8)
-    
-    # 转回PIL
-    light_img = Image.fromarray(lighting, mode='L')
-    
-    # 4. 凹陷时反相（交换高光和阴影）
+    # 3. 凹陷时反相
     if direction == 'down':
-        light_img = light_img.point(lambda x: 255 - x)
+        distance = 255 - distance
     
-    # 5. 增强对比度
-    light_img = ImageEnhance.Contrast(light_img).enhance(3.0)
+    height = Image.fromarray(distance.astype(np.uint8), 'L')
     
-    # 6. 色调映射到金属色
+    # 4. 使用 EMBOSS 滤镜生成浮雕感（这是产生 demo 效果的关键）
+    emboss = height.filter(ImageFilter.EMBOSS)
+    
+    # 5. 强烈增强对比度，让明暗边界更清晰
+    emboss = ImageEnhance.Contrast(emboss).enhance(2.0 + strength * 1.5)
+    
+    # 6. 色调映射到金属色（增强映射范围）
+    contrast_factor = 2.0 + strength * 0.5
     if metal_color:
         r_base, g_base, b_base = metal_color
-        r = light_img.point(lambda x: max(0, min(255, int(r_base + (x - 128) * 1.5))))
-        g = light_img.point(lambda x: max(0, min(255, int(g_base + (x - 128) * 1.5))))
-        b = light_img.point(lambda x: max(0, min(255, int(b_base + (x - 128) * 1.5))))
+        r = emboss.point(lambda x: max(0, min(255, int(r_base + (x - 128) * contrast_factor))))
+        g = emboss.point(lambda x: max(0, min(255, int(g_base + (x - 128) * contrast_factor))))
+        b = emboss.point(lambda x: max(0, min(255, int(b_base + (x - 128) * contrast_factor))))
         result = Image.merge('RGB', (r, g, b))
     else:
-        # 银灰色映射：中性灰190，暗部可降到约100，亮部可到255
-        r = light_img.point(lambda x: int(180 + (x - 128) * 1.8))
-        g = light_img.point(lambda x: int(180 + (x - 128) * 1.8))
-        b = light_img.point(lambda x: int(185 + (x - 128) * 1.7))
+        # 银灰色映射：中性灰160，暗部更暗，亮部更亮
+        r = emboss.point(lambda x: int(160 + (x - 128) * contrast_factor))
+        g = emboss.point(lambda x: int(160 + (x - 128) * contrast_factor))
+        b = emboss.point(lambda x: int(165 + (x - 128) * (contrast_factor * 0.95)))
         result = Image.merge('RGB', (r, g, b))
     
-    # 7. 将效果限制在内容区域内（背景白色）
+    # 7. 添加投影/高光边缘，进一步增强立体感
+    if strength >= 1.0:
+        edges = mask.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.GaussianBlur(radius=1))
+        edge_mask = edges.point(lambda x: min(255, int(x * (0.3 + strength * 0.1))))
+        
+        # 方向决定高光/阴影位置
+        if direction == 'up':
+            shadow_color = Image.new('RGB', (w, h), (60, 60, 65))
+            highlight_color = Image.new('RGB', (w, h), (255, 255, 250))
+        else:
+            shadow_color = Image.new('RGB', (w, h), (255, 255, 250))
+            highlight_color = Image.new('RGB', (w, h), (60, 60, 65))
+        
+        # 高光（左上偏移）
+        highlight = ImageChops.offset(highlight_color, -1, -1)
+        result = Image.composite(highlight, result, edge_mask)
+        
+        # 阴影（右下偏移）
+        shadow = ImageChops.offset(shadow_color, 1, 1)
+        result = Image.composite(shadow, result, edge_mask)
+    
+    # 8. 将效果限制在内容区域内（背景白色）
     bg = Image.new('RGB', (w, h), (255, 255, 255))
     result = Image.composite(result, bg, mask)
     
