@@ -279,7 +279,7 @@
             </div>
         </div>
         {% if order.can_cancel %}
-        <a href="{% url 'cancel_order' order.id %}" class="btn btn-outline-danger w-100" onclick="return confirm('确定取消该订单吗？')">取消订单</a>
+        <form method="post" action="{% url 'cancel_order' order.id %}" onsubmit="return confirm('确定取消该订单吗？')">{% csrf_token %}<button type="submit" class="btn btn-outline-danger w-100">取消订单</button></form>
         {% else %}
         <button class="btn btn-outline-secondary w-100" disabled>取消订单</button>
         <div class="cancel-hint">订单已进入生产，无法取消</div>

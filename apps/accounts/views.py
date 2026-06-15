@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
 from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 from .models import User, CustomerProfile, Merchant, StaffProfile, Role, Address
 from .forms import (
     PhoneLoginForm, CustomerRegisterForm, CustomerProfileForm,
@@ -28,7 +29,11 @@ def user_login(request):
             messages.success(request, f'登录成功，{user.username or user.phone}')
             return _redirect_by_user_type(user)
         else:
-            messages.error(request, '手机号或密码错误')
+            error_msg = '手机号或密码错误'
+            for err in form.non_field_errors():
+                error_msg = err
+                break
+            messages.error(request, error_msg)
     else:
         form = PhoneLoginForm()
     return render(request, 'registration/login.html', {'form': form})
@@ -211,6 +216,7 @@ def address_edit(request, pk):
 
 
 @login_required
+@require_POST
 def address_delete(request, pk):
     """删除地址"""
     addr = get_object_or_404(Address, pk=pk, user=request.user)
@@ -253,12 +259,20 @@ def phone_code_login(request):
 
         try:
             user = User.objects.get(phone=phone)
-            login(request, user)
-            messages.success(request, f'登录成功，{user.username or user.phone}')
-            return _redirect_by_user_type(user)
         except User.DoesNotExist:
             messages.error(request, '该手机号未注册')
             return render(request, 'registration/login.html', {'login_mode': 'phone'})
 
+        # 复用密码登录的统一准入校验
+        form = PhoneLoginForm(request)
+        try:
+            form.confirm_login_allowed(user)
+        except Exception as e:
+            messages.error(request, str(e))
+            return render(request, 'registration/login.html', {'login_mode': 'phone'})
+
+        login(request, user)
+        messages.success(request, f'登录成功，{user.username or user.phone}')
+        return _redirect_by_user_type(user)
+
     return render(request, 'registration/login.html', {'login_mode': 'phone'})
-    return redirect('my_addresses')

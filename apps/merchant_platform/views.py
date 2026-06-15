@@ -4,6 +4,7 @@
 """
 
 import json
+import logging
 import os
 import uuid
 from decimal import Decimal
@@ -17,6 +18,8 @@ from django.utils import timezone
 from django.http import HttpResponse
 from django.core.files.storage import default_storage
 from apps.accounts.models import User, CustomerProfile, Merchant, StaffProfile, Role
+
+logger = logging.getLogger(__name__)
 from apps.orders.models import Order, OrderItem, CommunicationLog, OrderStatusLog, PlateLayout, PlateBatch, PlateBatchItem, ProductionPhoto, Statement, DeliveryExtension, OrderComplaint
 from apps.products.models import ProductSpec, CustomSpecRequest
 from .models import Factory, FactoryEquipmentStatus, FactoryInventory
@@ -34,9 +37,17 @@ def merchant_required(view_func):
                 'message': '请先登录商家账号',
                 'can_logout': True,
             })
+        # 账号必须激活且已审核
+        if not request.user.is_active or not request.user.is_approved:
+            return render(request, 'common/account_unauthorized.html', {
+                'message': '账号未启用或未审核通过，请联系管理员处理。',
+                'can_logout': True,
+            })
         # 商家管理员检查 managed_merchant
+        merchant = None
         if request.user.user_type == 'merchant_admin':
-            if not getattr(request.user, 'managed_merchant', None):
+            merchant = getattr(request.user, 'managed_merchant', None)
+            if not merchant:
                 return render(request, 'common/account_unauthorized.html', {
                     'message': '您没有关联的商家，请联系平台管理员处理。',
                     'can_logout': True,
@@ -49,6 +60,13 @@ def merchant_required(view_func):
                     'message': '您的员工账号未启用，请联系商家管理员处理。',
                     'can_logout': True,
                 })
+            merchant = profile.merchant
+        # 商家必须处于已通过状态（冻结/拒绝/待审核均不可访问）
+        if not merchant or merchant.status != 'approved':
+            return render(request, 'common/account_unauthorized.html', {
+                'message': '商家未通过审核或已被冻结，暂无法访问后台。',
+                'can_logout': True,
+            })
         return view_func(request, *args, **kwargs)
     return wrapper
 
@@ -1601,7 +1619,7 @@ def role_edit(request, role_id):
     role = get_object_or_404(Role, pk=role_id, merchant=merchant)
     if request.method == 'POST':
         perms = request.POST.getlist('permissions')
-        role.permissions = {p: True for p in perms}
+        role.set_permissions(perms)
         role.save(update_fields=['permissions'])
         messages.success(request, '权限已更新')
         return redirect('role_list')
@@ -3009,8 +3027,9 @@ def plate_batch_update_layout(request, batch_id):
         batch.save()
 
         return JsonResponse({'success': True})
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+    except Exception:
+        logger.exception('拼版布局保存失败')
+        return JsonResponse({'success': False, 'error': '保存失败，请稍后重试'})
 
 
 @login_required
@@ -3215,8 +3234,9 @@ def upload_plate_file(request):
             'file_name': uploaded_file.name,
             'file_url': default_storage.url(path) if hasattr(default_storage, 'url') else path,
         })
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': f'上传失败：{str(e)}'})
+    except Exception:
+        logger.exception('制版文件上传失败')
+        return JsonResponse({'success': False, 'error': '上传失败，请稍后重试'})
 
 
 @login_required
@@ -3477,24 +3497,23 @@ def create_plate_batch(request):
             if image_path:
                 batch.layout_image = image_path
                 batch.save(update_fields=['layout_image'])
-        except Exception as e:
-            print(f"[拼版效果图生成失败] {e}")
+        except Exception:
+            logger.exception('拼版效果图生成失败')
         
         try:
             pdf_path = generate_plate_production_pdf(batch, use_plate_file=True)
             if pdf_path:
                 batch.production_pdf = pdf_path
                 batch.save(update_fields=['production_pdf'])
-        except Exception as e:
-            print(f"[生产PDF生成失败] {e}")
+        except Exception:
+            logger.exception('生产PDF生成失败')
         
         messages.success(request, f'拼版批次创建成功！共 {len(plates)} 张版，利用率 {plates[0]["usage_rate"]:.1%}')
         return redirect('plate_batch_detail', batch_id=batch.id)
         
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        messages.error(request, f'拼版失败：{str(e)}')
+    except Exception:
+        logger.exception('拼版批次创建失败')
+        messages.error(request, '拼版失败，请稍后重试或联系客服')
         return redirect('pending_layout_orders')
 
 

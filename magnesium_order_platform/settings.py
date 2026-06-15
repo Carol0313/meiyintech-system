@@ -3,7 +3,9 @@ Django settings for magnesium_order_platform project.
 """
 
 import os
+import logging
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 
 # PyMySQL 兼容（宝塔面板使用 MySQL 时无需安装 mysqlclient）
 try:
@@ -14,14 +16,47 @@ except ImportError:
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# 确保日志目录存在，避免新环境/容器启动时因缺少目录而失败
+LOGS_DIR = BASE_DIR / 'logs'
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
 # ==================== 安全设置 ====================
 # 生产环境必须通过环境变量传入，严禁使用默认密钥
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-b0kloytxexei@ms7yq&zd#y08li&^x41d6rkya!!w*p@he#s@0')
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('true', '1', 'yes')
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 # 生产环境必须配置具体域名
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
+    if h.strip()
+]
+
+# 生产环境 fail-closed 校验
+if not DEBUG:
+    if not SECRET_KEY or len(SECRET_KEY) < 32 or SECRET_KEY.startswith('django-insecure-'):
+        raise ImproperlyConfigured(
+            "生产环境必须设置强随机 DJANGO_SECRET_KEY（至少 32 位，且不能以 django-insecure- 开头）。"
+        )
+    if not ALLOWED_HOSTS:
+        raise ImproperlyConfigured(
+            "生产环境必须设置 DJANGO_ALLOWED_HOSTS，不能留空。"
+        )
+    if '*' in ALLOWED_HOSTS:
+        raise ImproperlyConfigured(
+            "生产环境 DJANGO_ALLOWED_HOSTS 不允许使用通配符 '*'。"
+        )
+
+# 开发环境兜底（仅用于本地开发，不允许进入生产）
+if DEBUG:
+    if not SECRET_KEY:
+        SECRET_KEY = 'django-insecure-dev-only-not-for-production'
+        logging.getLogger(__name__).warning(
+            "当前使用开发环境默认 SECRET_KEY，请勿用于生产。"
+        )
+    if not ALLOWED_HOSTS:
+        ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 # 允许同站点嵌入（用于PDF文件预览）
 X_FRAME_OPTIONS = 'SAMEORIGIN'
@@ -36,10 +71,14 @@ CSRF_TRUSTED_ORIGINS = os.environ.get(
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    # 使用HTTPS时取消下面注释
-    # SECURE_SSL_REDIRECT = True
-    # SESSION_COOKIE_SECURE = True
-    # CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # HSTS 谨慎启用：先短 TTL 灰度，验证无 mixed-content 后再提升
+    # SECURE_HSTS_SECONDS = 300
+    # SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    # SECURE_HSTS_PRELOAD = True
 
 # Application definition
 INSTALLED_APPS = [

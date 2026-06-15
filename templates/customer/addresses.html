@@ -18,7 +18,7 @@
                 <p class="text-muted small">{{ addr.province }}{{ addr.city }}{{ addr.district }} {{ addr.detail }}</p>
                 <div class="d-flex gap-2">
                     <a href="{% url 'address_edit' addr.id %}" class="btn btn-sm btn-outline-primary">编辑</a>
-                    <a href="{% url 'address_delete' addr.id %}" class="btn btn-sm btn-outline-danger" onclick="return confirm('删除该地址？')">删除</a>
+                    <form method="post" action="{% url 'address_delete' addr.id %}" class="d-inline" onsubmit="return confirm('删除该地址？')">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">删除</button></form>
                 </div>
             </div>
         </div>

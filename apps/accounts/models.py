@@ -155,13 +155,18 @@ class Role(models.Model):
         ('production', '生产岗'),
         ('admin', '总管理员'),
     ]
+    VALID_PERMISSIONS = {
+        'order_view', 'order_audit', 'order_production', 'order_ship',
+        'design_layout', 'member_manage', 'factory_manage', 'spec_manage',
+        'subaccount_manage', 'finance_manage',
+    }
     merchant = models.ForeignKey(
         Merchant, on_delete=models.CASCADE, related_name='roles',
         verbose_name='所属商家', null=True, blank=True
     )
     name = models.CharField('角色名称', max_length=50, choices=ROLE_NAME_CHOICES)
     custom_name = models.CharField('自定义名称', max_length=50, blank=True)
-    permissions = models.TextField('权限配置', default='', blank=True)
+    permissions = models.JSONField('权限配置', default=dict, blank=True)
     is_platform_preset = models.BooleanField('是否平台预设', default=False)
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
 
@@ -173,6 +178,20 @@ class Role(models.Model):
     def __str__(self):
         prefix = '[平台]' if self.is_platform_preset else f'[{self.merchant}]'
         return f"{prefix} {self.get_name_display()}"
+
+    def has_permission(self, code):
+        """校验角色是否拥有指定权限码"""
+        if not code or code not in self.VALID_PERMISSIONS:
+            return False
+        perms = self.permissions or {}
+        if not isinstance(perms, dict):
+            return False
+        return bool(perms.get(code))
+
+    def set_permissions(self, codes):
+        """根据权限码列表设置权限，自动过滤非法 key"""
+        valid = {c for c in (codes or []) if c in self.VALID_PERMISSIONS}
+        self.permissions = {c: True for c in valid}
 
 
 class StaffProfile(models.Model):

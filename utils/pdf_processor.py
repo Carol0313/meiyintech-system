@@ -5,11 +5,14 @@ PDF处理工具
 
 import os
 import io
+import logging
 import tempfile
 import fitz
 from PIL import Image
 from django.conf import settings
 from django.core.files.storage import default_storage
+
+logger = logging.getLogger(__name__)
 
 
 def _get_pdf_local_path(file_path):
@@ -33,8 +36,8 @@ def _get_pdf_local_path(file_path):
                 for chunk in f.chunks():
                     tmp.write(chunk)
                 return tmp.name
-        except Exception as e:
-            print(f"[_get_pdf_local_path] 从存储后端读取失败 ({file_path}): {e}")
+        except Exception:
+            logger.exception('从存储后端读取文件失败: %s', file_path)
     return None
 
 
@@ -60,8 +63,8 @@ def calculate_pdf_area(file_path):
         if local_path != file_path and not local_path.startswith(str(settings.MEDIA_ROOT)):
             try:
                 os.unlink(local_path)
-            except:
-                pass
+            except Exception:
+                logger.warning('清理临时PDF文件失败: %s', local_path, exc_info=True)
         return round(area_cm2, 2)
     except Exception as e:
         return 0

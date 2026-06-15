@@ -10,6 +10,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.db import transaction, models
+from django.views.decorators.http import require_POST
 from django.db.models import Sum, Count
 from django.conf import settings
 from django.core.files.storage import default_storage
@@ -30,6 +31,12 @@ def customer_required(view_func):
         if request.user.user_type != 'customer':
             return render(request, 'common/account_unauthorized.html', {
                 'message': '请先以终端用户身份登录',
+                'can_logout': True,
+            })
+        # 账号必须激活且已审核
+        if not request.user.is_active or not request.user.is_approved:
+            return render(request, 'common/account_unauthorized.html', {
+                'message': '账号未启用或未审核通过，请联系商家管理员处理。',
                 'can_logout': True,
             })
         profile = getattr(request.user, 'customer_profile', None)
@@ -399,6 +406,7 @@ def order_step7(request, draft_id):
 
 @login_required
 @customer_required
+@require_POST
 def remove_draft(request, draft_id):
     """移除草稿"""
     session_key = f"order_drafts_{request.user.id}"
@@ -703,6 +711,7 @@ def order_detail(request, order_id):
 
 @login_required
 @customer_required
+@require_POST
 def cancel_order(request, order_id):
     """取消订单（生产前可取消）"""
     order = get_object_or_404(Order, pk=order_id, customer=request.user)
@@ -723,6 +732,7 @@ def cancel_order(request, order_id):
 
 @login_required
 @customer_required
+@require_POST
 def confirm_receipt(request, order_id):
     """用户确认收货"""
     order = get_object_or_404(Order, pk=order_id, customer=request.user, status='shipped')
@@ -782,18 +792,16 @@ def quick_order_upload(request):
             from utils.pdf_processor import generate_pdf_preview
             # 【修复】降低DPI到72，减少处理时间和内存占用
             preview_url = generate_pdf_preview(local_path, preview_filename, dpi=72, black_only=True)
-            print(f"[预览图生成] 结果: {preview_url}, 文件: {file.name}")
-        except Exception as e:
-            import traceback
-            print(f"[预览图生成] 失败: {e}")
-            traceback.print_exc()
+            logger.info('预览图生成成功: %s, 文件: %s', preview_url, file.name)
+        except Exception:
+            logger.exception('预览图生成失败')
 
         # 清理临时文件
         if local_path != os.path.join(settings.MEDIA_ROOT, path):
             try:
                 os.unlink(local_path)
-            except:
-                pass
+            except Exception:
+                logger.warning('清理临时PDF文件失败', exc_info=True)
 
         response_data = {
             'success': True,
@@ -814,8 +822,9 @@ def quick_order_upload(request):
             response_data['boxes'] = box_info['boxes']
 
         return JsonResponse(response_data)
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+    except Exception:
+        logger.exception('单文件上传处理失败')
+        return JsonResponse({'success': False, 'error': '文件处理失败，请稍后重试或联系客服'})
 
 
 @login_required
@@ -858,8 +867,8 @@ def batch_upload_files(request):
             box_info = None
             try:
                 box_info = smart_extract_boxes_for_order(local_path)
-            except Exception as e:
-                print(f"[batch_upload_files] 红框识别失败: {e}")
+            except Exception:
+                logger.exception('批量上传红框识别失败')
 
             # 计算面积（优先使用框尺寸）
             area = _calculate_pdf_area(local_path, box_info)
@@ -876,8 +885,8 @@ def batch_upload_files(request):
                 if os.path.exists(abs_preview):
                     with Image.open(abs_preview) as im:
                         img_width, img_height = im.size
-            except Exception as e:
-                print(f"[batch_upload_files] 预览图生成失败: {e}")
+            except Exception:
+                logger.exception('批量上传预览图生成失败')
 
             # 【修复】将框的PDF点坐标转换为预览图像素坐标
             # 必须在清理临时文件前完成，因为需要读取PDF页面尺寸
@@ -908,8 +917,8 @@ def batch_upload_files(request):
             if local_path != os.path.join(settings.MEDIA_ROOT, path):
                 try:
                     os.unlink(local_path)
-                except:
-                    pass
+                except Exception:
+                    logger.warning('批量上传清理临时PDF文件失败', exc_info=True)
 
             # 组装返回结果
             file_result = {
@@ -927,8 +936,9 @@ def batch_upload_files(request):
                 'boxes': boxes_pixel,
             }
             results.append(file_result)
-        except Exception as e:
-            results.append({'success': False, 'error': str(e), 'file_name': file.name})
+        except Exception:
+            logger.exception('批量上传单文件处理失败: %s', file.name)
+            results.append({'success': False, 'error': '文件处理失败，请稍后重试', 'file_name': file.name})
 
     return JsonResponse({'success': True, 'files': results})
 
@@ -1449,8 +1459,8 @@ def api_pdf_red_boxes(request):
         try:
             # 【修复】降低DPI到72，减少处理时间
             preview_url = generate_pdf_preview(local_path, preview_filename, dpi=72, black_only=True)
-        except Exception as e:
-            print(f"[api_pdf_red_boxes] 预览图生成失败: {e}")
+        except Exception:
+            logger.exception('PDF红框预览图生成失败')
 
         # 获取预览图实际尺寸
         img_width, img_height = 0, 0
@@ -1461,8 +1471,8 @@ def api_pdf_red_boxes(request):
                 if os.path.exists(abs_preview):
                     with Image.open(abs_preview) as im:
                         img_width, img_height = im.size
-            except Exception as e:
-                print(f"[api_pdf_red_boxes] 读取预览图尺寸失败: {e}")
+            except Exception:
+                logger.exception('读取预览图尺寸失败')
 
         # 识别红框（基于 PDF 点坐标）
         doc = fitz.open(local_path)
@@ -1499,8 +1509,8 @@ def api_pdf_red_boxes(request):
         if local_path != os.path.join(settings.MEDIA_ROOT, file_path):
             try:
                 os.unlink(local_path)
-            except:
-                pass
+            except Exception:
+                logger.warning('清理临时PDF文件失败', exc_info=True)
 
         return JsonResponse({
             'success': True,
@@ -1511,10 +1521,9 @@ def api_pdf_red_boxes(request):
             'boxes': box_list,
             'box_count': len(box_list),
         })
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return JsonResponse({'success': False, 'error': str(e)})
+    except Exception:
+        logger.exception('PDF红框识别处理失败')
+        return JsonResponse({'success': False, 'error': '文件处理失败，请稍后重试或联系客服'})
 
 
 @login_required
@@ -1593,8 +1602,8 @@ def api_preview_effect(request):
         if pdf_path != file_path and not pdf_path.startswith(str(settings.MEDIA_ROOT)):
             try:
                 os.unlink(pdf_path)
-            except:
-                pass
+            except Exception:
+                logger.warning('效果预览清理临时PDF文件失败', exc_info=True)
 
         effect_name = get_effect_name(product_name, effect_type or None)
 
@@ -1605,10 +1614,9 @@ def api_preview_effect(request):
             'effect_type': actual_effect_type,
             'effect_name': effect_name,
         })
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return JsonResponse({'success': False, 'error': str(e)})
+    except Exception:
+        logger.exception('版类效果预览处理失败')
+        return JsonResponse({'success': False, 'error': '效果预览生成失败，请稍后重试'})
 
 
 @login_required
@@ -1657,7 +1665,6 @@ def api_preview_3d(request):
             'width': maps['width'],
             'height': maps['height'],
         })
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return JsonResponse({'success': False, 'error': str(e)})
+    except Exception:
+        logger.exception('3D预览贴图生成失败')
+        return JsonResponse({'success': False, 'error': '3D预览生成失败，请稍后重试'})

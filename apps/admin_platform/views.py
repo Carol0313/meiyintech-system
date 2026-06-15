@@ -7,6 +7,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
+from django.views.decorators.http import require_POST
 from apps.accounts.models import User, Merchant, Role
 from apps.orders.models import Order
 from apps.products.models import CustomSpecRequest
@@ -87,6 +88,7 @@ def merchant_reject(request, merchant_id):
 
 @login_required
 @platform_admin_required
+@require_POST
 def merchant_freeze(request, merchant_id):
     """冻结商家"""
     merchant = get_object_or_404(Merchant, pk=merchant_id, status='approved')
@@ -143,7 +145,7 @@ def merchant_add(request):
             merchant.save()
             # 创建默认角色
             for role_name, role_label in Role.ROLE_NAME_CHOICES:
-                Role.objects.create(merchant=merchant, name=role_name, custom_name=role_label, permissions='')
+                Role.objects.create(merchant=merchant, name=role_name, custom_name=role_label, permissions={})
 
         messages.success(request, f'商家 "{name}" 已创建成功，邀请码：{merchant.invite_code}')
         return redirect('admin_merchants')
@@ -182,11 +184,11 @@ def admin_role_edit(request, role_id):
     role = get_object_or_404(Role, pk=role_id, is_platform_preset=True)
     if request.method == 'POST':
         perms = request.POST.getlist('permissions')
-        role.permissions = {p: True for p in perms}
+        role.set_permissions(perms)
         role.save(update_fields=['permissions'])
         # 同步更新所有商家的对应角色
         for mr in Role.objects.filter(name=role.name, is_platform_preset=False):
-            mr.permissions = role.permissions
+            mr.set_permissions(perms)
             mr.save(update_fields=['permissions'])
         messages.success(request, '全局权限已更新，并同步到所有商家')
         return redirect('admin_roles')

@@ -11,11 +11,14 @@
 """
 
 import os
+import logging
 import fitz
 import numpy as np
 from scipy import ndimage
 from PIL import Image, ImageFilter, ImageEnhance, ImageOps, ImageDraw, ImageChops
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 # ========== 版类 → 视觉效果映射 ==========
@@ -565,7 +568,7 @@ def apply_plate_effect(img, effect_type, emboss_direction='up', emboss_strength=
             return func(img, direction=emboss_direction, strength=emboss_strength)
         return func(img)
     except Exception as e:
-        print(f"[plate_preview_effects] 效果处理失败 ({effect_type}): {e}")
+        logger.exception('版类效果处理失败: %s', effect_type)
         return effect_normal(img)
 
 
@@ -606,7 +609,7 @@ def generate_effect_preview(pdf_path, output_path, product_name, plate_type_key=
 
         return output_path
     except Exception as e:
-        print(f"[generate_effect_preview] 生成失败: {e}")
+        logger.exception('生成版类效果图失败')
         return None
 
 
@@ -818,8 +821,6 @@ def generate_3d_preview_maps(pdf_path, output_dir, product_name, plate_type_key=
             'width': img.width,
             'height': img.height,
         }
-    except Exception as e:
-        print(f"[generate_3d_preview_maps] 生成失败: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception('生成3D预览贴图失败')
         return None

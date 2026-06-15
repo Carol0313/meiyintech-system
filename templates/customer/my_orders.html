@@ -372,10 +372,10 @@
         <div class="order-actions">
             <a href="{% url 'order_detail' order.id %}" class="btn btn-sm btn-outline-primary">详情</a>
             {% if order.can_cancel %}
-            <a href="{% url 'cancel_order' order.id %}" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定取消该订单吗？')">取消</a>
+            <form method="post" action="{% url 'cancel_order' order.id %}" class="d-inline" onsubmit="return confirm('确定取消该订单吗？')">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">取消</button></form>
             {% endif %}
             {% if order.status == 'shipped' %}
-            <a href="{% url 'confirm_receipt' order.id %}" class="btn btn-sm btn-success" onclick="return confirm('确认已收到该订单的货物吗？')">确认收货</a>
+            <form method="post" action="{% url 'confirm_receipt' order.id %}" class="d-inline" onsubmit="return confirm('确认已收到该订单的货物吗？')">{% csrf_token %}<button type="submit" class="btn btn-sm btn-success">确认收货</button></form>
             {% endif %}
             {% if order.complaints.exists %}
             <a href="{% url 'complaint_detail' order.complaints.first.id %}" class="btn btn-sm btn-warning">

@@ -11,9 +11,12 @@
 4. 在 .env 中配置 SMS_ACCESS_KEY_ID / SMS_ACCESS_KEY_SECRET / SMS_SIGN_NAME / SMS_TEMPLATE_CODE
 """
 import json
+import logging
 import random
 from django.core.cache import cache
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 try:
     from alibabacloud_dysmsapi20170525.client import Client as DysmsapiClient
@@ -77,7 +80,8 @@ def send_verify_code(phone: str) -> tuple:
             return False, response.body.message or '发送失败'
 
     except Exception as e:
-        return False, f'发送异常: {str(e)}'
+        logger.exception('短信验证码发送失败: phone=%s', phone)
+        return False, '短信发送失败，请稍后重试'
 
 
 def verify_sms_code(phone: str, code: str) -> bool:

@@ -18,6 +18,34 @@ class PhoneLoginForm(AuthenticationForm):
         widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': '请输入密码'})
     )
 
+    def confirm_login_allowed(self, user):
+        """统一登录准入校验：未激活、未审核、商户被冻结均不允许登录"""
+        if not user.is_active:
+            raise forms.ValidationError(
+                '账号已被禁用，请联系管理员。', code='inactive'
+            )
+        if not user.is_approved:
+            raise forms.ValidationError(
+                '账号尚未审核通过，请等待审核后再登录。', code='unapproved'
+            )
+        # 商户管理员/员工需校验商户状态
+        if user.user_type in ('merchant_admin', 'merchant_staff'):
+            merchant = None
+            if user.user_type == 'merchant_admin':
+                merchant = getattr(user, 'managed_merchant', None)
+            else:
+                profile = getattr(user, 'staff_profile', None)
+                if profile:
+                    merchant = profile.merchant
+            if not merchant:
+                raise forms.ValidationError(
+                    '账号未关联有效商家，请联系平台管理员。', code='no_merchant'
+                )
+            if merchant.status != 'approved':
+                raise forms.ValidationError(
+                    '商家未通过审核或已被冻结，暂无法登录。', code='merchant_not_approved'
+                )
+
 
 class CustomerRegisterForm(forms.ModelForm):
     """终端用户注册表单"""

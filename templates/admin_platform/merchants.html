@@ -31,7 +31,7 @@
                         <form method="post" action="{% url 'merchant_reject' m.id %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm btn-danger">拒绝</button></form>
                         {% elif m.status == 'approved' %}
                         <a href="{% url 'merchant_edit' m.id %}" class="btn btn-sm btn-outline-primary">编辑</a>
-                        <a href="{% url 'merchant_freeze' m.id %}" class="btn btn-sm btn-outline-warning" onclick="return confirm('冻结该商家？')">冻结</a>
+                        <form method="post" action="{% url 'merchant_freeze' m.id %}" class="d-inline" onsubmit="return confirm('冻结该商家？')">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-warning">冻结</button></form>
                         {% endif %}
                     </td>
                 </tr>
