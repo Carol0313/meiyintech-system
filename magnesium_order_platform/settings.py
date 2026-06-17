@@ -62,19 +62,27 @@ if DEBUG:
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 # 生产环境必须配置CSRF可信来源（HTTPS部署时）
-CSRF_TRUSTED_ORIGINS = os.environ.get(
-    'CSRF_TRUSTED_ORIGINS',
-    'http://127.0.0.1,http://localhost,http://www.zhibanhome.com,https://www.zhibanhome.com'
-).split(',')
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        'CSRF_TRUSTED_ORIGINS',
+        'http://127.0.0.1,http://localhost,http://www.zhibanhome.com,https://www.zhibanhome.com'
+    ).split(',')
+    if o.strip()
+]
 
-# 生产环境安全设置
+# 备案期间用 IP + HTTP 访问时设为 false；域名 HTTPS 上线后改为 true
+USE_HTTPS = os.environ.get('DJANGO_USE_HTTPS', 'true' if not DEBUG else 'false').lower() in ('true', '1', 'yes')
+
+# 生产环境安全设置（仅 HTTPS 模式启用，HTTP 访问时须关闭否则无法登录）
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    if USE_HTTPS:
+        SECURE_SSL_REDIRECT = True
+        SESSION_COOKIE_SECURE = True
+        CSRF_COOKIE_SECURE = True
+        SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     # HSTS 谨慎启用：先短 TTL 灰度，验证无 mixed-content 后再提升
     # SECURE_HSTS_SECONDS = 300
     # SECURE_HSTS_INCLUDE_SUBDOMAINS = True

@@ -254,6 +254,15 @@
                 <div class="login-brand-subtitle">千厂资源一键触达，制版从未如此简单</div>
             </div>
 
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show mb-3" role="alert" style="font-size:14px;">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
             <!-- 登录方式切换 -->
             <div class="login-tabs">
                 <div class="login-tab {% if login_mode != 'phone' %}active{% endif %}" onclick="switchTab('password')" id="tab-password">账号密码登录</div>
