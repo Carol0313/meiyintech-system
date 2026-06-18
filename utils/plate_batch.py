@@ -582,6 +582,93 @@ def generate_plate_image(plate_result, output_filename=None, dpi=150, use_plate_
     return rel_path, url
 
 
+def persist_plate_batch(merchant, product_name, material, thickness, plate, algorithm='maxrects', use_plate_file=False):
+    """
+    将 pack_rects_into_plates 的单张版结果写入 PlateBatch / PlateBatchItem。
+    返回 PlateBatch 实例。
+    """
+    spec = plate['spec']
+    placed = plate['placed']
+    if not placed:
+        return None
+
+    layout_data = {
+        'plate_width': spec['width'],
+        'plate_height': spec['height'],
+        'plate_spec_name': spec['name'],
+        'placed_count': len(placed),
+        'usage_rate': plate.get('usage_rate', 0),
+        'algorithm': algorithm,
+        'rectangles': [
+            {
+                'id': r['id'],
+                'x': r['x'],
+                'y': r['y'],
+                'width': r['orig_width'],
+                'height': r['orig_height'],
+                'rotation': 0,
+                'label': r['label'],
+                'order_sn': r['order_sn'],
+                'customer_phone': str(r['customer_phone']),
+            }
+            for r in placed
+        ],
+    }
+
+    import uuid
+    img_filename = f"batch_{uuid.uuid4().hex[:12]}.png"
+    img_rel_path, _img_url = generate_plate_image(plate, output_filename=img_filename, use_plate_file=use_plate_file)
+
+    batch = PlateBatch.objects.create(
+        merchant=merchant,
+        product_name=product_name,
+        material=material,
+        thickness=thickness,
+        plate_spec_name=spec['name'],
+        plate_width=spec['width'],
+        plate_height=spec['height'],
+        layout_data=json.dumps(layout_data, ensure_ascii=False),
+        usage_rate=plate.get('usage_rate', 0),
+        status='auto_generated',
+    )
+
+    if img_rel_path:
+        abs_path = os.path.join(settings.MEDIA_ROOT, img_rel_path)
+        with open(abs_path, 'rb') as f:
+            batch.layout_image.save(img_filename, ContentFile(f.read()), save=True)
+
+    from utils.plate_pdf import generate_plate_production_pdf
+    pdf_filename = f"batch_{uuid.uuid4().hex[:12]}_production.pdf"
+    pdf_rel_path, _pdf_url = generate_plate_production_pdf(batch, output_filename=pdf_filename)
+    if pdf_rel_path:
+        pdf_abs_path = os.path.join(settings.MEDIA_ROOT, pdf_rel_path)
+        with open(pdf_abs_path, 'rb') as f:
+            batch.production_pdf.save(pdf_filename, ContentFile(f.read()), save=True)
+
+    affected_orders = set()
+    for r in placed:
+        item = r['original_item']
+        PlateBatchItem.objects.create(
+            plate_batch=batch,
+            order=item.order,
+            order_item=item,
+            x=r['x'],
+            y=r['y'],
+            width=r['orig_width'],
+            height=r['orig_height'],
+            rotation=0,
+        )
+        item.plate_batch = batch
+        item.save(update_fields=['plate_batch'])
+        affected_orders.add(item.order)
+
+    for order in affected_orders:
+        order.plate_status = 'auto_generated'
+        order.save(update_fields=['plate_status'])
+
+    return batch
+
+
 def auto_generate_plate_batches(merchant, algorithm='maxrects', dry_run=False):
     """
     为商户自动跨订单拼版
@@ -627,41 +714,32 @@ def auto_generate_plate_batches(merchant, algorithm='maxrects', dry_run=False):
             if not placed:
                 continue
 
-            # 生成布局数据 JSON
-            layout_data = {
-                'plate_width': spec['width'],
-                'plate_height': spec['height'],
-                'plate_spec_name': spec['name'],
-                'placed_count': len(placed),
-                'usage_rate': plate.get('usage_rate', 0),
-                'algorithm': algorithm,
-                'rectangles': [
-                    {
-                        'id': r['id'],
-                        'x': r['x'],
-                        'y': r['y'],
-                        'width': r['orig_width'],
-                        'height': r['orig_height'],
-                        'rotation': 0,
-                        'label': r['label'],
-                        'order_sn': r['order_sn'],
-                        'customer_phone': str(r['customer_phone']),
-                    }
-                    for r in placed
-                ],
-            }
-
-            # 生成效果图
-            import uuid
-            img_filename = f"batch_{uuid.uuid4().hex[:12]}.png"
-            img_rel_path, img_url = generate_plate_image(plate, output_filename=img_filename)
-
-            # 生成生产PDF
-            from utils.plate_pdf import generate_plate_production_pdf
-            pdf_filename = f"batch_{uuid.uuid4().hex[:12]}_production.pdf"
-            pdf_rel_path, pdf_url = None, None
-
             if dry_run:
+                layout_data = {
+                    'plate_width': spec['width'],
+                    'plate_height': spec['height'],
+                    'plate_spec_name': spec['name'],
+                    'placed_count': len(placed),
+                    'usage_rate': plate.get('usage_rate', 0),
+                    'algorithm': algorithm,
+                    'rectangles': [
+                        {
+                            'id': r['id'],
+                            'x': r['x'],
+                            'y': r['y'],
+                            'width': r['orig_width'],
+                            'height': r['orig_height'],
+                            'rotation': 0,
+                            'label': r['label'],
+                            'order_sn': r['order_sn'],
+                            'customer_phone': str(r['customer_phone']),
+                        }
+                        for r in placed
+                    ],
+                }
+                import uuid
+                img_filename = f"batch_{uuid.uuid4().hex[:12]}.png"
+                img_rel_path, img_url = generate_plate_image(plate, output_filename=img_filename)
                 results.append({
                     'batch': {
                         'product_name': product_name,
@@ -680,62 +758,16 @@ def auto_generate_plate_batches(merchant, algorithm='maxrects', dry_run=False):
                 })
                 continue
 
-            # 创建 PlateBatch
-            batch = PlateBatch.objects.create(
-                merchant=merchant,
-                product_name=product_name,
-                material=material,
-                thickness=thickness,
-                plate_spec_name=spec['name'],
-                plate_width=spec['width'],
-                plate_height=spec['height'],
-                layout_data=json.dumps(layout_data, ensure_ascii=False),
-                usage_rate=plate.get('usage_rate', 0),
-                status='auto_generated',
+            batch = persist_plate_batch(
+                merchant, product_name, material, thickness, plate,
+                algorithm=algorithm, use_plate_file=False,
             )
-
-            # 保存图片
-            abs_path = os.path.join(settings.MEDIA_ROOT, img_rel_path)
-            with open(abs_path, 'rb') as f:
-                batch.layout_image.save(img_filename, ContentFile(f.read()), save=True)
-
-            # 保存生产PDF
-            pdf_rel_path, pdf_url = generate_plate_production_pdf(batch, output_filename=pdf_filename)
-            if pdf_rel_path:
-                pdf_abs_path = os.path.join(settings.MEDIA_ROOT, pdf_rel_path)
-                with open(pdf_abs_path, 'rb') as f:
-                    batch.production_pdf.save(pdf_filename, ContentFile(f.read()), save=True)
-
-            # 创建 PlateBatchItem 并更新 OrderItem
-            batch_items = []
-            affected_orders = set()
-            for r in placed:
-                item = r['original_item']
-                pbi = PlateBatchItem.objects.create(
-                    plate_batch=batch,
-                    order=item.order,
-                    order_item=item,
-                    x=r['x'],
-                    y=r['y'],
-                    width=r['orig_width'],
-                    height=r['orig_height'],
-                    rotation=0,
-                )
-                batch_items.append(pbi)
-                # 更新 OrderItem 的 plate_batch 外键
-                item.plate_batch = batch
-                item.save(update_fields=['plate_batch'])
-                affected_orders.add(item.order)
-
-            # 更新订单拼版状态
-            for order in affected_orders:
-                order.plate_status = 'auto_generated'
-                order.save(update_fields=['plate_status'])
+            batch_items = list(batch.items.all()) if batch else []
 
             results.append({
                 'batch': batch,
                 'items': batch_items,
-                'image_url': batch.layout_image.url if batch.layout_image else '',
+                'image_url': batch.layout_image.url if batch and batch.layout_image else '',
             })
 
     return results

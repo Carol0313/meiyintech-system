@@ -187,6 +187,9 @@ def my_addresses(request):
 @login_required
 def address_add(request):
     """添加地址"""
+    if request.user.user_type != 'customer':
+        messages.error(request, '无权访问')
+        return redirect('/')
     if request.method == 'POST':
         form = AddressForm(request.POST)
         if form.is_valid():
@@ -203,6 +206,9 @@ def address_add(request):
 @login_required
 def address_edit(request, pk):
     """编辑地址"""
+    if request.user.user_type != 'customer':
+        messages.error(request, '无权访问')
+        return redirect('/')
     addr = get_object_or_404(Address, pk=pk, user=request.user)
     if request.method == 'POST':
         form = AddressForm(request.POST, instance=addr)
@@ -219,6 +225,9 @@ def address_edit(request, pk):
 @require_POST
 def address_delete(request, pk):
     """删除地址"""
+    if request.user.user_type != 'customer':
+        messages.error(request, '无权访问')
+        return redirect('/')
     addr = get_object_or_404(Address, pk=pk, user=request.user)
     addr.delete()
     messages.success(request, '地址已删除')

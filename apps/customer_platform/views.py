@@ -628,14 +628,9 @@ def my_orders(request):
         order_count=Count('order', distinct=True),
         total_qty=Sum('quantity')
     ).order_by('-total_qty')[:5]
-    from apps.products.models import ProductSpec
-    product_name_map = {p[0]: p[1] for p in ProductSpec.PRODUCT_NAME_CHOICES}
-    # 兼容旧数据中的非标准值
-    extra_name_map = {
-        'pingdiao': '雕刻版 - 平雕版',
-    }
+    from utils.product_labels import get_product_display_name
     for s in product_stats:
-        s['label'] = product_name_map.get(s['product_name']) or extra_name_map.get(s['product_name'], s['product_name'])
+        s['label'] = get_product_display_name(s['product_name'])
 
     # 状态分组统计
     status_stats = {
@@ -1445,6 +1440,11 @@ def api_pdf_red_boxes(request):
     if not file_path:
         return JsonResponse({'success': False, 'error': '缺少文件路径'})
 
+    from utils.file_access import assert_customer_file_path
+    ok, err = assert_customer_file_path(request.user, file_path)
+    if not ok:
+        return JsonResponse({'success': False, 'error': err})
+
     try:
         from utils.pdf_processor import _get_pdf_local_path, generate_pdf_preview
         from utils.pdf_red_box import find_colored_rectangles
@@ -1549,6 +1549,11 @@ def api_preview_effect(request):
     if not product_name:
         return JsonResponse({'success': False, 'error': '缺少产品类型'})
 
+    from utils.file_access import assert_customer_file_path
+    ok, err = assert_customer_file_path(request.user, file_path)
+    if not ok:
+        return JsonResponse({'success': False, 'error': err})
+
     try:
         import fitz
         from PIL import Image
@@ -1640,6 +1645,11 @@ def api_preview_3d(request):
         return JsonResponse({'success': False, 'error': '缺少文件路径'})
     if not product_name:
         return JsonResponse({'success': False, 'error': '缺少产品类型'})
+
+    from utils.file_access import assert_customer_file_path
+    ok, err = assert_customer_file_path(request.user, file_path)
+    if not ok:
+        return JsonResponse({'success': False, 'error': err})
 
     try:
         from utils.plate_preview_effects import generate_3d_preview_maps

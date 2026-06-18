@@ -24,6 +24,7 @@ from apps.orders.models import Order, OrderItem, CommunicationLog, OrderStatusLo
 from apps.products.models import ProductSpec, CustomSpecRequest
 from .models import Factory, FactoryEquipmentStatus, FactoryInventory
 from utils.plate_layout import calculate_plate_layout, calculate_plate_layout_rectpack, auto_generate_plate_layout_for_order
+from .permissions import staff_permission
 
 
 def merchant_required(view_func):
@@ -72,12 +73,14 @@ def merchant_required(view_func):
 
 
 def merchant_admin_required(view_func):
-    """仅商家总管理员"""
+    """仅商家总管理员（须先通过 merchant_required 校验）"""
+    @merchant_required
     def wrapper(request, *args, **kwargs):
-        if not request.user.is_authenticated or request.user.user_type != 'merchant_admin':
+        if request.user.user_type != 'merchant_admin':
             messages.error(request, '仅商家管理员可操作')
             return redirect('merchant_dashboard')
         return view_func(request, *args, **kwargs)
+    wrapper.__name__ = view_func.__name__
     return wrapper
 
 
@@ -505,6 +508,7 @@ def member_pricing(request, profile_id):
 
 @login_required
 @merchant_required
+@staff_permission('member_manage')
 def member_approve(request, profile_id):
     """审核通过会员（保留入口，供直接调用）"""
     merchant = get_merchant(request)
@@ -521,6 +525,7 @@ def member_approve(request, profile_id):
 
 @login_required
 @merchant_required
+@staff_permission('member_manage')
 def member_reject(request, profile_id):
     """拒绝会员注册"""
     merchant = get_merchant(request)
@@ -535,6 +540,7 @@ def member_reject(request, profile_id):
 
 @login_required
 @merchant_required
+@staff_permission('member_manage')
 def member_adjust_credit(request, profile_id):
     """调整会员信用额度"""
     merchant = get_merchant(request)
@@ -1209,6 +1215,7 @@ def upload_production_photo(request, order_id):
 
 @login_required
 @merchant_required
+@staff_permission('order_audit')
 def batch_process_orders(request):
     """批量处理订单（二级页面）：支持审核、拼版确认、安排生产、上传文件"""
     merchant = get_merchant(request)
@@ -2100,6 +2107,7 @@ def remake_order_create(request, order_id):
 
 @login_required
 @merchant_required
+@staff_permission('finance_manage')
 def statement_list(request):
     """商户：对账单列表"""
     merchant = get_merchant(request)
@@ -2123,6 +2131,7 @@ def statement_list(request):
 
 @login_required
 @merchant_required
+@staff_permission('finance_manage')
 def statement_detail(request, statement_id):
     """商户：对账单详情"""
     merchant = get_merchant(request)
@@ -2135,6 +2144,7 @@ def statement_detail(request, statement_id):
 
 @login_required
 @merchant_required
+@staff_permission('finance_manage')
 @transaction.atomic
 def statement_generate(request):
     """商户：手动生成对账单（汇总客户未结清的已收货订单）"""
@@ -2545,6 +2555,7 @@ def statement_export(request, statement_id):
 
 @login_required
 @merchant_required
+@staff_permission('design_layout')
 def plate_batch_list(request):
     """拼版批次列表页"""
     merchant = get_merchant(request)
@@ -2605,6 +2616,7 @@ def plate_batch_generate(request):
 
 @login_required
 @merchant_required
+@staff_permission('design_layout')
 def plate_batch_detail(request, batch_id):
     """拼版批次详情/工作台（支持拖拽微调）"""
     merchant = get_merchant(request)
@@ -2623,7 +2635,8 @@ def plate_batch_detail(request, batch_id):
     # 重新生成建议（如果点击了重新计算）
     suggestion = None
     if request.GET.get('recalculate') == '1' and batch.status == 'auto_generated':
-        from utils.plate_batch import build_rects_from_items, pack_rects_into_plates, get_spacing_mm
+        from utils.plate_type_rules import get_spacing_mm
+        from utils.plate_batch import build_rects_from_items, pack_rects_into_plates
         batch_items = [bi.order_item for bi in batch.items.all()]
         if batch_items:
             spacing = get_spacing_mm(batch.thickness, batch.thickness, batch.material, batch.material)
@@ -3105,23 +3118,21 @@ def download_plate_batch_file(request, batch_id, field_name):
     """
     安全下载拼版批次文件（production_pdf 或 layout_image）
     """
-    try:
-        merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
-    except AttributeError:
+    ALLOWED_FIELDS = {'production_pdf', 'layout_image'}
+    if field_name not in ALLOWED_FIELDS:
+        messages.error(request, '无效的文件类型')
+        return redirect('merchant_dashboard')
+
+    merchant = get_merchant(request)
+    if not merchant:
         messages.error(request, '无权访问')
         return redirect('merchant_dashboard')
 
-    batch = get_object_or_404(PlateBatch, id=batch_id)
-    # 通过批次关联的订单验证商家权限
-    batch_item = batch.items.first()
-    if not batch_item or batch_item.order.merchant != merchant:
-        messages.error(request, '无权访问该文件')
-        return redirect('merchant_dashboard')
-
+    batch = get_object_or_404(PlateBatch, id=batch_id, merchant=merchant)
     file_field = getattr(batch, field_name, None)
     if not file_field:
         messages.error(request, '文件不存在')
-        return redirect('merchant_dashboard')
+        return redirect('plate_batch_detail', batch_id=batch.id)
 
     try:
         with file_field.open('rb') as f:
@@ -3280,6 +3291,7 @@ def download_plate_file(request, order_id, item_id):
 
 @login_required
 @merchant_required
+@staff_permission('design_layout')
 def pending_layout_orders(request):
     """
     待拼版页面（合并原拼版工具功能）
@@ -3375,6 +3387,7 @@ def pending_layout_orders(request):
 
 @login_required
 @merchant_required
+@staff_permission('design_layout')
 def create_plate_batch(request):
     """
     从勾选的订单项创建拼版批次
@@ -3384,133 +3397,81 @@ def create_plate_batch(request):
     """
     if request.method != 'POST':
         return redirect('pending_layout_orders')
-    
-    try:
-        merchant = request.user.managed_merchant if request.user.user_type == 'merchant_admin' else request.user.staff_profile.merchant
-    except AttributeError:
+
+    merchant = get_merchant(request)
+    if not merchant:
         messages.error(request, '无权访问')
         return redirect('merchant_dashboard')
-    
+
     item_ids = request.POST.getlist('item_ids')
     algorithm = request.POST.get('algorithm', 'maxrects')
-    
+
     if not item_ids:
         messages.error(request, '请至少选择一个订单项进行拼版')
         return redirect('pending_layout_orders')
-    
-    # 获取并验证订单项
+
     items = OrderItem.objects.filter(
         id__in=item_ids,
         order__merchant=merchant,
         plate_file__isnull=False,
-    ).select_related('order')
-    
+    ).exclude(plate_file='').select_related('order')
+
     if not items.exists():
         messages.error(request, '所选订单项无效或没有制版文件')
         return redirect('pending_layout_orders')
-    
-    # 检查是否属于同一分组（product_name, material, thickness）
+
     first_item = items.first()
-    expected_key = (first_item.product_name, first_item.material, first_item.thickness)
-    
+    product_name = first_item.product_name
+    material = first_item.material
+    thickness = first_item.thickness
+
     for item in items:
-        actual_key = (item.product_name, item.material, item.thickness)
-        if actual_key != expected_key:
+        if (item.product_name, item.material, item.thickness) != (product_name, material, thickness):
             messages.error(request, '请选择相同产品类型、材质和厚度的订单项进行拼版')
             return redirect('pending_layout_orders')
-    
+        if item.plate_batch and item.plate_batch.status == 'confirmed':
+            messages.error(request, f'订单 {item.order.sn} 已确认拼版，无法重复拼版')
+            return redirect('pending_layout_orders')
+
     try:
-        # 调用拼版算法
-        from utils.plate_batch import build_rects_from_items, pack_rects_into_plates, get_spacing_mm, generate_plate_image, generate_plate_production_pdf
-        
-        # 计算间距（同组内所有项间距相同）
-        spacing_mm = get_spacing_mm(
-            first_item.thickness, first_item.thickness,
-            first_item.material, first_item.material
-        )
-        
-        # 构建矩形列表
+        from utils.plate_type_rules import get_spacing_mm
+        from utils.plate_batch import build_rects_from_items, pack_rects_into_plates, persist_plate_batch
+
+        spacing_mm = get_spacing_mm(thickness, thickness, material, material)
         rects = build_rects_from_items(items, spacing_mm=spacing_mm)
-        
         if not rects:
             messages.error(request, '无法构建拼版矩形，请检查订单项尺寸')
             return redirect('pending_layout_orders')
-        
-        # 执行拼版
+
         plates = pack_rects_into_plates(rects, algorithm=algorithm)
-        
         if not plates:
             messages.error(request, '拼版失败，无法放置所有矩形')
             return redirect('pending_layout_orders')
-        
-        # 创建 PlateBatch
-        from apps.orders.models import PlateBatch, PlateBatchItem
-        
-        batch = PlateBatch.objects.create(
-            merchant=merchant,
-            status='auto_generated',
-            algorithm=algorithm,
-            plate_spec=plates[0]['spec']['name'] if plates else '',
-            usage_rate=plates[0]['usage_rate'] if plates else 0,
-        )
-        
-        # 创建 PlateBatchItem 关联
-        for item in items:
-            PlateBatchItem.objects.create(
-                batch=batch,
-                order=item.order,
-                order_item=item,
-            )
-            # 更新订单项关联的批次
-            item.plate_batch = batch
-            item.save(update_fields=['plate_batch'])
-        
-        # 构建 layout_data
-        layout_data = {
-            'plates': []
-        }
+
+        created_batches = []
+        total_unplaced = 0
         for plate in plates:
-            plate_data = {
-                'spec': plate['spec'],
-                'usage_rate': plate['usage_rate'],
-                'items': []
-            }
-            for placed in plate['placed']:
-                plate_data['items'].append({
-                    'item_id': placed.get('original_item', {}).id if placed.get('original_item') else '',
-                    'x': placed['x'],
-                    'y': placed['y'],
-                    'width': placed['orig_width'],
-                    'height': placed['orig_height'],
-                    'rotation': 0,
-                    'order_sn': placed.get('order_sn', ''),
-                })
-            layout_data['plates'].append(plate_data)
-        
-        batch.layout_data = json.dumps(layout_data, ensure_ascii=False)
-        batch.save(update_fields=['layout_data'])
-        
-        # 生成拼版效果图和生产PDF
-        try:
-            # 使用制版文件生成效果图
-            image_path = generate_plate_image(batch, use_plate_file=True)
-            if image_path:
-                batch.layout_image = image_path
-                batch.save(update_fields=['layout_image'])
-        except Exception:
-            logger.exception('拼版效果图生成失败')
-        
-        try:
-            pdf_path = generate_plate_production_pdf(batch, use_plate_file=True)
-            if pdf_path:
-                batch.production_pdf = pdf_path
-                batch.save(update_fields=['production_pdf'])
-        except Exception:
-            logger.exception('生产PDF生成失败')
-        
-        messages.success(request, f'拼版批次创建成功！共 {len(plates)} 张版，利用率 {plates[0]["usage_rate"]:.1%}')
-        return redirect('plate_batch_detail', batch_id=batch.id)
-        
+            if not plate.get('placed'):
+                continue
+            total_unplaced += len(plate.get('unplaced', []))
+            batch = persist_plate_batch(
+                merchant, product_name, material, thickness, plate,
+                algorithm=algorithm, use_plate_file=True,
+            )
+            if batch:
+                created_batches.append(batch)
+
+        if not created_batches:
+            messages.error(request, '拼版失败，未能生成批次')
+            return redirect('pending_layout_orders')
+
+        usage = created_batches[0].usage_rate or 0
+        msg = f'拼版成功！共 {len(created_batches)} 张版，首张利用率 {usage:.1f}%'
+        if total_unplaced:
+            msg += f'（{total_unplaced} 件未能放置，请减少数量或换更大板材）'
+        messages.success(request, msg)
+        return redirect('plate_batch_detail', batch_id=created_batches[0].id)
+
     except Exception:
         logger.exception('拼版批次创建失败')
         messages.error(request, '拼版失败，请稍后重试或联系客服')

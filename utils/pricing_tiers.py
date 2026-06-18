@@ -7,6 +7,19 @@
 
 from decimal import Decimal
 
+# 旧版 product_name → 当前定价/版类使用的编码
+LEGACY_PRODUCT_ALIASES = {
+    'etching_bump_set': 'etching_double_sided_magnesium_bump',
+    'carving_flat_gold': 'carving_flat_convex',
+    'carving_flat_bump': 'carving_flat_concave',
+    'carving_relief_gold_bump': 'carving_relief_bump_gold',
+    'carving_relief_bump_set': 'carving_relief_complex',
+    'pingdiao': 'carving_flat_convex',
+    'fudiao': 'carving_relief_bump_gold',
+    'duoceng': 'carving_relief_multi_bump_gold',
+    'shike': 'etching_convex',
+}
+
 # ========== 产品分类 ==========
 # 腐蚀版产品列表（按档位定价）
 ETCHING_PRODUCTS = [
@@ -135,9 +148,16 @@ PROVINCE_CHOICES = sorted(PROVINCE_TIER_MAP.keys())
 
 # ========== 查询函数 ==========
 
+def resolve_product_code(product_name):
+    """将旧版 product_name 映射为当前体系编码。"""
+    if not product_name:
+        return product_name
+    return LEGACY_PRODUCT_ALIASES.get(product_name, product_name)
+
+
 def is_etching_product(product_name):
     """判断是否为腐蚀版产品（按档位定价）"""
-    return product_name in ETCHING_PRODUCTS
+    return resolve_product_code(product_name) in ETCHING_PRODUCTS
 
 
 def get_etching_price(tier_level, thickness):
@@ -148,6 +168,7 @@ def get_etching_price(tier_level, thickness):
 
 def get_carving_price(product_name, material, thickness):
     """雕刻版/树脂版/菲林：根据产品、材质、厚度获取固定单价"""
+    product_name = resolve_product_code(product_name)
     try:
         return CARVING_PRICE_TABLE[product_name][material][str(thickness)]
     except KeyError:
@@ -182,13 +203,14 @@ def get_all_specs():
 
 def get_product_category(product_name):
     """获取产品大类"""
-    if product_name in ETCHING_PRODUCTS:
+    code = resolve_product_code(product_name)
+    if code in ETCHING_PRODUCTS:
         return '腐蚀版'
-    if product_name.startswith('carving'):
+    if code.startswith('carving'):
         return '雕刻版'
-    if product_name.startswith('resin'):
+    if code.startswith('resin'):
         return '树脂版'
-    if product_name.startswith('film'):
+    if code.startswith('film'):
         return '菲林'
     return '其他'
 
@@ -196,6 +218,7 @@ def get_product_category(product_name):
 def get_customer_price(profile, product_name, material, thickness):
     """获取客户实际单价：优先使用商户自定义价格，否则使用标准价格"""
     import json
+    product_name = resolve_product_code(product_name)
     try:
         custom_prices = json.loads(profile.custom_prices or '{}')
     except Exception:

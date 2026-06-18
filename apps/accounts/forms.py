@@ -173,8 +173,12 @@ class AddressForm(forms.ModelForm):
 
 
 class ForgetPasswordForm(forms.Form):
-    """忘记密码表单"""
+    """忘记密码表单（需短信验证码）"""
     phone = forms.CharField(label='手机号', max_length=20, widget=forms.TextInput(attrs={'class': 'form-control'}))
+    verify_code = forms.CharField(
+        label='短信验证码', max_length=6,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '6位验证码'}),
+    )
     new_password = forms.CharField(label='新密码', min_length=6, widget=forms.PasswordInput(attrs={'class': 'form-control'}))
     new_password_confirm = forms.CharField(label='确认新密码', widget=forms.PasswordInput(attrs={'class': 'form-control'}))
 
@@ -188,4 +192,10 @@ class ForgetPasswordForm(forms.Form):
         cleaned = super().clean()
         if cleaned.get('new_password') != cleaned.get('new_password_confirm'):
             raise forms.ValidationError('两次输入的密码不一致')
+        phone = cleaned.get('phone')
+        code = cleaned.get('verify_code')
+        if phone and code:
+            from utils.sms import verify_sms_code
+            if not verify_sms_code(phone, code):
+                raise forms.ValidationError('验证码错误或已过期')
         return cleaned

@@ -12,3 +12,4 @@ matplotlib>=3.7
 # 阿里云 OSS 存储（可选，取消注释 settings.py 中 DEFAULT_FILE_STORAGE 后启用）
 django-storages>=1.14
 oss2>=2.18
+python-dotenv>=1.0

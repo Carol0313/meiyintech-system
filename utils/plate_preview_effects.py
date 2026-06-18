@@ -60,6 +60,8 @@ PRODUCT_TO_PLATE_TYPE = {
 def get_effect_type(product_name, plate_type_key=None):
     if plate_type_key:
         return PLATE_EFFECT_MAP.get(plate_type_key, 'normal')
+    from utils.pricing_tiers import resolve_product_code
+    product_name = resolve_product_code(product_name)
     pt = PRODUCT_TO_PLATE_TYPE.get(product_name)
     return PLATE_EFFECT_MAP.get(pt, 'normal')
 

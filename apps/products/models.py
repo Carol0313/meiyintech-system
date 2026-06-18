@@ -68,6 +68,10 @@ class ProductSpec(models.Model):
     def __str__(self):
         return f"{self.get_product_name_display()} {self.get_material_display()} {self.thickness}mm ¥{self.unit_price}"
 
+    def get_product_name_display(self):
+        from utils.product_labels import get_product_display_name
+        return get_product_display_name(self.product_name)
+
 
 class CustomSpecRequest(models.Model):
     """非标规格开通申请"""

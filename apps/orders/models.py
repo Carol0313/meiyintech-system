@@ -317,6 +317,10 @@ class OrderItem(models.Model):
     def __str__(self):
         return f"{self.get_product_name_display()} {self.get_material_display()} {self.thickness}mm"
 
+    def get_product_name_display(self):
+        from utils.product_labels import get_product_display_name
+        return get_product_display_name(self.product_name)
+
     def save(self, *args, **kwargs):
         from utils.pricing_tiers import is_etching_product
         import json
@@ -460,6 +464,10 @@ class PlateBatch(models.Model):
 
     def __str__(self):
         return f"拼版批次 {self.id.hex[:8]} ({self.plate_spec_name})"
+
+    def get_product_name_display(self):
+        from utils.product_labels import get_product_display_name
+        return get_product_display_name(self.product_name)
 
 
 class PlateBatchItem(models.Model):
