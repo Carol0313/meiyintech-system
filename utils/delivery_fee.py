@@ -129,6 +129,36 @@ NANTONG_DEST_MAP = {
 }
 
 
+def _normalize_province(province: str) -> str:
+    """清洗省份名称，去除'市'、'省'后缀，统一格式"""
+    if not province:
+        return ''
+    province = province.strip()
+    # 去除'市'后缀：上海市 -> 上海，北京市 -> 北京
+    if province.endswith('市'):
+        province = province[:-1]
+    # 去除'省'后缀：广东省 -> 广东
+    if province.endswith('省'):
+        province = province[:-1]
+    # 处理自治区：广西壮族自治区 -> 广西，内蒙古自治区 -> 内蒙古（内蒙古本身不带后缀）
+    # 处理特别行政区：香港特别行政区 -> 香港
+    if province.endswith('特别行政区'):
+        province = province[:-5]
+    if province.endswith('自治区'):
+        # 新疆维吾尔自治区 -> 新疆，西藏自治区 -> 西藏，宁夏回族自治区 -> 宁夏，广西壮族自治区 -> 广西，内蒙古自治区 -> 内蒙古
+        if '新疆' in province:
+            province = '新疆'
+        elif '西藏' in province:
+            province = '西藏'
+        elif '宁夏' in province:
+            province = '宁夏'
+        elif '广西' in province:
+            province = '广西'
+        elif '内蒙古' in province:
+            province = '内蒙古'
+    return province
+
+
 def select_factory(customer_province: str) -> str:
     """
     根据客户省份选择最近的发货工厂
@@ -139,6 +169,9 @@ def select_factory(customer_province: str) -> str:
     Returns:
         工厂代码: 'guangzhou' 或 'nantong'
     """
+    # 清洗省份名称
+    customer_province = _normalize_province(customer_province)
+    
     # 如果客户在广东省，一定从广州发
     if customer_province == '广东':
         return 'guangzhou'
@@ -200,6 +233,9 @@ def calculate_delivery_fee(
             'note': '顺丰标快参考价，实际以收派员确认为准',
         }
     """
+    # 清洗省份名称
+    customer_province = _normalize_province(customer_province)
+    
     # 选择工厂
     if factory is None:
         factory = select_factory(customer_province)

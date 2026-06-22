@@ -587,14 +587,14 @@ function renderSpecGroup(id) {
                     <i class="fa-solid fa-circle-info"></i> 金属材料上机加热会有一定膨胀，建议提前缩放补偿
                 </div>
                 <div class="d-flex flex-wrap gap-2 mb-2">
-                    <label class="scale-option active" data-group="${id}" data-value="100">
-                        <input type="radio" name="scale_ratio_${id}" value="100" checked> 不缩放 (100%)
+                    <label class="scale-option active" data-group="${id}" data-value="100" for="scale_ratio_${id}_100">
+                        <input type="radio" name="scale_ratio_${id}" value="100" checked id="scale_ratio_${id}_100"> 不缩放 (100%)
                     </label>
-                    <label class="scale-option" data-group="${id}" data-value="99.75">
-                        <input type="radio" name="scale_ratio_${id}" value="99.75"> 系统推荐 (99.75%)
+                    <label class="scale-option" data-group="${id}" data-value="99.75" for="scale_ratio_${id}_99_75">
+                        <input type="radio" name="scale_ratio_${id}" value="99.75" id="scale_ratio_${id}_99_75"> 系统推荐 (99.75%)
                     </label>
-                    <label class="scale-option" data-group="${id}" data-value="custom">
-                        <input type="radio" name="scale_ratio_${id}" value="custom"> 自定义比例
+                    <label class="scale-option" data-group="${id}" data-value="custom" for="scale_ratio_${id}_custom">
+                        <input type="radio" name="scale_ratio_${id}" value="custom" id="scale_ratio_${id}_custom"> 自定义比例
                     </label>
                 </div>
                 <div class="scale-custom-input" id="scaleCustomInput-${id}">
@@ -2297,26 +2297,44 @@ function setEmbossStrength(groupId, idx, value) {
 createSpecGroup();
 
 // ===== 缩放选项事件绑定（动态元素委托）=====
-document.getElementById('specGroupsContainer').addEventListener('click', function(e) {
+// 使用捕获阶段确保事件不被其他元素阻止
+document.addEventListener('click', function(e) {
     const option = e.target.closest('.scale-option');
     if (!option) return;
-    const groupId = option.dataset.group;
+    
+    // 确保在规格组容器内
+    const groupCard = option.closest('.spec-group-card');
+    if (!groupCard) return;
+    
+    const groupId = option.dataset.group || groupCard.dataset.groupId;
     const value = option.dataset.value;
+    if (!value) return;
+    
+    // 阻止默认行为和冒泡，确保radio正确切换
+    e.preventDefault();
+    e.stopPropagation();
     
     // 切换active状态
     const container = option.parentElement;
-    container.querySelectorAll('.scale-option').forEach(el => el.classList.remove('active'));
+    container.querySelectorAll('.scale-option').forEach(el => {
+        el.classList.remove('active');
+        const input = el.querySelector('input[type="radio"]');
+        if (input) input.checked = false;
+    });
     option.classList.add('active');
-    option.querySelector('input').checked = true;
+    const radioInput = option.querySelector('input[type="radio"]');
+    if (radioInput) radioInput.checked = true;
     
     // 显示/隐藏自定义输入框
     const customInput = document.getElementById(`scaleCustomInput-${groupId}`);
-    if (value === 'custom') {
-        customInput.classList.add('show');
-    } else {
-        customInput.classList.remove('show');
+    if (customInput) {
+        if (value === 'custom') {
+            customInput.classList.add('show');
+        } else {
+            customInput.classList.remove('show');
+        }
     }
-});
+}, true); // 使用捕获阶段
 </script>
 
 <!-- Three.js 3D 渲染库 -->
