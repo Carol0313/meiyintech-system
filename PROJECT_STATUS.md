@@ -1,6 +1,6 @@
 # 镁印制版下单系统 - 项目状态记录
 
-> 最后更新：2026-06-18 11:30
+> 最后更新：2026-06-22 09:15
 > 此文件用于快速恢复项目上下文，每次对话开始时请将此文件内容发送给AI
 
 ---
@@ -13,8 +13,8 @@
 | 域名 | www.zhibanhome.com ✅ 已上线 |
 | 服务器IP | 47.100.212.79 |
 | 技术栈 | Django 4.2, Python 3.8, Bootstrap 5.3, PostgreSQL(生产) |
-| 代码仓库 | https://github.com/Carol0313/meiyintech-system |
-| 部署状态 | 生产阶段，HTTPS已启用；Gunicorn 127.0.0.1:8000 + PostgreSQL 13 + Nginx反向代理 + SSL证书；服务器 ECS 4核8G；OSS 100G/年 已启用；systemd 自启动已配置；SSH 端口已改为 2222，root 登录已禁用，fail2ban 已启用 |
+| 代码仓库 | https://github.com/Carol0313/meiyintech-system (GitHub) / https://gitee.com/carol0313/zhibanhome (Gitee镜像) |
+| 部署状态 | 生产阶段，HTTPS已启用；Gunicorn 127.0.0.1:8000 + PostgreSQL 13 + Nginx反向代理 + SSL证书；服务器 ECS 4核8G；OSS 100G/年 已启用；systemd 自启动已配置；SSH 端口已改为 2222，root 登录已禁用，fail2ban 已已启用 |
 | 服务器配置 | 阿里云 ECS 4核8G（已升级并验证，原轻量应用服务器2GB） |
 
 ---
@@ -50,6 +50,7 @@ sudo systemctl status nginx
 |------|---------|------|
 | 用户认证体系（登录/注册/权限） | 2026-05 | 手机号登录，四层角色权限 |
 | 客户下单流程（单页/分步） | 2026-05 | 支持快速下单和分步下单 |
+| **顺丰标快运费预估** | **2026-06-22** | **双工厂（广州/南通）自动选择，按省份分区计费，前端实时显示** |
 | PDF红框智能识别 | 2026-05 | 自动检测内容框尺寸 |
 | 订单状态流转与追踪 | 2026-05 | 6步进度条可视化 |
 | 拼版工具（单订单/跨订单） | 2026-05 | 4种算法，版类效果预览 |
