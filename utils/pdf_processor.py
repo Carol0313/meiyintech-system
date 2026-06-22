@@ -138,7 +138,7 @@ def convert_pdf_to_black(input_path, output_path=None, threshold=240):
 
 def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
     """
-    生成PDF第一页的预览图
+    生成PDF第一页的预览图，并保存到Django默认存储后端（本地或OSS）
     :param pdf_path: PDF文件路径
     :param output_filename: 输出文件名（相对于MEDIA_ROOT）
     :param dpi: 分辨率
@@ -148,11 +148,15 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
     try:
         local_pdf_path = _get_pdf_local_path(pdf_path)
         if not local_pdf_path:
-            print(f"[generate_pdf_preview] PDF 文件不存在: {pdf_path}")
+            logger.warning("[generate_pdf_preview] PDF 文件不存在: %s", pdf_path)
             return None
         
-        output_path = os.path.join(settings.MEDIA_ROOT, output_filename)
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # 1. 生成预览图到临时文件
+        import tempfile
+        suffix = os.path.splitext(output_filename)[1] or '.png'
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp_path = tmp.name
+        
         doc = fitz.open(local_pdf_path)
         page = doc[0]
         zoom = dpi / 72
@@ -160,31 +164,42 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
         
         if black_only:
             try:
-                # 【修复】使用 Colorspace 对象而非整数，解决 'int' object has no attribute 'n' 错误
+                # 【修复】使用 Colorspace 对象而非整数
                 cs = fitz.Colorspace(fitz.CS_GRAY)
                 pix = page.get_pixmap(matrix=mat, colorspace=cs)
                 img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
                 img_bw = img.point(lambda x: 0 if x < 240 else 255, 'L')
                 img_rgb = img_bw.convert("RGB")
-                img_rgb.save(output_path)
+                img_rgb.save(tmp_path)
             except Exception as e:
-                # 灰度渲染失败时回退到普通 RGB 渲染
-                print(f"[generate_pdf_preview] 灰度渲染失败，回退到RGB: {e}")
+                logger.warning("[generate_pdf_preview] 灰度渲染失败，回退到RGB: %s", e)
                 pix = page.get_pixmap(matrix=mat)
-                pix.save(output_path)
+                pix.save(tmp_path)
         else:
             pix = page.get_pixmap(matrix=mat)
-            pix.save(output_path)
+            pix.save(tmp_path)
         doc.close()
         
-        # 清理临时文件
+        # 2. 上传到Django默认存储后端（本地或OSS）
+        from django.core.files.base import File
+        if not default_storage.exists(output_filename):
+            with open(tmp_path, 'rb') as f:
+                default_storage.save(output_filename, File(f))
+        
+        # 3. 清理临时文件
+        try:
+            os.unlink(tmp_path)
+        except:
+            pass
         if local_pdf_path != pdf_path and not local_pdf_path.startswith(str(settings.MEDIA_ROOT)):
             try:
                 os.unlink(local_pdf_path)
             except:
                 pass
         
-        return settings.MEDIA_URL + output_filename
+        # 4. 返回存储后端的URL
+        return default_storage.url(output_filename)
+        
     except Exception as e:
-        print(f"[generate_pdf_preview] 生成预览图失败: {e}")
+        logger.exception("[generate_pdf_preview] 生成预览图失败: %s", e)
         return None

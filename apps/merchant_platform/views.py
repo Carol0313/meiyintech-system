@@ -3341,24 +3341,18 @@ def pending_layout_orders(request):
     ).select_related('order', 'order__customer__customer_profile').order_by('order__created_at')
     
     # 【新增】为每个item准备预览图URL
-    import os
-    from django.conf import settings
     from utils.pdf_processor import generate_pdf_preview
     for item in items:
         if item.preview_image:
             item.preview_url = item.preview_image.url
         elif item.plate_file:
-            # 尝试生成预览图
+            # 尝试生成预览图（生成后自动上传到OSS/本地存储）
             try:
                 preview_filename = f"previews/{item.id}_plate.png"
-                preview_path = os.path.join(settings.MEDIA_ROOT, preview_filename)
-                if not os.path.exists(preview_path):
-                    generate_pdf_preview(item.plate_file.name, preview_filename, dpi=72)
-                if os.path.exists(preview_path):
-                    item.preview_url = settings.MEDIA_URL + preview_filename
-                else:
-                    item.preview_url = None
+                preview_url = generate_pdf_preview(item.plate_file.name, preview_filename, dpi=72)
+                item.preview_url = preview_url
             except Exception:
+                logger.exception("预览图生成失败 item=%s", item.id)
                 item.preview_url = None
         else:
             item.preview_url = None
