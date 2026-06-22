@@ -404,7 +404,7 @@
                         </div>
                         {% if item.order.special_requests %}
                         <div class="layout-item-note" title="{{ item.order.special_requests }}">
-                            <i class="fa-solid fa-note-sticky"></i> 有备注
+                            <i class="fa-solid fa-note-sticky"></i> {{ item.order.special_requests|truncatechars:25 }}
                         </div>
                         {% endif %}
                     </div>
