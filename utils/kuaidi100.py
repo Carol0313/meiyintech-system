@@ -13,10 +13,13 @@
 import hashlib
 import json
 import time
+import logging
 from decimal import Decimal
 from django.conf import settings
 from django.core.cache import cache
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 def _generate_sign(param_json_str: str, key: str, customer: str) -> str:
@@ -125,7 +128,140 @@ def query_tracking(tracking_number: str, company_code: str = None, phone_tail: s
     return response_data
 
 
-def get_company_code(company_name: str) -> str:
+def subscribe_tracking(tracking_number: str, company_code: str, callback_url: str = None, phone_tail: str = None):
+    """
+    订阅快递100物流推送（实时推送）
+    当物流状态变更时，快递100会主动推送数据到 callback_url
+    
+    Args:
+        tracking_number: 快递单号
+        company_code: 快递公司编码（必须）
+        callback_url: 回调地址（默认使用 settings.KUAIDI100_CALLBACK_URL）
+        phone_tail: 收件人手机号后4位
+    
+    Returns:
+        dict: {'success': bool, 'message': str}
+    """
+    key = getattr(settings, 'KUAIDI100_KEY', '')
+    customer = getattr(settings, 'KUAIDI100_CUSTOMER', '')
+    
+    if not key or not customer:
+        return {
+            'success': False,
+            'message': '快递100未配置'
+        }
+    
+    if not company_code:
+        return {
+            'success': False,
+            'message': '订阅推送需要指定快递公司编码'
+        }
+    
+    if not callback_url:
+        callback_url = getattr(settings, 'KUAIDI100_CALLBACK_URL', '')
+    
+    if not callback_url:
+        return {
+            'success': False,
+            'message': '未配置回调地址 KUAIDI100_CALLBACK_URL'
+        }
+    
+    param_dict = {
+        "company": company_code,
+        "number": tracking_number,
+        "key": key,
+        "parameters": {
+            "callbackurl": callback_url,
+            "phone": phone_tail or "",
+        }
+    }
+    
+    param_json_str = json.dumps(param_dict, ensure_ascii=False, separators=(',', ':'))
+    sign = _generate_sign(param_json_str, key, customer)
+    
+    payload = {
+        "schema": "json",
+        "param": param_json_str,
+        "sign": sign,
+    }
+    
+    try:
+        resp = requests.post(
+            "https://poll.kuaidi100.com/poll",
+            data=payload,
+            timeout=10,
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        
+        # 返回结果：result=true 表示订阅成功
+        if result.get('result') == 'true':
+            logger.info("订阅快递100推送成功: %s %s", company_code, tracking_number)
+            return {
+                'success': True,
+                'message': '订阅成功',
+                'data': result
+            }
+        else:
+            logger.warning("订阅快递100推送失败: %s %s - %s", company_code, tracking_number, result)
+            return {
+                'success': False,
+                'message': result.get('returnCode', '订阅失败'),
+                'data': result
+            }
+    except requests.RequestException as e:
+        logger.exception("订阅快递100推送网络失败: %s", tracking_number)
+        return {
+            'success': False,
+            'message': f'网络请求失败: {str(e)}'
+        }
+    except Exception as e:
+        logger.exception("订阅快递100推送异常: %s", tracking_number)
+        return {
+            'success': False,
+            'message': f'订阅异常: {str(e)}'
+        }
+
+
+def parse_callback_data(request_body: bytes) -> dict:
+    """
+    解析快递100推送的回调数据
+    
+    Args:
+        request_body: HTTP请求的body（bytes）
+    
+    Returns:
+        dict: 解析后的物流数据，格式与 query_tracking 返回的 data 一致
+    """
+    try:
+        data = json.loads(request_body.decode('utf-8'))
+        logger.info("收到快递100推送: %s %s", data.get('com'), data.get('nu'))
+        return data
+    except Exception as e:
+        logger.exception("解析快递100推送数据失败")
+        return {}
+
+
+def verify_callback_sign(param: str, sign: str) -> bool:
+    """
+    验证快递100推送的签名
+    
+    Args:
+        param: 推送的param参数
+        sign: 推送的sign参数
+    
+    Returns:
+        bool: 签名是否有效
+    """
+    key = getattr(settings, 'KUAIDI100_KEY', '')
+    customer = getattr(settings, 'KUAIDI100_CUSTOMER', '')
+    
+    if not key or not customer:
+        return False
+    
+    expected = _generate_sign(param, key, customer)
+    return expected == sign
     """
     根据快递公司名称获取编码（常用映射）
     完整列表参见：https://api.kuaidi100.com/document/5f0ff4a29777d50d94e1026a.html

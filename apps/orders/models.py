@@ -76,6 +76,10 @@ class Order(models.Model):
     tracking_number = models.CharField('物流单号', max_length=100, blank=True)
     tracking_company = models.CharField('快递公司', max_length=50, blank=True)
     shipped_at = models.DateTimeField('发货时间', blank=True, null=True)
+    # 物流状态缓存（用于列表页快速展示，减少API调用）
+    tracking_status = models.CharField('物流状态', max_length=20, blank=True, help_text='缓存最新物流状态：0运输中/1揽收/2疑难/3签收/4退签/5派件/6退回')
+    tracking_last_context = models.CharField('最新物流节点', max_length=200, blank=True, help_text='最新一条物流信息摘要')
+    tracking_last_update = models.DateTimeField('物流更新时间', blank=True, null=True)
     rejection_reason = models.TextField('驳回/拒绝原因', blank=True)
     # 补版单关联信息
     original_order = models.ForeignKey(
@@ -247,6 +251,62 @@ class Order(models.Model):
     def first_item_with_file(self):
         """返回第一个有上传文件的订单项"""
         return self.items.filter(file__isnull=False).exclude(file='').first()
+
+    def get_tracking_summary(self):
+        """
+        获取物流摘要信息（用于列表页快速展示）
+        优先使用缓存字段，如果没有缓存则返回基础信息
+        """
+        if not self.tracking_number:
+            return None
+        
+        state_map = {
+            '0': '运输中',
+            '1': '揽件中',
+            '2': '疑难件',
+            '3': '已签收',
+            '4': '退签',
+            '5': '派件中',
+            '6': '退回中',
+        }
+        
+        return {
+            'tracking_number': self.tracking_number,
+            'company': self.tracking_company or '未知快递',
+            'status': self.tracking_status,
+            'status_label': state_map.get(self.tracking_status, '运输中'),
+            'last_context': self.tracking_last_context or '',
+            'last_update': self.tracking_last_update,
+            'is_signed': self.tracking_status == '3',
+        }
+
+    def update_tracking_cache(self, tracking_data):
+        """
+        更新物流缓存字段
+        tracking_data: 快递100 format_tracking_data 的返回结果
+        """
+        if not tracking_data:
+            return
+        
+        self.tracking_status = tracking_data.get('state', '')
+        tracks = tracking_data.get('tracks', [])
+        if tracks:
+            self.tracking_last_context = tracks[0].get('context', '')[:200]
+        self.tracking_last_update = timezone.now()
+        self.save(update_fields=['tracking_status', 'tracking_last_context', 'tracking_last_update'])
+
+    def get_tracking_state_label(self):
+        """返回物流状态的中文标签"""
+        state_map = {
+            '0': '运输中',
+            '1': '揽件中',
+            '2': '疑难件',
+            '3': '已签收',
+            '4': '退签',
+            '5': '派件中',
+            '6': '退回中',
+        }
+        return state_map.get(self.tracking_status, '运输中')
 
 
 class OrderItem(models.Model):

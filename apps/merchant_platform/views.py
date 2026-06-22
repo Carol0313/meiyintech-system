@@ -913,13 +913,31 @@ def merchant_orders(request):
         orders = orders.filter(is_settled=True)
     orders = orders.order_by('-created_at')
     
-    # 【新增】计算每个订单的时效状态
+    # 【新增】计算每个订单的时效状态 + 物流摘要
     from django.utils import timezone
+    from utils.kuaidi100 import query_tracking, format_tracking_data
     now = timezone.now()
     for order in orders:
         order.sla_status = None
         order.sla_label = '-'
         order.sla_class = ''
+        
+        # 物流摘要：已发货/已收货的订单预加载
+        order.tracking_summary = None
+        if order.status in ('shipped', 'received') and order.tracking_number:
+            # 优先使用缓存
+            if order.tracking_status and order.tracking_last_context:
+                order.tracking_summary = order.get_tracking_summary()
+            else:
+                # 缓存为空，查询API并更新缓存
+                try:
+                    result = query_tracking(order.tracking_number, order.tracking_company or None)
+                    if result['success']:
+                        tracking_data = format_tracking_data(result['data'])
+                        order.update_tracking_cache(tracking_data)
+                        order.tracking_summary = order.get_tracking_summary()
+                except Exception:
+                    pass
         
         # 客服处理时效：pending_confirm 状态
         if order.status == 'pending_confirm' and order.file_uploaded_at:
@@ -1044,6 +1062,22 @@ def merchant_order_detail(request, order_id):
             order.save(update_fields=['tracking_number', 'tracking_company', 'shipped_at'])
             order.transition_status('shipped', operator=request.user, remark='已发货')
             messages.success(request, '订单已发货')
+            # 【新增】尝试订阅快递100推送
+            if order.tracking_number and order.tracking_company:
+                from utils.kuaidi100 import get_company_code, subscribe_tracking
+                company_code = get_company_code(order.tracking_company)
+                if company_code:
+                    subscribe_result = subscribe_tracking(
+                        order.tracking_number,
+                        company_code,
+                        phone_tail=order.delivery_address.phone[-4:] if order.delivery_address and order.delivery_address.phone else None
+                    )
+                    if subscribe_result['success']:
+                        logger.info("快递100订阅成功: order=%s tracking=%s", order.id, order.tracking_number)
+                    else:
+                        logger.warning("快递100订阅失败: order=%s tracking=%s msg=%s", order.id, order.tracking_number, subscribe_result['message'])
+                else:
+                    logger.warning("未找到快递公司编码: %s", order.tracking_company)
         elif action == 'mark_paid':
             old_status = order.status
             order.transition_status('paid', operator=request.user, remark='线下支付已确认')

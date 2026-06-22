@@ -37,4 +37,6 @@ urlpatterns = [
     # 投诉
     path('orders/<uuid:order_id>/complaint/', views.complaint_create, name='complaint_create'),
     path('complaints/<uuid:complaint_id>/', views.complaint_detail, name='complaint_detail'),
+    # 物流查询API
+    path('orders/<uuid:order_id>/tracking/', views.api_tracking_query, name='api_tracking_query'),
 ]

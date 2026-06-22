@@ -588,9 +588,25 @@ def my_orders(request):
         orders = orders.filter(created_at__date__lte=end_date)
     orders = orders.order_by('-created_at')
 
-    # 为每个 OrderItem 生成预览缩略图
+    # 为每个 OrderItem 生成预览缩略图 + 已发货订单加载物流摘要
     from utils.pdf_processor import generate_pdf_preview
+    from utils.kuaidi100 import query_tracking, format_tracking_data
     for order in orders:
+        # 物流摘要
+        order.tracking_summary = None
+        if order.status in ('shipped', 'received') and order.tracking_number:
+            if order.tracking_status and order.tracking_last_context:
+                order.tracking_summary = order.get_tracking_summary()
+            else:
+                try:
+                    result = query_tracking(order.tracking_number, order.tracking_company or None)
+                    if result['success']:
+                        tracking_data = format_tracking_data(result['data'])
+                        order.update_tracking_cache(tracking_data)
+                        order.tracking_summary = order.get_tracking_summary()
+                except Exception:
+                    pass
+        
         for item in order.items.all():
             item.preview_url = None
             if item.file:
@@ -1737,3 +1753,59 @@ def api_delivery_fee_estimate(request):
         'weight_estimate': result['weight_kg'],
         'customer_province': address.province,
     })
+
+
+@login_required
+@customer_required
+def api_tracking_query(request, order_id):
+    """
+    AJAX接口：查询订单物流轨迹
+    支持GET（带缓存）和POST（强制刷新）
+    """
+    order = get_object_or_404(Order, pk=order_id, customer=request.user, is_submitted=True)
+    
+    if not order.tracking_number:
+        return JsonResponse({
+            'success': False,
+            'message': '该订单暂无物流单号',
+            'data': None
+        })
+    
+    from utils.kuaidi100 import query_tracking, format_tracking_data
+    from django.core.cache import cache
+    
+    # 强制刷新：POST请求清除缓存
+    if request.method == 'POST':
+        cache.delete(f'kuaidi100:{order.tracking_number}')
+    
+    try:
+        result = query_tracking(order.tracking_number, order.tracking_company or None)
+        if result['success']:
+            tracking_data = format_tracking_data(result['data'])
+            # 更新缓存
+            order.update_tracking_cache(tracking_data)
+            return JsonResponse({
+                'success': True,
+                'message': '查询成功',
+                'data': {
+                    'company': tracking_data['company'],
+                    'tracking_number': tracking_data['tracking_number'],
+                    'state': tracking_data['state'],
+                    'state_label': tracking_data['state_label'],
+                    'is_signed': tracking_data['is_signed'],
+                    'tracks': tracking_data['tracks'],
+                }
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': result.get('message', '查询失败'),
+                'data': None
+            })
+    except Exception as e:
+        logger.exception("物流查询失败 order=%s", order_id)
+        return JsonResponse({
+            'success': False,
+            'message': f'查询异常: {str(e)}',
+            'data': None
+        })

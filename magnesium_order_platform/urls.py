@@ -13,6 +13,8 @@ urlpatterns = [
     path('customer/', include('apps.customer_platform.urls')),
     path('merchant/', include('apps.merchant_platform.urls')),
     path('platform/', include('apps.admin_platform.urls')),
+    # 快递100回调
+    path('webhook/kuaidi100/', include('apps.merchant_platform.urls_kuaidi100')),
     path('', include('apps.accounts.urls')),
 ]
 

@@ -368,6 +368,16 @@
         <div class="order-total">
             共 {{ order.items.count }} 款
             <strong>¥{{ order.total_amount }}</strong>
+            {% if order.status == 'shipped' and order.tracking_summary %}
+            <div class="mt-1 small">
+                <span class="badge {% if order.tracking_summary.is_signed %}bg-success{% else %}bg-info{% endif %}" style="font-size:0.7rem;">
+                    <i class="fa-solid fa-truck-fast"></i> {{ order.tracking_summary.status_label }}
+                </span>
+                <span class="text-muted ms-1" style="font-size:0.75rem;" title="{{ order.tracking_summary.last_context }}">
+                    {{ order.tracking_summary.last_context|truncatechars:20|default:"运输中" }}
+                </span>
+            </div>
+            {% endif %}
         </div>
         <div class="order-actions">
             <a href="{% url 'order_detail' order.id %}" class="btn btn-sm btn-outline-primary">详情</a>
