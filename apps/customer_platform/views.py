@@ -927,10 +927,10 @@ def batch_upload_files(request):
                 'pdf_width_mm': pdf_w_mm,
                 'pdf_height_mm': pdf_h_mm,
                 'preview_url': preview_url,
-                'box_count': box_info['box_count'] if box_info else 0,
-                'first_length': box_info['first_length'] if box_info else 0,
-                'first_width': box_info['first_width'] if box_info else 0,
-                'first_quantity': box_info['first_quantity'] if box_info else 1,
+                'box_count': box_info.get('box_count', 0) if box_info else 0,
+                'first_length': box_info.get('first_length', 0) if box_info else 0,
+                'first_width': box_info.get('first_width', 0) if box_info else 0,
+                'first_quantity': box_info.get('first_quantity', 1) if box_info else 1,
                 'boxes': boxes_pixel,
             }
             results.append(file_result)
