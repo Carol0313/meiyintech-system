@@ -98,8 +98,9 @@ class Order(models.Model):
     updated_at = models.DateTimeField('更新时间', auto_now=True)
     submitted_at = models.DateTimeField('提交时间', blank=True, null=True)
     
-    # ===== 时效追踪字段（SLA）=====
-    # 客服处理时效：客户上传文件 → 客服确认
+    delivery_fee = models.DecimalField('预估运费', max_digits=10, decimal_places=2, default=0, help_text='顺丰标快预估运费')
+    actual_delivery_fee = models.DecimalField('实际运费', max_digits=10, decimal_places=2, default=0, blank=True, help_text='商户发货时填写的实际运费')
+    delivery_factory = models.CharField('发货工厂', max_length=20, blank=True, help_text='guangzhou/nantong')
     file_uploaded_at = models.DateTimeField('客户上传文件时间', blank=True, null=True)
     customer_service_processed_at = models.DateTimeField('客服处理时间', blank=True, null=True)
     # 工厂下载时效：工厂收到通知 → 工厂下载文件
@@ -127,11 +128,37 @@ class Order(models.Model):
         return f"O{prefix}{suffix}"
 
     def calculate_total(self):
-        """计算订单总金额（含加急费）"""
+        """计算订单总金额（含加急费+运费）"""
         total = sum(item.subtotal for item in self.items.all())
         if self.urgent:
             total = total * Decimal('1.10')
+        # 加上预估运费
+        total = total + self.delivery_fee
         return total.quantize(Decimal('0.01'))
+
+    def get_product_total(self):
+        """仅产品费用（不含加急和运费）"""
+        total = sum(item.subtotal for item in self.items.all())
+        return total.quantize(Decimal('0.01'))
+
+    def get_urgent_fee(self):
+        """加急费"""
+        if not self.urgent:
+            return Decimal('0.00')
+        product_total = self.get_product_total()
+        return (product_total * Decimal('0.10')).quantize(Decimal('0.01'))
+
+    def get_amount_breakdown(self):
+        """费用明细"""
+        product_total = self.get_product_total()
+        urgent_fee = self.get_urgent_fee()
+        delivery_fee = self.delivery_fee or Decimal('0.00')
+        return {
+            'product_total': product_total,
+            'urgent_fee': urgent_fee,
+            'delivery_fee': delivery_fee,
+            'total': product_total + urgent_fee + delivery_fee,
+        }
 
     def update_total(self):
         """更新订单总金额"""

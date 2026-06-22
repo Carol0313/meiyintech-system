@@ -10,6 +10,7 @@ urlpatterns = [
     path('place-order/api/pdf-red-boxes/', views.api_pdf_red_boxes, name='api_pdf_red_boxes'),
     path('place-order/api/preview-effect/', views.api_preview_effect, name='api_preview_effect'),
     path('place-order/api/preview-3d/', views.api_preview_3d, name='api_preview_3d'),
+    path('place-order/api/delivery-fee-estimate/', views.api_delivery_fee_estimate, name='api_delivery_fee_estimate'),
     path('place-order/step1/', views.order_step1, name='order_step1'),
     path('place-order/step2/<uuid:draft_id>/', views.order_step2, name='order_step2'),
     path('place-order/step3/<uuid:draft_id>/', views.order_step3, name='order_step3'),

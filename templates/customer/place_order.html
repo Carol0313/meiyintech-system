@@ -397,10 +397,10 @@
 
                     <div class="form-section">
                         <label class="form-label">收货地址 <span class="text-danger">*</span></label>
-                        <select name="address_id" class="form-select" required>
+                        <select name="address_id" class="form-select" id="addressSelect" required>
                             <option value="">-- 请选择地址 --</option>
                             {% for addr in addresses %}
-                            <option value="{{ addr.id }}" {% if default_address and addr.id == default_address.id %}selected{% endif %}>
+                            <option value="{{ addr.id }}" data-province="{{ addr.province }}" {% if default_address and addr.id == default_address.id %}selected{% endif %}>
                                 {{ addr.contact_name }} {{ addr.phone }} - {{ addr.province }}{{ addr.city }}{{ addr.district }} {{ addr.detail }}
                             </option>
                             {% endfor %}
@@ -410,6 +410,15 @@
                             <i class="fa-solid fa-triangle-exclamation"></i> 您还没有收货地址，<a href="{% url 'my_addresses' %}">去添加</a>
                         </div>
                         {% endif %}
+                    </div>
+
+                    <!-- 运费预估显示 -->
+                    <div id="deliveryFeeSection" class="form-section" style="display:none;">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted"><i class="fa-solid fa-truck-fast"></i> 顺丰标快运费</span>
+                            <span id="deliveryFeeDisplay" class="fw-bold text-primary">--</span>
+                        </div>
+                        <div class="small text-muted" id="deliveryFeeNote"></div>
                     </div>
 
                     <div class="form-section">
@@ -428,8 +437,9 @@
                         <div class="price-label">预估总价</div>
                         <div class="price-value">¥<span id="totalPrice">0.00</span></div>
                         <div class="small text-muted mt-1">
-                            共 <span id="groupCountDisplay">0</span> 个规格组
+                            产品费 <span id="productPriceDisplay">¥0.00</span>
                             <span id="urgentDisplay" style="display:none;"> + 加急10%</span>
+                            <span id="deliveryFeeDisplay2" style="display:none;"> + 运费 <span id="deliveryFeeAmount">¥0.00</span></span>
                         </div>
                     </div>
 
@@ -1161,9 +1171,79 @@ function calcTotalPrice() {
 
     if (isUrgent && total > 0) total *= 1.10;
 
+    // 加上运费
+    const deliveryFee = parseFloat(document.getElementById('deliveryFeeAmount').dataset.fee || 0);
+    if (deliveryFee > 0) {
+        total += deliveryFee;
+    }
+
     detailsEl.innerHTML = detailsHtml;
     document.getElementById('totalPrice').textContent = total.toFixed(2);
+    document.getElementById('productPriceDisplay').textContent = '¥' + (total / (isUrgent ? 1.10 : 1) - deliveryFee).toFixed(2);
     document.getElementById('urgentDisplay').style.display = isUrgent ? 'inline' : 'none';
+    document.getElementById('deliveryFeeDisplay2').style.display = deliveryFee > 0 ? 'inline' : 'none';
+}
+
+// ===== 运费预估 =====
+let currentDeliveryFee = 0;
+
+function estimateDeliveryFee() {
+    const addressSelect = document.getElementById('addressSelect');
+    const feeSection = document.getElementById('deliveryFeeSection');
+    const feeDisplay = document.getElementById('deliveryFeeDisplay');
+    const feeNote = document.getElementById('deliveryFeeNote');
+    const feeAmount = document.getElementById('deliveryFeeAmount');
+
+    if (!addressSelect.value) {
+        feeSection.style.display = 'none';
+        currentDeliveryFee = 0;
+        feeAmount.dataset.fee = 0;
+        feeAmount.textContent = '¥0.00';
+        calcTotalPrice();
+        return;
+    }
+
+    const itemCount = specGroups.length || 1;
+
+    fetch('/customer/place-order/api/delivery-fee-estimate/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+        },
+        body: JSON.stringify({
+            address_id: addressSelect.value,
+            item_count: itemCount,
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            currentDeliveryFee = data.delivery_fee;
+            feeDisplay.textContent = data.delivery_fee_str;
+            feeNote.textContent = `从${data.factory}发货，${data.rate_name}（${data.note}）`;
+            feeSection.style.display = 'block';
+            feeAmount.dataset.fee = data.delivery_fee;
+            feeAmount.textContent = data.delivery_fee_str;
+            calcTotalPrice();
+        } else {
+            feeSection.style.display = 'none';
+            currentDeliveryFee = 0;
+            calcTotalPrice();
+        }
+    })
+    .catch(() => {
+        feeSection.style.display = 'none';
+        currentDeliveryFee = 0;
+        calcTotalPrice();
+    });
+}
+
+document.getElementById('addressSelect').addEventListener('change', estimateDeliveryFee);
+
+// 页面加载时如果有默认地址，自动计算运费
+if (document.getElementById('addressSelect').value) {
+    estimateDeliveryFee();
 }
 
 document.getElementById('urgentCheck').addEventListener('change', calcTotalPrice);

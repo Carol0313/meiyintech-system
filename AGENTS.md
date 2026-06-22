@@ -2,9 +2,9 @@
 
 > 本文档面向 AI 编程助手，描述项目架构、技术栈、开发规范与关键注意事项。所有信息基于项目实际代码与配置文件，不假设任何外部知识。
 > 
-> **文档版本**: 2.0  
-> **生成日期**: 2026-06-07  
-> **基于代码版本**: 截至 2026-06-07 的静态分析
+> **文档版本**: 3.0  
+> **生成日期**: 2026-06-18  
+> **基于代码版本**: 截至 2026-06-18 的静态分析（Git 最新提交 `8a7ec7c`）
 
 ---
 
@@ -17,7 +17,7 @@
 - **商家/商户**（Merchant）：制版服务提供方，管理会员、处理订单、拼版排产、发货对账、数据分析
 - **平台管理员**（Platform Admin）：系统运营方，审核商家入驻、管理全局规格与权限
 
-系统核心能力：PDF 智能红框识别、自动拼版布局、跨订单批次管理、信用额度对账、版类视觉效果预览、SLA 时效追踪、商户数据分析中心。
+系统核心能力：PDF 智能红框识别、自动拼版布局、跨订单批次管理、信用额度对账、版类视觉效果预览、SLA 时效追踪、商户数据分析中心、Three.js 3D 浮雕预览。
 
 ---
 
@@ -33,13 +33,15 @@
 | 前端框架 | Bootstrap 5.3 | CDN 引入，无构建步骤 |
 | 图标库 | Font Awesome 6.4 | CDN 引入（2026-06-06 从 Bootstrap Icons 切换） |
 | 图表库 | ECharts 5.4.3 | 仅数据分析中心页 |
-| 文件存储 | 阿里云 OSS（生产）/ 本地（开发） | `DEFAULT_FILE_STORAGE` 默认已启用 OSS |
+| 3D 渲染 | Three.js | 3D 浮雕预览（高度图 + 法线贴图 + 四灯照明） |
+| 文件存储 | 阿里云 OSS（生产）/ 本地（开发） | `DEFAULT_FILE_STORAGE` 默认已启用 OSS；私有 Bucket + 签名 URL |
 | PDF 处理 | PyMuPDF (fitz) | 1.24+ |
 | 图片处理 | Pillow | 10.0+ |
 | Excel 处理 | openpyxl | 3.1+ |
 | 矩形排版 | rectpack（内嵌修改版） | `utils/rectpack/`，纯 Python，非 pip 包 |
 | 数据可视化 | matplotlib | 3.7+（拼版效果图） |
 | 物流查询 | 快递100 API | 自建封装 `utils/kuaidi100.py` |
+| 短信服务 | 阿里云 SMS | 手机号验证码登录（`utils/sms.py`） |
 
 **架构风格**：
 - 服务端渲染（SSR）：Django 模板引擎渲染完整 HTML 页面
@@ -70,18 +72,19 @@
 │   └── products/                  # 产品规格模型（ProductSpec/CustomSpecRequest）
 ├── utils/                         # 工具模块与核心业务逻辑
 │   ├── rectpack/                  # 矩形排版算法库（内嵌，非 pip 包）
-│   ├── oss_storage.py             # 阿里云 OSS Storage 后端
+│   ├── oss_storage.py             # 阿里云 OSS Storage 后端（私有 Bucket + 签名 URL）
 │   ├── pdf_processor.py           # PDF 基础处理（面积计算/转黑/预览）
 │   ├── pdf_preflight.py           # PDF 印前预检（线条/颜色/位图检测）
 │   ├── pdf_red_box.py             # PDF 红框智能识别（核心）
 │   ├── plate_layout.py            # 单订单拼版算法
 │   ├── plate_batch.py             # 跨订单拼版 + 效果图生成（核心，~800 行）
 │   ├── plate_pdf.py               # 拼版矢量生产 PDF 生成（核心）
-│   ├── plate_preview_effects.py   # 版类视觉效果处理器（9 种效果）
+│   ├── plate_preview_effects.py   # 版类视觉效果处理器（9 种效果 + 3D 贴图生成）
 │   ├── plate_type_rules.py        # 版类规则与间距配置
 │   ├── pricing_tiers.py           # 价格体系（腐蚀版档位 + 雕刻版固定价）
 │   ├── kuaidi100.py               # 快递100 物流查询 SDK
-│   └── ...
+│   ├── sms.py                     # 阿里云短信验证码
+│   └── product_labels.py          # 产品标签映射
 ├── templates/                     # 全局模板目录（65 个 HTML）
 │   ├── base.html                  # 基础模板（侧边栏 220px + 主内容区）
 │   ├── common/menu.html           # 动态侧边栏菜单
@@ -99,20 +102,27 @@
 │   └── customer_previews/         # 客户端预览图
 ├── deploy/                        # 部署配置
 │   ├── nginx.conf                 # Nginx 配置模板
+│   ├── nginx_ssl.conf             # Nginx SSL 配置
 │   ├── gunicorn.conf.py           # Gunicorn 配置
 │   ├── magnesium.service          # systemd 服务模板
 │   ├── deploy.sh                  # 阿里云 ECS 一键部署脚本
 │   ├── update.sh                  # 代码更新脚本
 │   ├── ssl_certbot.sh             # SSL 证书自动续期
+│   ├── migrate_to_postgresql.sh   # SQLite → PostgreSQL 迁移脚本
 │   ├── QUICK_START.md             # 宝塔面板快速部署指南
 │   ├── README.md                  # 阿里云 ECS 完整部署指南
-│   └── SOP_代码发布.md             # 代码发布 SOP
+│   ├── DEPLOY_GUIDE.md            # 完整部署指南（环境准备→SSL→OSS）
+│   ├── SOP_代码发布.md             # 代码发布 SOP
+│   ├── BT_PANEL_DEPLOY.md         # 宝塔面板部署文档
+│   └── scripts/                   # 分步部署脚本（01~04）
 ├── manage.py                      # Django 管理命令入口（含 .env 自动加载）
 ├── requirements.txt               # Python 依赖
+├── start.sh                       # Linux 生产启动脚本（从 .env 读取密钥）
 ├── start_server.bat               # Windows 开发启动脚本
 ├── db.sqlite3                     # 开发环境 SQLite 数据库
 ├── .env                           # 环境变量文件（生产环境）
 ├── init_data.py                   # 初始化测试数据脚本
+├── migrate_to_oss.py              # 本地文件批量迁移到 OSS 脚本
 └── ...
 ```
 
@@ -127,6 +137,8 @@ psycopg2-binary>=2.9          # PostgreSQL（生产）
 PyMySQL>=1.1                  # MySQL支持（宝塔面板默认使用）
 PyMuPDF>=1.24                 # PDF处理（红框识别、矢量嵌入）
 Pillow>=10.0                  # 拼版效果图生成
+numpy>=1.24                   # 数值计算（3D预览用）
+scipy>=1.10                   # 科学计算（距离变换、Sobel算子）
 openpyxl>=3.1                 # Excel 导出
 requests>=2.31                # HTTP 请求
 gunicorn>=21.0                # WSGI 服务器
@@ -136,15 +148,19 @@ oss2>=2.18                    # 阿里云 OSS（可选）
 ```
 
 ### 4.2 `magnesium_order_platform/settings.py`
-- 开发默认：`DEBUG=True`，`DB_ENGINE=sqlite3`，`ALLOWED_HOSTS=*`
-- 生产切换：通过环境变量 `DJANGO_DEBUG=False`、`DB_ENGINE=postgresql`、`DJANGO_ALLOWED_HOSTS=域名`
-- `SECRET_KEY` 默认有占位值，**生产必须通过环境变量 `DJANGO_SECRET_KEY` 覆盖**
-- 阿里云 OSS 配置已存在，`DEFAULT_FILE_STORAGE` 默认已启用（指向 `utils.oss_storage.AliyunOSSMediaStorage`）
-- `OSS_ACCESS_KEY_ID` 和 `OSS_ACCESS_KEY_SECRET` 优先从环境变量读取，留空则使用本地存储
-- 快递100 API Key 默认空字符串，需配置真实值
+- **安全加固（2026-06-12 审计后）**：
+  - `SECRET_KEY` 必须从环境变量 `DJANGO_SECRET_KEY` 读取，生产环境禁止默认值
+  - `DEBUG` 默认 `False`，仅当 `DJANGO_DEBUG=true` 时开启
+  - 生产环境 fail-closed 校验：未设置 `SECRET_KEY`（<32位或以 `django-insecure-` 开头）、`ALLOWED_HOSTS` 为空或含 `*` 时直接抛出 `ImproperlyConfigured`
+  - `USE_HTTPS` 通过环境变量控制，HTTPS 模式下自动启用 `SECURE_SSL_REDIRECT`、`SESSION_COOKIE_SECURE`、`CSRF_COOKIE_SECURE`
+  - `CSRF_TRUSTED_ORIGINS` 包含 `www.zhibanhome.com` 和 IP 访问地址
+- 数据库切换：通过 `DB_ENGINE` 环境变量（`sqlite3`/`postgresql`/`mysql`）
+- 阿里云 OSS：`DEFAULT_FILE_STORAGE` 默认启用 `utils.oss_storage.AliyunOSSMediaStorage`；`OSS_ACCESS_KEY_ID`/`OSS_ACCESS_KEY_SECRET` 从环境变量读取；`OSS_INTERNAL` 自动检测 ECS 内网环境
+- 快递100 API Key / 阿里云 SMS 密钥均从环境变量读取
 - 文件上传限制：50MB
 - 自定义用户模型：`AUTH_USER_MODEL = 'accounts.User'`，`USERNAME_FIELD = 'phone'`
 - 会话有效期：7 天（`SESSION_COOKIE_AGE = 86400 * 7`）
+- **日志配置（2026-06-12 新增）**：`RotatingFileHandler` 写入 `logs/django.log`（INFO，10MB×10）和 `logs/error.log`（ERROR，10MB×10）
 
 ### 4.3 `magnesium_order_platform/urls.py`
 根路由按用户角色划分前缀：
@@ -271,7 +287,7 @@ design_confirmed（设计/规格确认）    │
           ├── 策略2: 多 bin 同规格 ──► 最少张数放下全部
           └── 策略3: Fallback ──► 能放最多的（可能有未放置）
           │
-          ├──► plate_preview_effects.py ──► 生成版类视觉效果图（9 种效果）
+          ├──► plate_preview_effects.py ──► 生成版类视觉效果图（9 种效果）+ 3D 贴图
           │
           └──► plate_pdf.py ──► 生成矢量生产 PDF
 ```
@@ -298,6 +314,14 @@ design_confirmed（设计/规格确认）    │
 | `effect_relief_gold` | 浮雕版 | 金色浮雕 |
 | `effect_relief_gold_multi` | 多层次浮雕版 | 多层金色浮雕 |
 | `effect_film_transparent` | 菲林 | 半透明淡蓝灰 |
+
+**3D 浮雕预览**（2026-06-08 新增）：
+- 后端：`generate_3d_preview_maps()` 生成 color / displacement / normal 贴图
+- 算法：scipy 距离变换生成圆润浮雕形状，Sobel 算子生成精确法线贴图
+- 前端：Three.js 场景，PlaneGeometry + displacementMap + normalMap
+- 交互：鼠标拖拽旋转、滚轮缩放、触摸支持、自动旋转
+- 灯光系统：环境光 + 主光 + 补光 + 轮廓光四灯照明
+- 材质参数：displacementScale 0.8, metalness 0.6, normalScale 3.0
 
 ---
 
@@ -346,6 +370,7 @@ sudo systemctl status magnesium      # 查看服务状态
 sudo systemctl restart magnesium     # 重启服务
 sudo systemctl reload nginx          # 重载 Nginx
 sudo tail -f /var/log/gunicorn/magnesium_error.log   # 查看错误日志
+sudo tail -f logs/error.log          # 查看 Django 错误日志
 ```
 
 ### 7.3 自定义管理命令
@@ -356,6 +381,7 @@ sudo tail -f /var/log/gunicorn/magnesium_error.log   # 查看错误日志
 | `python manage.py fix_credit_used` | 修复客户 `credit_used` 字段 | 手动执行 |
 | `python manage.py generate_monthly_statements` | 按月自动生成对账单 | 每月 1 日执行 |
 | `python manage.py sync_files_to_oss` | 批量同步本地文件到 OSS | 迁移/备份时执行 |
+| `python manage.py reset_test_accounts` | 重置测试账号数据 | 开发测试时执行 |
 
 ---
 
@@ -392,6 +418,7 @@ python manage.py test
 - 原生 JavaScript（Vanilla JS），无 jQuery/Vue/React
 - AJAX 请求使用 `fetch` API，必须携带 `X-CSRFToken`
 - Bootstrap 5.3 + Font Awesome 6.4 通过 CDN 引入
+- Three.js 3D 预览通过 CDN 引入，仅在需要 3D 效果的页面加载
 
 ### 9.3 模型规范
 - 主键使用 `UUIDField(primary_key=True, default=uuid.uuid4, editable=False)`
@@ -414,17 +441,22 @@ python manage.py test
 | MIME 嗅探防护 | ✅ 已启用 | `SECURE_CONTENT_TYPE_NOSNIFF` |
 | 密码强度校验 | ✅ 已启用 | 4 种 Django 内置校验器 |
 | 文件上传大小限制 | ✅ 已启用 | 50MB |
+| 生产环境 fail-closed | ✅ 已启用 | 未配置密钥/域名时直接抛出异常，禁止启动 |
+| HTTPS 安全 Cookie | ✅ 条件启用 | `USE_HTTPS=true` 时启用 `SESSION_COOKIE_SECURE` / `CSRF_COOKIE_SECURE` |
+| OSS 私有 Bucket | ✅ 已启用 | 2026-06-12 启用私有 Bucket + 签名 URL |
+| 日志审计 | ✅ 已启用 | `logs/django.log` + `logs/error.log` 轮转日志 |
 
-### 10.2 已知风险
+### 10.2 已知风险（2026-06-12 审计后已修复大部分）
 
-| # | 风险 | 严重程度 | 建议 |
-|---|------|---------|------|
-| 1 | **OSS 密钥硬编码** | 🔴 高 | `settings.py` 中 `OSS_ACCESS_KEY_ID` 和 `OSS_ACCESS_KEY_SECRET` 应迁移至环境变量 |
-| 2 | **无日志配置** | 🟡 中 | `settings.py` 中未定义 `LOGGING`，生产环境需补充文件日志配置 |
-| 3 | **DEBUG 默认 True** | 🟡 中 | 未设置 `DJANGO_DEBUG` 环境变量时默认开启 DEBUG，生产易误配 |
-| 4 | **SQLite 为默认数据库** | 🟡 中 | 未设置 `DB_ENGINE` 时默认 SQLite，生产部署需显式切换 |
-| 5 | **HTTPS 配置被注释** | 🟡 中 | `SECURE_SSL_REDIRECT`、`SESSION_COOKIE_SECURE` 等被注释，启用 HTTPS 后需取消注释 |
-| 6 | **开发脚本含绝对路径** | 🟢 低 | `start_server.bat` 硬编码了开发者本地路径 |
+| # | 风险 | 严重程度 | 状态 | 说明 |
+|---|------|---------|------|------|
+| 1 | ~~OSS 密钥硬编码~~ | 🔴 高 | ✅ 已修复 | 2026-06-12 审计后改为从环境变量读取；`start.sh` 硬编码密钥已清理 |
+| 2 | ~~无日志配置~~ | 🟡 中 | ✅ 已修复 | 2026-06-12 新增 `LOGGING` 配置，RotatingFileHandler 写入 `logs/` |
+| 3 | ~~DEBUG 默认 True~~ | 🟡 中 | ✅ 已修复 | 默认 `False`，仅 `DJANGO_DEBUG=true` 时开启；生产环境 fail-closed |
+| 4 | ~~SQLite 为默认数据库~~ | 🟡 中 | ⚠️ 保留设计 | 未设置 `DB_ENGINE` 时默认 SQLite，生产部署脚本已显式切换为 PostgreSQL |
+| 5 | ~~HTTPS 配置被注释~~ | 🟡 中 | ✅ 已修复 | 改为 `USE_HTTPS` 环境变量控制，条件启用 SSL 相关配置 |
+| 6 | 开发脚本含绝对路径 | 🟢 低 | ⚠️ 已知 | `start_server.bat` 硬编码了开发者本地路径，仅限开发使用 |
+| 7 | Python 3.8 弃用警告 | 🟢 低 | ⚠️ 已知 | PyMySQL 的 cryptography 库提示 Python 3.8 不再支持，不影响运行但建议后续升级 |
 
 ---
 
@@ -456,7 +488,7 @@ Django Application
     - 媒体文件: 本地（开发）/ 阿里云 OSS（生产）
     │
     ├──────► PostgreSQL/MySQL（生产数据库）
-    └──────► 阿里云 OSS（文件存储）
+    └──────► 阿里云 OSS（文件存储，私有 Bucket + 签名 URL）
 ```
 
 ---
@@ -504,6 +536,7 @@ Django Application
 | `PLATE_LAYOUT_TECH_GUIDE.md` | 拼版功能技术栈与嵌入对接指南 |
 | `deploy/QUICK_START.md` | 宝塔面板快速部署指南 |
 | `deploy/README.md` | 阿里云 ECS 完整部署指南 |
+| `deploy/DEPLOY_GUIDE.md` | 完整部署指南（环境准备→SSL→OSS） |
 | `测试说明.md` | 内部测试人员操作指南 |
 | `服务器部署指南.txt` | 服务器部署步骤速查 |
 | `业务流程文档_v2.xlsx` | 业务流程说明 |
@@ -516,16 +549,17 @@ Django Application
 
 | 指标 | 数值 |
 |------|------|
-| Python 文件数 | ~125 |
-| Python 代码行数 | ~14,500（apps: ~8,800 + utils: ~5,700） |
+| Python 文件数 | ~3800（含 venv）/ ~200（项目代码） |
+| Python 代码行数 | ~21,700（项目总计）/ ~11,200（apps + utils 核心） |
 | HTML 模板数 | 65 |
+| HTML 模板行数 | ~15,700 |
 | 数据库模型数 | 21 |
-| 数据库迁移文件数 | ~49 |
+| 数据库迁移文件数 | ~100 |
 | Git 提交数 | 94+ |
 | 测试覆盖率 | 0%（尚未编写测试） |
 
 ---
 
-> **文档版本**: 2.0  
-> **生成日期**: 2026-06-07  
-> **基于代码版本**: 截至 2026-06-07 的静态分析
+> **文档版本**: 3.0  
+> **生成日期**: 2026-06-18  
+> **基于代码版本**: 截至 2026-06-18 的静态分析（Git 最新提交 `8a7ec7c`）

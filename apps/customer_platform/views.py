@@ -20,6 +20,7 @@ from apps.accounts.models import User, CustomerProfile, Address
 from apps.orders.models import Order, OrderItem, OrderStatusLog, CommunicationLog, Statement, OrderComplaint
 from apps.products.models import ProductSpec
 from apps.merchant_platform.models import Factory
+from utils.delivery_fee import calculate_delivery_fee, estimate_order_delivery_fee
 
 
 def customer_required(view_func):
@@ -1036,14 +1037,23 @@ def _handle_quick_order_post(request, profile, tier):
         preset_options=preset_options,
         is_submitted=True,
         submitted_at=timezone.now(),
-        file_uploaded_at=timezone.now(),  # 【新增】记录客户上传文件时间
+        file_uploaded_at=timezone.now(),
     )
 
-    # 地址
+    # 地址 + 运费预估
     if address_id:
         try:
-            order.delivery_address = Address.objects.get(pk=address_id, user=request.user)
-            order.save(update_fields=['delivery_address'])
+            address = Address.objects.get(pk=address_id, user=request.user)
+            order.delivery_address = address
+            # 计算并保存预估运费
+            from utils.delivery_fee import estimate_order_delivery_fee
+            fee_result = estimate_order_delivery_fee(
+                order_items=spec_groups,
+                customer_province=address.province,
+            )
+            order.delivery_fee = fee_result['预估运费']
+            order.delivery_factory = fee_result['factory']
+            order.save(update_fields=['delivery_address', 'delivery_fee', 'delivery_factory'])
         except Address.DoesNotExist:
             pass
 
@@ -1678,3 +1688,47 @@ def api_preview_3d(request):
     except Exception:
         logger.exception('3D预览贴图生成失败')
         return JsonResponse({'success': False, 'error': '3D预览生成失败，请稍后重试'})
+
+
+@login_required
+@customer_required
+def api_delivery_fee_estimate(request):
+    """
+    AJAX接口：根据地址ID计算预估运费
+    参数：address_id, item_count(可选，默认1)
+    返回：factory, rate_name, delivery_fee, note
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': '仅支持POST请求'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        data = request.POST
+
+    address_id = data.get('address_id')
+    item_count = int(data.get('item_count', 1))
+
+    if not address_id:
+        return JsonResponse({'error': '请选择收货地址'}, status=400)
+
+    try:
+        address = Address.objects.get(pk=address_id, user=request.user)
+    except Address.DoesNotExist:
+        return JsonResponse({'error': '地址不存在'}, status=404)
+
+    # 计算预估运费
+    result = estimate_order_delivery_fee(
+        order_items=[{}] * item_count,
+        customer_province=address.province,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'factory': result['factory_name'],
+        'rate_name': result['rate_name'],
+        'delivery_fee': float(result['预估运费']),
+        'delivery_fee_str': f"¥{result['预估运费']}",
+        'note': result['note'],
+        'weight_estimate': result['weight_kg'],
+    })
