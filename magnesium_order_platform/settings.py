@@ -217,9 +217,7 @@ OSS_INTERNAL = os.environ.get('OSS_INTERNAL', 'false' if DEBUG else 'true').lowe
 OSS_CUSTOM_DOMAIN = ''           # CDN 加速域名（可选）
 
 # 启用 OSS：所有上传文件将自动存入阿里云 OSS
-# 【临时禁用】OSS AccessKey 失效，切换到本地存储
-# DEFAULT_FILE_STORAGE = 'utils.oss_storage.AliyunOSSMediaStorage'
-DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
+DEFAULT_FILE_STORAGE = 'utils.oss_storage.AliyunOSSMediaStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
