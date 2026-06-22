@@ -245,6 +245,10 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
 KUAIDI100_KEY = os.environ.get('KUAIDI100_KEY', '')           # 快递100授权Key
 KUAIDI100_CUSTOMER = os.environ.get('KUAIDI100_CUSTOMER', '')      # 快递100 Customer ID
 KUAIDI100_CACHE_SECONDS = 300  # 物流数据缓存时间（秒）
+# 快递100推送回调地址（用于订阅物流状态变更推送）
+# 格式：https://您的域名/webhook/kuaidi100/
+# 需要在快递100后台配置回调URL，并确保公网可访问
+KUAIDI100_CALLBACK_URL = os.environ.get('KUAIDI100_CALLBACK_URL', '')
 
 # ==================== 阿里云短信配置（手机号验证码登录） ====================
 SMS_ACCESS_KEY_ID = os.environ.get('SMS_ACCESS_KEY_ID', '')
