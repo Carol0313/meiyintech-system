@@ -3,7 +3,7 @@
 包含：首页、下单流程（多步骤）、订单管理、支付
 """
 
-import json, uuid, os, fitz
+import json, uuid, os, fitz, logging
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -21,6 +21,8 @@ from apps.orders.models import Order, OrderItem, OrderStatusLog, CommunicationLo
 from apps.products.models import ProductSpec
 from apps.merchant_platform.models import Factory
 from utils.delivery_fee import calculate_delivery_fee, estimate_order_delivery_fee
+
+logger = logging.getLogger(__name__)
 
 
 def customer_required(view_func):
