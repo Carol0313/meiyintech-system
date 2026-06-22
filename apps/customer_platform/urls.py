@@ -39,4 +39,7 @@ urlpatterns = [
     path('complaints/<uuid:complaint_id>/', views.complaint_detail, name='complaint_detail'),
     # 物流查询API
     path('orders/<uuid:order_id>/tracking/', views.api_tracking_query, name='api_tracking_query'),
+    # 隐私地址：扫码填地址
+    path('orders/<uuid:order_id>/scan-fill-address/', views.scan_fill_address, name='scan_fill_address'),
+    path('orders/<uuid:order_id>/confirm-address-filled/', views.confirm_address_filled, name='confirm_address_filled'),
 ]

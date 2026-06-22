@@ -1809,3 +1809,27 @@ def api_tracking_query(request, order_id):
             'message': f'查询异常: {str(e)}',
             'data': None
         })
+
+
+@login_required
+@customer_required
+def scan_fill_address(request, order_id):
+    """客户扫码填地址页面"""
+    order = get_object_or_404(Order, pk=order_id, customer=request.user, is_submitted=True)
+    if not order.is_private_address:
+        messages.info(request, '该订单不是隐私地址发货，无需扫码填写')
+        return redirect('order_detail', order_id=order_id)
+    return render(request, 'customer/scan_fill_address.html', {'order': order})
+
+
+@login_required
+@customer_required
+@require_POST
+def confirm_address_filled(request, order_id):
+    """客户确认已填写地址"""
+    order = get_object_or_404(Order, pk=order_id, customer=request.user, is_submitted=True)
+    if order.is_private_address and order.address_fill_status == 'pending':
+        order.address_fill_status = 'filled'
+        order.save(update_fields=['address_fill_status'])
+        messages.success(request, '已确认填写地址，感谢您的配合！')
+    return redirect('order_detail', order_id=order_id)

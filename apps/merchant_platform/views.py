@@ -1056,28 +1056,52 @@ def merchant_order_detail(request, order_id):
             messages.info(request, '订单已驳回')
         elif action == 'ship':
             from django.utils import timezone
-            order.tracking_number = request.POST.get('tracking_number', '')
-            order.tracking_company = request.POST.get('tracking_company', '')
-            order.shipped_at = timezone.now()
-            order.save(update_fields=['tracking_number', 'tracking_company', 'shipped_at'])
-            order.transition_status('shipped', operator=request.user, remark='已发货')
-            messages.success(request, '订单已发货')
-            # 【新增】尝试订阅快递100推送
-            if order.tracking_number and order.tracking_company:
-                from utils.kuaidi100 import get_company_code, subscribe_tracking
-                company_code = get_company_code(order.tracking_company)
-                if company_code:
-                    subscribe_result = subscribe_tracking(
-                        order.tracking_number,
-                        company_code,
-                        phone_tail=order.delivery_address.phone[-4:] if order.delivery_address and order.delivery_address.phone else None
-                    )
-                    if subscribe_result['success']:
-                        logger.info("快递100订阅成功: order=%s tracking=%s", order.id, order.tracking_number)
+            ship_mode = request.POST.get('ship_mode', 'normal')
+            
+            if ship_mode == 'private':
+                # 隐私地址发货模式：客户扫码填地址
+                order.is_private_address = True
+                order.address_fill_status = 'pending'
+                order.tracking_number = request.POST.get('tracking_number', '')
+                order.tracking_company = request.POST.get('tracking_company', '顺丰速运')
+                order.shipped_at = timezone.now()
+                if request.FILES.get('express_label_image'):
+                    order.express_label_image = request.FILES.get('express_label_image')
+                order.save(update_fields=['is_private_address', 'address_fill_status', 'tracking_number', 'tracking_company', 'shipped_at', 'express_label_image'])
+                order.transition_status('shipped', operator=request.user, remark='隐私发货：客户扫码填地址')
+                messages.success(request, '已标记为隐私发货，请把快递单照片发给客户扫码填写地址')
+                # 尝试订阅快递100推送
+                if order.tracking_number:
+                    from utils.kuaidi100 import get_company_code, subscribe_tracking
+                    company_code = get_company_code(order.tracking_company or '顺丰速运')
+                    if company_code:
+                        subscribe_tracking(order.tracking_number, company_code)
+            else:
+                # 常规发货模式（原有逻辑）
+                order.is_private_address = False
+                order.address_fill_status = 'not_required'
+                order.tracking_number = request.POST.get('tracking_number', '')
+                order.tracking_company = request.POST.get('tracking_company', '')
+                order.shipped_at = timezone.now()
+                order.save(update_fields=['is_private_address', 'address_fill_status', 'tracking_number', 'tracking_company', 'shipped_at'])
+                order.transition_status('shipped', operator=request.user, remark='已发货')
+                messages.success(request, '订单已发货')
+                # 尝试订阅快递100推送
+                if order.tracking_number and order.tracking_company:
+                    from utils.kuaidi100 import get_company_code, subscribe_tracking
+                    company_code = get_company_code(order.tracking_company)
+                    if company_code:
+                        subscribe_result = subscribe_tracking(
+                            order.tracking_number,
+                            company_code,
+                            phone_tail=order.delivery_address.phone[-4:] if order.delivery_address and order.delivery_address.phone else None
+                        )
+                        if subscribe_result['success']:
+                            logger.info("快递100订阅成功: order=%s tracking=%s", order.id, order.tracking_number)
+                        else:
+                            logger.warning("快递100订阅失败: order=%s tracking=%s msg=%s", order.id, order.tracking_number, subscribe_result['message'])
                     else:
-                        logger.warning("快递100订阅失败: order=%s tracking=%s msg=%s", order.id, order.tracking_number, subscribe_result['message'])
-                else:
-                    logger.warning("未找到快递公司编码: %s", order.tracking_company)
+                        logger.warning("未找到快递公司编码: %s", order.tracking_company)
         elif action == 'mark_paid':
             old_status = order.status
             order.transition_status('paid', operator=request.user, remark='线下支付已确认')

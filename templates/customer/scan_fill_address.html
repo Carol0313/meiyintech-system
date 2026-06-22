@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% block title %}填写收货地址 - {{ order.sn }}{% endblock %}
+{% block page_title %}填写收货地址{% endblock %}
+{% block page_subtitle %}订单 {{ order.sn }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <!-- 订单信息 -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fa-solid fa-box"></i> 订单信息</span>
+                <span class="badge bg-primary">{{ order.get_status_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="row small">
+                    <div class="col-6"><strong>订单号：</strong>{{ order.sn }}</div>
+                    <div class="col-6"><strong>商家：</strong>{{ order.merchant.name }}</div>
+                    <div class="col-6"><strong>产品：</strong>{{ order.items.first.get_product_name_display }}</div>
+                    <div class="col-6"><strong>数量：</strong>共 {{ order.items.count }} 款</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 快递单照片 -->
+        <div class="card mb-3">
+            <div class="card-header bg-warning text-dark">
+                <i class="fa-solid fa-qrcode"></i> 请扫描快递单上的二维码填写地址
+            </div>
+            <div class="card-body text-center">
+                {% if order.express_label_image %}
+                <div class="mb-3">
+                    <img src="{{ order.express_label_image.url }}" alt="快递单照片" class="img-fluid rounded border" style="max-height:400px;">
+                </div>
+                <div class="alert alert-info">
+                    <i class="fa-solid fa-mobile-screen"></i> 
+                    <strong>操作步骤：</strong>
+                    <ol class="text-start mt-2 mb-0">
+                        <li>长按上方快递单照片，保存到手机相册</li>
+                        <li>打开微信，使用"扫一扫"功能</li>
+                        <li>选择相册中的快递单照片</li>
+                        <li>识别二维码后，在顺丰小程序中填写您的收货地址</li>
+                    </ol>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="fa-solid fa-triangle-exclamation"></i> 
+                    商家尚未上传快递单照片，请联系商家处理
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 快递单号信息 -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="fa-solid fa-truck-fast"></i> 物流信息
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small text-muted">快递公司</div>
+                        <div class="fw-bold">{{ order.tracking_company|default:"顺丰速运" }}</div>
+                    </div>
+                    <div class="text-end">
+                        <div class="small text-muted">快递单号</div>
+                        <div class="fw-bold">{{ order.tracking_number }}</div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <a href="https://www.kuaidi100.com/chaxun?com=shunfeng&nu={{ order.tracking_number }}" 
+                       target="_blank" class="btn btn-outline-primary btn-sm w-100">
+                        <i class="fa-solid fa-magnifying-glass"></i> 查询物流状态
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 确认按钮 -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="alert alert-light border">
+                    <i class="fa-solid fa-circle-check text-success"></i>
+                    填写完成后，请点击下方按钮确认，以便商家知道您已完成地址填写
+                </div>
+                <form method="post" action="{% url 'confirm_address_filled' order.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="fa-solid fa-check"></i> 我已填写完成
+                    </button>
+                </form>
+                <div class="mt-2 text-center">
+                    <a href="{% url 'order_detail' order.id %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa-solid fa-arrow-left"></i> 返回订单详情
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

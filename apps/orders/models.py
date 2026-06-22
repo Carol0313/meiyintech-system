@@ -80,6 +80,14 @@ class Order(models.Model):
     tracking_status = models.CharField('物流状态', max_length=20, blank=True, help_text='缓存最新物流状态：0运输中/1揽收/2疑难/3签收/4退签/5派件/6退回')
     tracking_last_context = models.CharField('最新物流节点', max_length=200, blank=True, help_text='最新一条物流信息摘要')
     tracking_last_update = models.DateTimeField('物流更新时间', blank=True, null=True)
+    # 隐私地址发货（客户扫码填地址）
+    is_private_address = models.BooleanField('隐私地址发货', default=False, help_text='客户自行扫码填写地址，系统不保存具体地址')
+    express_label_image = models.ImageField('快递单照片', upload_to='express_labels/%Y/%m/', blank=True, null=True, help_text='工厂贴好预打印单后拍照上传')
+    address_fill_status = models.CharField('地址填写状态', max_length=20, default='not_required', choices=[
+        ('not_required', '无需填写'),
+        ('pending', '待填写'),
+        ('filled', '已填写'),
+    ], help_text='隐私地址模式下客户填写地址的状态')
     rejection_reason = models.TextField('驳回/拒绝原因', blank=True)
     # 补版单关联信息
     original_order = models.ForeignKey(

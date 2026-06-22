@@ -474,6 +474,97 @@
             </div>
         </div>
 
+        <!-- 发货操作卡片（生产中状态显示） -->
+        {% if order.status == 'in_production' %}
+        <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <span><i class="fa-solid fa-truck-fast"></i> 发货操作</span>
+                <span class="badge bg-light text-primary">{{ order.get_status_display }}</span>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'merchant_order_detail' order.id %}" enctype="multipart/form-data" id="shipForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="ship">
+                    
+                    <!-- 发货方式切换 -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">发货方式</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="ship_mode" id="shipModeNormal" value="normal" checked onchange="toggleShipMode()">
+                            <label class="btn btn-outline-primary" for="shipModeNormal">
+                                <i class="fa-solid fa-user-check"></i> 常规发货
+                            </label>
+                            <input type="radio" class="btn-check" name="ship_mode" id="shipModePrivate" value="private" onchange="toggleShipMode()">
+                            <label class="btn btn-outline-warning" for="shipModePrivate">
+                                <i class="fa-solid fa-qrcode"></i> 客户扫码填地址
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 常规发货区域 -->
+                    <div id="normalShipArea">
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted">快递单号 <span class="text-danger">*</span></label>
+                                <input type="text" name="tracking_number" class="form-control" placeholder="请输入快递单号" id="normalTrackingNumber">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted">快递公司 <span class="text-danger">*</span></label>
+                                <select name="tracking_company" class="form-select">
+                                    <option value="顺丰速运" selected>顺丰速运</option>
+                                    <option value="中通快递">中通快递</option>
+                                    <option value="圆通速递">圆通速递</option>
+                                    <option value="韵达快递">韵达快递</option>
+                                    <option value="申通快递">申通快递</option>
+                                    <option value="EMS">EMS</option>
+                                    <option value="京东物流">京东物流</option>
+                                    <option value="德邦快递">德邦快递</option>
+                                </select>
+                            </div>
+                        </div>
+                        {% if order.delivery_address %}
+                        <div class="mt-2 small text-muted">
+                            <i class="fa-solid fa-location-dot"></i> 收货地址：
+                            {{ order.delivery_address.contact_name }} {{ order.delivery_address.phone }} 
+                            {{ order.delivery_address.province }}{{ order.delivery_address.city }}{{ order.delivery_address.district }}{{ order.delivery_address.detail }}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- 隐私发货区域 -->
+                    <div id="privateShipArea" style="display:none;">
+                        <div class="alert alert-warning">
+                            <i class="fa-solid fa-circle-info"></i> 
+                            <strong>隐私发货模式：</strong>客户将自行扫码填写收货地址
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted">预打印快递单号 <span class="text-danger">*</span></label>
+                                <input type="text" name="tracking_number" class="form-control" placeholder="顺丰预打印单号" id="privateTrackingNumber">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted">快递公司</label>
+                                <input type="text" class="form-control" value="顺丰速运" disabled>
+                                <input type="hidden" name="tracking_company" value="顺丰速运">
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label small text-muted">快递单照片 <span class="text-danger">*</span></label>
+                            <input type="file" name="express_label_image" class="form-control" accept="image/*" id="expressLabelImage">
+                            <div class="form-text">请上传工厂贴好的顺丰预打印单照片，发给客户扫码填地址</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-primary w-100" id="shipSubmitBtn" onclick="return validateShipForm()">
+                            <i class="fa-solid fa-paper-plane"></i> 确认发货
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="card">
             <div class="card-header">状态流转</div>
             <div class="card-body small">
@@ -529,6 +620,42 @@
 </style>
 
 <script>
+function toggleShipMode() {
+    const normalArea = document.getElementById('normalShipArea');
+    const privateArea = document.getElementById('privateShipArea');
+    const isPrivate = document.getElementById('shipModePrivate').checked;
+    
+    if (isPrivate) {
+        normalArea.style.display = 'none';
+        privateArea.style.display = 'block';
+    } else {
+        normalArea.style.display = 'block';
+        privateArea.style.display = 'none';
+    }
+}
+
+function validateShipForm() {
+    const isPrivate = document.getElementById('shipModePrivate').checked;
+    const trackingNumber = isPrivate 
+        ? document.getElementById('privateTrackingNumber').value.trim()
+        : document.getElementById('normalTrackingNumber').value.trim();
+    
+    if (!trackingNumber) {
+        alert('请输入快递单号');
+        return false;
+    }
+    
+    if (isPrivate) {
+        const imageFile = document.getElementById('expressLabelImage').files[0];
+        if (!imageFile) {
+            alert('请上传快递单照片');
+            return false;
+        }
+    }
+    
+    return confirm('确认发货？' + (isPrivate ? '客户将需要扫码填写地址。' : ''));
+}
+
 // 红框编辑功能
 function toggleRedBoxEdit(itemId) {
     const displayEl = document.getElementById('redBoxDisplay-' + itemId);
