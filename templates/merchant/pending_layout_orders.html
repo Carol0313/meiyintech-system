@@ -148,7 +148,7 @@
     }
     .layout-item-preview {
         position: relative;
-        height: 120px;
+        height: 140px;
         background: #f1f5f9;
         display: flex;
         align-items: center;
@@ -160,7 +160,7 @@
         object-fit: contain;
         padding: 6px;
     }
-    .layout-item-body { padding: 10px 12px; flex: 1; }
+    .layout-item-body { padding: 10px 12px; flex: 1; display: flex; flex-direction: column; }
     .layout-item-size {
         font-size: 15px;
         font-weight: 700;
@@ -171,6 +171,28 @@
         color: var(--text-muted);
         margin-top: 4px;
         line-height: 1.5;
+    }
+    .layout-item-customer {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px dashed #e2e8f0;
+    }
+    .layout-item-order {
+        font-size: 11px;
+        color: #64748b;
+        margin-top: 2px;
+    }
+    .layout-item-product {
+        font-size: 11px;
+        color: #475569;
+        background: #f1f5f9;
+        padding: 3px 8px;
+        border-radius: 4px;
+        margin-top: 6px;
+        display: inline-block;
     }
     .layout-item-note {
         font-size: 11px;
@@ -363,13 +385,22 @@
                     <div class="layout-item-body">
                         <div class="layout-item-size">{{ item.length_mm }}×{{ item.width_mm }} mm</div>
                         <div class="layout-item-meta">
-                            ×{{ item.quantity }} 块<br>
+                            ×{{ item.quantity }} 块
+                        </div>
+                        <div class="layout-item-customer">
+                            <i class="fa-solid fa-user fa-xs text-muted me-1"></i>
                             {% if item.order.customer.customer_profile.company_name %}
-                                {{ item.order.customer.customer_profile.company_name|truncatechars:10 }}
+                                {{ item.order.customer.customer_profile.company_name|truncatechars:12 }}
                             {% else %}
                                 {{ item.order.customer.phone|slice:"-4:" }}…
                             {% endif %}
-                            · {{ item.order.sn|slice:"-8:" }}
+                        </div>
+                        <div class="layout-item-order">
+                            <i class="fa-solid fa-hashtag fa-xs text-muted me-1"></i>
+                            {{ item.order.sn }}
+                        </div>
+                        <div class="layout-item-product">
+                            {{ item.get_product_name_display }} · {{ item.get_material_display }} · {{ item.thickness }}mm
                         </div>
                         {% if item.order.special_requests %}
                         <div class="layout-item-note" title="{{ item.order.special_requests }}">
