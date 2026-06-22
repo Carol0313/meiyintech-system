@@ -1728,9 +1728,12 @@ def api_delivery_fee_estimate(request):
     return JsonResponse({
         'success': True,
         'factory': result['factory_name'],
+        'factory_code': result['factory'],
         'rate_name': result['rate_name'],
+        'rate_code': result['rate_code'],
         'delivery_fee': float(result['预估运费']),
         'delivery_fee_str': f"¥{result['预估运费']}",
         'note': result['note'],
         'weight_estimate': result['weight_kg'],
+        'customer_province': address.province,
     })
