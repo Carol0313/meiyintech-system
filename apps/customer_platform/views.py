@@ -820,9 +820,9 @@ def quick_order_upload(request):
             response_data['boxes'] = box_info['boxes']
 
         return JsonResponse(response_data)
-    except Exception:
+    except Exception as e:
         logger.exception('单文件上传处理失败')
-        return JsonResponse({'success': False, 'error': '文件处理失败，请稍后重试或联系客服'})
+        return JsonResponse({'success': False, 'error': f'文件处理失败: {str(e)}'})
 
 
 @login_required
