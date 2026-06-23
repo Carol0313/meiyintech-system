@@ -17,6 +17,14 @@ from .forms import (
 )
 
 
+def index(request):
+    """网站首页 - 根据登录状态和用户类型跳转"""
+    if request.user.is_authenticated:
+        return _redirect_by_user_type(request.user)
+    # 未登录用户跳转到登录页
+    return redirect('login')
+
+
 def user_login(request):
     """统一登录视图，根据用户类型跳转不同首页"""
     if request.user.is_authenticated:
