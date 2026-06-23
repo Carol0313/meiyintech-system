@@ -98,7 +98,7 @@
                 <div class="mb-3">
                     <div class="d-flex flex-wrap">
                         {% for stat in type_stats %}
-                        <span class="type-badge {% if stat.code.startswith 'file_' %}file{% elif stat.code.startswith 'prod_' %}prod{% elif stat.code.startswith 'shipping_' %}shipping{% else %}other{% endif %}">
+                        <span class="type-badge {% if stat.code|slice:':5' == 'file_' %}file{% elif stat.code|slice:':5' == 'prod_' %}prod{% elif stat.code|slice:':8' == 'shipping' %}shipping{% else %}other{% endif %}">
                             {{ stat.label }} <strong>{{ stat.count }}</strong>
                         </span>
                         {% endfor %}
@@ -162,9 +162,9 @@
                     <td>{{ complaint.customer.phone }}</td>
                     <td>
                         <span class="badge 
-                            {% if complaint.complaint_type.startswith 'file_' %}bg-warning text-dark
-                            {% elif complaint.complaint_type.startswith 'prod_' %}bg-info text-dark
-                            {% elif complaint.complaint_type.startswith 'shipping_' %}bg-success
+                            {% if complaint.complaint_type|slice:':5' == 'file_' %}bg-warning text-dark
+                            {% elif complaint.complaint_type|slice:':5' == 'prod_' %}bg-info text-dark
+                            {% elif complaint.complaint_type|slice:':8' == 'shipping' %}bg-success
                             {% else %}bg-secondary{% endif %}">
                             {{ complaint.get_complaint_type_display|default:"其他" }}
                         </span>
