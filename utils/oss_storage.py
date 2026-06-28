@@ -37,25 +37,33 @@ class AliyunOSSStorage(Storage):
     def __init__(self, **kwargs):
         self.access_key_id = kwargs.get('access_key_id') or getattr(settings, 'OSS_ACCESS_KEY_ID', '')
         self.access_key_secret = kwargs.get('access_key_secret') or getattr(settings, 'OSS_ACCESS_KEY_SECRET', '')
+        # 外网 Endpoint（用于生成浏览器可访问的签名 URL）
         self.endpoint = kwargs.get('endpoint') or getattr(settings, 'OSS_ENDPOINT', '')
         self.bucket_name = kwargs.get('bucket_name') or getattr(settings, 'OSS_BUCKET_NAME', '')
         self.base_dir = kwargs.get('base_dir') or getattr(settings, 'OSS_BASE_DIR', 'magnesium/')
         self.use_internal = kwargs.get('use_internal') or getattr(settings, 'OSS_INTERNAL', False)
         self.custom_domain = kwargs.get('custom_domain') or getattr(settings, 'OSS_CUSTOM_DOMAIN', '')
 
-        # 如果启用内网，将 endpoint 中的 .aliyuncs.com 替换为 -internal.aliyuncs.com
+        # 内网 Endpoint（服务器后端上传/下载/检查使用，同区域 ECS 访问免流量费）
+        self.internal_endpoint = self.endpoint
         if self.use_internal and '.aliyuncs.com' in self.endpoint and '-internal' not in self.endpoint:
-            self.endpoint = self.endpoint.replace('.aliyuncs.com', '-internal.aliyuncs.com')
+            self.internal_endpoint = self.endpoint.replace('.aliyuncs.com', '-internal.aliyuncs.com')
 
         self._bucket = None
         super().__init__()
 
     @property
     def bucket(self):
+        """服务器后端操作使用的 Bucket（优先内网 Endpoint）"""
         if self._bucket is None:
             auth = oss2.Auth(self.access_key_id, self.access_key_secret)
-            self._bucket = oss2.Bucket(auth, f"https://{self.endpoint}", self.bucket_name)
+            self._bucket = oss2.Bucket(auth, f"https://{self.internal_endpoint}", self.bucket_name)
         return self._bucket
+
+    def _get_public_bucket(self):
+        """生成浏览器可访问的外网 Bucket 实例（用于签名 URL）"""
+        auth = oss2.Auth(self.access_key_id, self.access_key_secret)
+        return oss2.Bucket(auth, f"https://{self.endpoint}", self.bucket_name)
 
     def _get_object_name(self, name):
         """将 Django 的相对路径转换为 OSS 的完整对象名"""
@@ -101,7 +109,9 @@ class AliyunOSSStorage(Storage):
 
     def url(self, name):
         """获取文件的访问 URL
-        私有Bucket下返回带签名的临时URL（默认1小时有效）
+        私有Bucket下返回带签名的临时URL（默认1小时有效）。
+        注意：返回给浏览器访问的 URL 必须使用外网 Endpoint，
+        因此这里使用 _get_public_bucket() 而非内网 bucket。
         """
         object_name = self._get_object_name(name)
 
@@ -110,14 +120,13 @@ class AliyunOSSStorage(Storage):
             domain = self.custom_domain.rstrip('/')
             return f"{domain}/{object_name}"
 
-        # 私有Bucket：返回带签名的临时URL（1小时有效）
-        # 签名URL支持内网Endpoint，ECS同区域访问流量免费
-        return self.bucket.sign_url('GET', object_name, 3600)
+        # 私有Bucket：返回带签名的临时URL（1小时有效），使用外网 Endpoint
+        return self._get_public_bucket().sign_url('GET', object_name, 3600)
 
     def get_signed_url(self, name, expires=3600):
-        """获取自定义有效期的签名URL"""
+        """获取自定义有效期的签名URL（使用外网 Endpoint）"""
         object_name = self._get_object_name(name)
-        return self.bucket.sign_url('GET', object_name, expires)
+        return self._get_public_bucket().sign_url('GET', object_name, expires)
 
     def size(self, name):
         """获取文件大小"""
