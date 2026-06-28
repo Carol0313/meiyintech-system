@@ -182,7 +182,6 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False, r
         doc.close()
         
         # 2. 读取预览图尺寸
-        from PIL import Image
         with Image.open(tmp_path) as im:
             img_width, img_height = im.size
         
