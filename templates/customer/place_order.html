@@ -458,7 +458,7 @@
 <div id="uploadOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.8);z-index:2000;align-items:center;justify-content:center;">
     <div class="text-center">
         <div class="spinner-border text-primary mb-2" role="status"></div>
-        <div class="text-primary">正在识别文件尺寸...</div>
+        <div id="uploadOverlayText" class="text-primary">正在识别文件尺寸...</div>
     </div>
 </div>
 {% endblock %}
@@ -846,80 +846,95 @@ function bindUploadEvents(groupId) {
         `).join('');
     }
 
-    startBtn.addEventListener('click', () => {
+    startBtn.addEventListener('click', async () => {
         if (group.pendingFiles.length === 0) return;
+
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const total = group.pendingFiles.length;
+        const failed = [];
+        const uploadedFiles = [];
+
         document.getElementById('uploadOverlay').style.display = 'flex';
+        const overlayText = document.getElementById('uploadOverlayText');
 
-        const formData = new FormData();
-        group.pendingFiles.forEach(file => formData.append('pdf_files', file));
-        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        // 逐个上传，避免多个大文件同时处理导致 Nginx 超时
+        for (let i = 0; i < total; i++) {
+            const file = group.pendingFiles[i];
+            if (overlayText) {
+                overlayText.textContent = `正在上传并识别 ${i + 1}/${total}：${file.name}`;
+            }
 
-        fetch('{% url "batch_upload_files" %}', {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(r => {
-            if (!r.ok) {
-                return r.text().then(text => {
+            const formData = new FormData();
+            formData.append('pdf_files', file);
+            formData.append('csrfmiddlewaretoken', csrfToken);
+
+            try {
+                const r = await fetch('{% url "batch_upload_files" %}', {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                if (!r.ok) {
+                    const text = await r.text();
                     throw new Error('服务器错误 [' + r.status + ']：' + text.substring(0, 200));
-                });
-            }
-            const ct = r.headers.get('content-type') || '';
-            if (!ct.includes('application/json')) {
-                return r.text().then(text => {
-                    throw new Error('返回格式错误：' + text.substring(0, 200));
-                });
-            }
-            return r.json();
-        })
-        .then(data => {
-            document.getElementById('uploadOverlay').style.display = 'none';
-            if (!data.success) {
-                alert(data.error || '识别失败');
-                return;
-            }
-            group.pendingFiles = [];
-            pendingArea.style.display = 'none';
-
-            data.files.forEach(f => {
-                console.log('File result:', f);  // 调试日志
-                if (f.success) {
-                    // 优先使用框尺寸，其次PDF页面尺寸
-                    let long, short;
-                    if (f.first_length && f.first_width) {
-                        long = Math.max(f.first_length, f.first_width);
-                        short = Math.min(f.first_length, f.first_width);
-                    } else if (f.pdf_width_mm && f.pdf_height_mm) {
-                        long = Math.max(f.pdf_width_mm, f.pdf_height_mm);
-                        short = Math.min(f.pdf_width_mm, f.pdf_height_mm);
-                    } else {
-                        long = 0;
-                        short = 0;
-                    }
-                    group.recognizedFiles.push({
-                        file_path: f.file_path,
-                        file_name: f.file_name,
-                        preview_url: f.preview_url,
-                        length_mm: long,
-                        width_mm: short,
-                        quantity: f.first_quantity || 1,
-                        area: f.area || 0,
-                        boxes: f.boxes || null,
-                        box_count: f.box_count || 0,
-                    });
-                } else {
-                    console.error('File failed:', f.error);
-                    alert('文件 "' + f.file_name + '" 处理失败：' + (f.error || '未知错误'));
                 }
-            });
-            renderRecognizedFiles(groupId);
-            calcTotalPrice();
-        })
-        .catch(err => {
-            document.getElementById('uploadOverlay').style.display = 'none';
-            alert('上传出错：' + err);
-        });
+                const ct = r.headers.get('content-type') || '';
+                if (!ct.includes('application/json')) {
+                    const text = await r.text();
+                    throw new Error('返回格式错误：' + text.substring(0, 200));
+                }
+                const data = await r.json();
+                if (!data.success) {
+                    throw new Error(data.error || '识别失败');
+                }
+
+                const f = data.files && data.files[0];
+                if (!f || !f.success) {
+                    throw new Error((f && f.error) || '处理失败');
+                }
+
+                // 优先使用框尺寸，其次PDF页面尺寸
+                let long, short;
+                if (f.first_length && f.first_width) {
+                    long = Math.max(f.first_length, f.first_width);
+                    short = Math.min(f.first_length, f.first_width);
+                } else if (f.pdf_width_mm && f.pdf_height_mm) {
+                    long = Math.max(f.pdf_width_mm, f.pdf_height_mm);
+                    short = Math.min(f.pdf_width_mm, f.pdf_height_mm);
+                } else {
+                    long = 0;
+                    short = 0;
+                }
+                group.recognizedFiles.push({
+                    file_path: f.file_path,
+                    file_name: f.file_name,
+                    preview_url: f.preview_url,
+                    length_mm: long,
+                    width_mm: short,
+                    quantity: f.first_quantity || 1,
+                    area: f.area || 0,
+                    boxes: f.boxes || null,
+                    box_count: f.box_count || 0,
+                });
+                uploadedFiles.push(file.name);
+            } catch (err) {
+                console.error('单个文件上传失败:', file.name, err);
+                failed.push({ name: file.name, error: String(err) });
+            }
+        }
+
+        document.getElementById('uploadOverlay').style.display = 'none';
+
+        // 从待上传列表中移除已成功识别的文件
+        group.pendingFiles = group.pendingFiles.filter(f => !uploadedFiles.includes(f.name));
+        renderPendingFiles();
+        renderRecognizedFiles(groupId);
+        calcTotalPrice();
+
+        if (failed.length > 0) {
+            alert(`${failed.length} 个文件处理失败（其余已正常识别）：\n` +
+                  failed.map(f => `• ${f.name}\n  ${f.error.substring(0, 120)}`).join('\n'));
+        }
     });
 }
 

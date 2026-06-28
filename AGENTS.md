@@ -157,7 +157,7 @@ oss2>=2.18                    # 阿里云 OSS（可选）
 - 数据库切换：通过 `DB_ENGINE` 环境变量（`sqlite3`/`postgresql`/`mysql`）
 - 阿里云 OSS：`DEFAULT_FILE_STORAGE` 默认启用 `utils.oss_storage.AliyunOSSMediaStorage`；`OSS_ACCESS_KEY_ID`/`OSS_ACCESS_KEY_SECRET` 从环境变量读取；`OSS_INTERNAL` 自动检测 ECS 内网环境
 - 快递100 API Key / 阿里云 SMS 密钥均从环境变量读取
-- 文件上传限制：50MB
+- 文件上传限制：100MB
 - 自定义用户模型：`AUTH_USER_MODEL = 'accounts.User'`，`USERNAME_FIELD = 'phone'`
 - 会话有效期：7 天（`SESSION_COOKIE_AGE = 86400 * 7`）
 - **日志配置（2026-06-12 新增）**：`RotatingFileHandler` 写入 `logs/django.log`（INFO，10MB×10）和 `logs/error.log`（ERROR，10MB×10）
@@ -440,7 +440,7 @@ python manage.py test
 | 点击劫持 | ✅ 已启用 | `XFrameOptionsMiddleware` (SAMEORIGIN) |
 | MIME 嗅探防护 | ✅ 已启用 | `SECURE_CONTENT_TYPE_NOSNIFF` |
 | 密码强度校验 | ✅ 已启用 | 4 种 Django 内置校验器 |
-| 文件上传大小限制 | ✅ 已启用 | 50MB |
+| 文件上传大小限制 | ✅ 已启用 | 100MB |
 | 生产环境 fail-closed | ✅ 已启用 | 未配置密钥/域名时直接抛出异常，禁止启动 |
 | HTTPS 安全 Cookie | ✅ 条件启用 | `USE_HTTPS=true` 时启用 `SESSION_COOKIE_SECURE` / `CSRF_COOKIE_SECURE` |
 | OSS 私有 Bucket | ✅ 已启用 | 2026-06-12 启用私有 Bucket + 签名 URL |

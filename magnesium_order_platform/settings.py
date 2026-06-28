@@ -233,8 +233,9 @@ LOGOUT_REDIRECT_URL = '/accounts/login/'
 SESSION_COOKIE_AGE = 86400 * 7  # 7 days
 
 # File upload limits
-DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
-FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
+# 单请求/单文件上限 100MB，配合 Nginx client_max_body_size 使用
+DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100MB
 
 # ==================== 快递100 物流查询配置 ====================
 # 接入步骤：
