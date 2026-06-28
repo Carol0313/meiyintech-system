@@ -20,21 +20,44 @@
 
 ---
 
-## 2026-06-13
+## 2026-06-28
 
-### 1. 更新项目进度表 [docs]
-- **改动**：根据6月12日进度总览及当前实际完成情况，更新《平台部署时间进度表》
-- **内容**：
-  - PostgreSQL 数据库迁移、Gunicorn+Nginx 生产部署、服务器安全加固标记为「已完成」
-  - 新增「性能测试」「核心功能二次深化开发」待开始项
-  - 部署时间线按 6月30日上线倒排，从 6月15日 开始制定冲刺计划
-  - 更新关键里程碑：性能测试 → 性能优化 → 核心功能深化 → UAT → 上线交付
-- **影响文件**：`平台部署时间进度表_详细版_6月13日更新.xlsx`
+### 1. 修复下单页 PDF 红框识别精度问题 [fix]
+- **颜色阈值**：收紧红色判定（R>0.7 且 R 比 G/B 高 0.2），减少橙/褐误判；提高白色/近白色阈值，减少浅灰/淡网点误判
+- **过滤优化**：文字重叠阈值从 90% 调至 85%；嵌套内边框检查扩展到全部候选框
+- **单位统一**：`red_box_data` 中 `x/y/width/height` 统一为 PDF pt，`length_mm/width_mm` 为毫米；拼版代码统一读取 mm 字段
+- **数量识别**：新增 "做3块"/"要3个"/"Qty:3"/"3PCS" 等口语化/英文表达匹配
+- **影响文件**：`utils/pdf_red_box.py`、`utils/plate_layout.py`、`utils/plate_batch.py`、`utils/plate_pdf.py`、`apps/customer_platform/views.py`
+- **数据库**：否
+
+### 2. 修复效果图不明显与 3D 预览失败 [fix][feat]
+- **前后端 key 对齐**：下单页「压纹凹陷」从 `emboss` 改为 `emboss_deboss`，不再回退成普通效果
+- **效果名称修复**：`api_preview_effect` 直接根据实际效果类型返回名称，不再总是显示「普通」
+- **3D OSS 读取**：`api_preview_3d` 先调用 `_get_pdf_local_path`，解决 OSS 环境下找不到 PDF 的问题
+- **3D 性能**：`generate_normal_map` 改为 numpy 向量化 Sobel，替代纯 Python 双层循环
+- **3D 跨域**：前端 `TextureLoader.setCrossOrigin('anonymous')`，贴图 URL 加时间戳防缓存
+- **效果图清晰度**：DPI 从 72 提升到 100，最大边长从 1200 放宽到 1400
+- **影响文件**：`utils/plate_preview_effects.py`、`apps/customer_platform/views.py`、`templates/customer/place_order.html`
+- **数据库**：否
+
+### 3. 修复「我的订单」预览图与下单页效果图断裂 [fix]
+- **持久化**：下单页用户选中的效果图保存为 `customer_previews/{item.id}.png` 并写入 `OrderItem.preview_image`
+- **优先读取**：`my_orders` / `order_detail` 优先使用 `preview_image.url`，无效果图时回退到基础 PDF 预览
+- **旧订单兼容**：没有效果图的订单继续显示普通 PDF 缩略图
+- **影响文件**：`apps/customer_platform/views.py`、`templates/customer/place_order.html`
+- **数据库**：否
+
+### 4. 版类效果图向 demo 风格靠拢 [style][feat]
+- **灰底背景**：浮雕/压纹/激凸/烫金效果图统一改用中灰背景（`bg_gray=180`），更接近 demo 样张质感
+- **光照模型重做**：`_emboss_metal` 改为距离变换 + 固定方向光照模型，左上光源产生统一立体感，避免旧版 PIL EMBOSS 的径向纹理
+- **强高光/阴影**：降低环境光（`ambient=0.18`）、保留自然明暗对比、gamma 增强，使高光更亮、暗部更深
+- **边缘平滑**：`_get_content_mask` 增加 0.5px 高斯模糊后阈值化，减少文字锯齿在光照模型中的高频噪声
+- **影响文件**：`utils/plate_preview_effects.py`
 - **数据库**：否
 
 ---
 
-## 2026-06-12
+## 2026-06-13
 
 ### 1. 阿里云OSS私有Bucket签名URL [feat][security]
 - **功能**：启用私有Bucket，通过签名URL安全访问OSS文件

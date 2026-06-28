@@ -45,6 +45,7 @@ def _add_crop_marks(page, pw_mm, ph_mm, mark_len_mm=5):
 def _get_red_box_clip_rect(order_item, box_index=0):
     """
     从 OrderItem 的 red_box_data 中提取指定索引的红框裁剪区域（单位：points）
+    优先使用后端返回的 pt_* 字段；不存在时根据 mm 字段换算；最后回退 x/y/width/height。
     返回 fitz.Rect 或 None
     """
     if not order_item.red_box_data:
@@ -55,6 +56,23 @@ def _get_red_box_clip_rect(order_item, box_index=0):
             return None
         # 循环使用红框（quantity 可能大于红框数量）
         box = boxes[box_index % len(boxes)]
+
+        # 优先使用后端识别出的原始 PDF 点坐标
+        x = float(box.get('pt_x', 0) or 0)
+        y = float(box.get('pt_y', 0) or 0)
+        w = float(box.get('pt_width', 0) or 0)
+        h = float(box.get('pt_height', 0) or 0)
+        if w > 0 and h > 0:
+            return fitz.Rect(x, y, x + w, y + h)
+
+        # 其次根据 mm 字段换算（1 pt = 25.4/72 mm）
+        mm_to_pt = 72.0 / 25.4
+        length_mm = float(box.get('length_mm', 0) or 0)
+        width_mm = float(box.get('width_mm', 0) or 0)
+        if length_mm > 0 and width_mm > 0:
+            return fitz.Rect(0, 0, length_mm * mm_to_pt, width_mm * mm_to_pt)
+
+        # 兼容旧数据：直接读取 x/y/width/height（假设为 pt）
         x = float(box.get('x', 0))
         y = float(box.get('y', 0))
         w = float(box.get('width', 0))

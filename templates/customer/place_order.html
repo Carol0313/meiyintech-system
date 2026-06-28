@@ -1364,7 +1364,7 @@ document.getElementById('quickOrderForm').addEventListener('submit', function(e)
 // 产品类型 -> 可用效果映射
 const PRODUCT_EFFECT_MAP = {
     'etching_concave':  [
-        { key: 'emboss', name: '压纹凹陷' },
+        { key: 'emboss_deboss', name: '压纹凹陷' },
         { key: 'normal', name: '普通' },
     ],
     'etching_convex':  [
@@ -1626,6 +1626,9 @@ function fetchRedBoxes(groupId, idx, needImage = false) {
             state.boxes = data.boxes.map((b, i) => ({
                 id: i, x: b.x, y: b.y,
                 width: b.width, height: b.height,
+                // 保留后端返回的原始 PDF 点坐标，供生产流程使用
+                pt_x: b.pt_x, pt_y: b.pt_y,
+                pt_width: b.pt_width, pt_height: b.pt_height,
                 length_mm: b.length_mm, width_mm: b.width_mm,
                 quantity: 1,
             }));
@@ -1993,9 +1996,20 @@ function initThreeJS(groupId, idx, data) {
         delete threeScenes[key];
     }
     
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    
+    let width = container.clientWidth;
+    let height = container.clientHeight;
+    if (width <= 0 || height <= 0) {
+        // 容器尚未正确展开时，使用父面板尺寸兜底
+        const panel = document.getElementById(`preview3DPanel-${groupId}-${idx}`);
+        if (panel) {
+            width = panel.clientWidth || 400;
+            height = panel.clientHeight || 300;
+        } else {
+            width = 400;
+            height = 300;
+        }
+    }
+
     // 场景
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf8f9fa);
@@ -2042,11 +2056,14 @@ function initThreeJS(groupId, idx, data) {
     
     // 加载贴图
     const textureLoader = new THREE.TextureLoader();
-    
+    textureLoader.setCrossOrigin('anonymous');
+
+    // 添加时间戳避免缓存导致跨域/过期问题
+    const ts = Date.now();
     Promise.all([
-        loadTexture(textureLoader, data.color_url),
-        loadTexture(textureLoader, data.displacement_url),
-        loadTexture(textureLoader, data.normal_url)
+        loadTexture(textureLoader, data.color_url + (data.color_url.includes('?') ? '&' : '?') + '_t=' + ts),
+        loadTexture(textureLoader, data.displacement_url + (data.displacement_url.includes('?') ? '&' : '?') + '_t=' + ts),
+        loadTexture(textureLoader, data.normal_url + (data.normal_url.includes('?') ? '&' : '?') + '_t=' + ts)
     ]).then(([colorMap, displacementMap, normalMap]) => {
         // 计算平面尺寸（保持宽高比）
         const aspect = data.width / data.height;
@@ -2225,6 +2242,8 @@ function switchEffect(groupId, idx, effectKey, btnEl) {
             return;
         }
         state.effectUrl = data.effect_url;
+        // 记录用户选中的效果图URL，提交订单时持久化到 OrderItem.preview_image
+        f.selected_effect_url = data.effect_url;
         previewArea.innerHTML = `
             <img src="${data.effect_url}" class="effect-preview-img" alt="${data.effect_name}">
             <div class="small text-muted mt-1">${data.effect_name}</div>

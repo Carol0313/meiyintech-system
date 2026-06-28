@@ -81,10 +81,10 @@ def build_rects_from_items(item_list, spacing_mm=10):
             try:
                 boxes = json.loads(item.red_box_data)
                 if isinstance(boxes, list) and len(boxes) > 0:
-                    # 使用第一个红框的尺寸
+                    # 使用第一个红框的尺寸（统一读取 mm 字段）
                     rb = boxes[0]
-                    rb_w = float(rb.get('width', 0))
-                    rb_h = float(rb.get('height', 0))
+                    rb_w = float(rb.get('length_mm', 0) or rb.get('width', 0))
+                    rb_h = float(rb.get('width_mm', 0) or rb.get('height', 0))
                     # 校验1：红框尺寸不能超过最大板材规格
                     # 校验2：红框面积不能超过用户填写面积的4倍（容错空间）
                     user_area = user_length * user_width

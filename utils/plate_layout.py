@@ -379,8 +379,9 @@ def auto_generate_plate_layout_for_order(order, algorithm='maxrects'):
         width = user_width
 
         if red_box:
-            rb_w = float(red_box.get('width', 0))
-            rb_h = float(red_box.get('height', 0))
+            # 【修复】统一使用 mm 字段，避免 pt/mm 混用导致尺寸异常
+            rb_w = float(red_box.get('length_mm', 0) or red_box.get('width', 0))
+            rb_h = float(red_box.get('width_mm', 0) or red_box.get('height', 0))
             user_area = user_length * user_width
             red_box_area = rb_w * rb_h
             is_reasonable = (

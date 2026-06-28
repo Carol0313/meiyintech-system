@@ -42,6 +42,18 @@ MIN_BOX_AREA_MM2 = 250          # 绝对最小面积（mm²），低于此值且
 MIN_BOX_RELATIVE_AREA = 0.08    # 相对最大框面积比例阈值
 NESTED_SMALL_RATIO = 0.30       # 嵌套在大框内部且面积小于 outer*0.3 的视为内容/噪声
 
+# 颜色判定参数（可配置）
+COLOR_WHITE_RGB_THRESHOLD = 0.97      # RGB 白色阈值，高于此值视为白色/近白色
+COLOR_WHITE_CMYK_THRESHOLD = 0.03     # CMYK 白色阈值，低于此值视为白色
+COLOR_WHITE_GRAY_THRESHOLD = 0.97     # 灰度白色阈值
+RED_RGB_R_THRESHOLD = 0.70            # 红色 R 通道最小值
+RED_RGB_GAP = 0.20                    # 红色 R 通道需比 G/B 高多少
+RED_CMYK_M_THRESHOLD = 0.30           # 红色 CMYK M 阈值
+RED_CMYK_Y_THRESHOLD = 0.30           # 红色 CMYK Y 阈值
+RED_CMYK_C_MAX = 0.30                 # 红色 CMYK C 最大值
+RED_CMYK_K_MAX = 0.50                 # 红色 CMYK K 最大值
+TEXT_OVERLAP_THRESHOLD = 0.85         # 框与文字块重叠面积超过此比例视为文字区域
+
 
 def find_colored_rectangles(file_path_or_doc):
     """
@@ -149,6 +161,8 @@ def find_colored_rectangles(file_path_or_doc):
                     'y': round(rect.y0, 2),
                     'width': round(rect.width, 2),
                     'height': round(rect.height, 2),
+                    'length_mm': round(rect.width * PT_TO_MM, 2),
+                    'width_mm': round(rect.height * PT_TO_MM, 2),
                     'area': round(rect_area, 2),
                     'is_red': is_red_stroke or is_red_fill,
                 })
@@ -182,7 +196,7 @@ def find_colored_rectangles(file_path_or_doc):
                 r_fitz = fitz.Rect(r['x'], r['y'], r['x'] + r['width'], r['y'] + r['height'])
                 for tr in text_rects:
                     intersect = r_fitz & tr
-                    if intersect and intersect.get_area() > r['area'] * 0.90:
+                    if intersect and intersect.get_area() > r['area'] * TEXT_OVERLAP_THRESHOLD:
                         is_text_area = True
                         break
                 if not is_text_area:
@@ -219,6 +233,8 @@ def find_colored_rectangles(file_path_or_doc):
                             'y': round(rect.y0, 2),
                             'width': round(rect.width, 2),
                             'height': round(rect.height, 2),
+                            'length_mm': round(rect.width * PT_TO_MM, 2),
+                            'width_mm': round(rect.height * PT_TO_MM, 2),
                             'area': round(rect_area, 2),
                             'is_red': is_red,
                         })
@@ -238,9 +254,9 @@ def find_colored_rectangles(file_path_or_doc):
 
     # 过滤嵌套内边框：如果一个框完全包含在另一个框内，且面积 > 外层框的 60%，
     # 则认为是内边框/描边副本，予以排除
-    # 【优化】只对前20个框做嵌套检查
+    # 【修复】扩展到全部候选框，避免前20个之后的描边副本被误保留
     filtered = []
-    check_count = min(len(colored_rects), 20)
+    check_count = len(colored_rects)
     for i in range(check_count):
         r = colored_rects[i]
         is_inner_border = False
@@ -249,7 +265,7 @@ def find_colored_rectangles(file_path_or_doc):
                 continue
             outer = colored_rects[j]
             # 检查 r 是否几乎完全在 outer 内部
-            if (r['x'] >= outer['x'] - 2 and 
+            if (r['x'] >= outer['x'] - 2 and
                 r['y'] >= outer['y'] - 2 and
                 r['x'] + r['width'] <= outer['x'] + outer['width'] + 2 and
                 r['y'] + r['height'] <= outer['y'] + outer['height'] + 2):
@@ -259,9 +275,6 @@ def find_colored_rectangles(file_path_or_doc):
                     break
         if not is_inner_border:
             filtered.append(r)
-    # 保留未检查的框
-    if len(colored_rects) > check_count:
-        filtered.extend(colored_rects[check_count:])
     colored_rects = filtered
 
     # 【修复】优先识别红色框，但没有红色框时保留其他颜色的框
@@ -298,7 +311,7 @@ def _is_colored_box(color):
     if len(color) >= 3:
         r, g, b = color[0], color[1], color[2]
         # 排除白色和近白色（所有通道都接近1）
-        if r > 0.95 and g > 0.95 and b > 0.95:
+        if r > COLOR_WHITE_RGB_THRESHOLD and g > COLOR_WHITE_RGB_THRESHOLD and b > COLOR_WHITE_RGB_THRESHOLD:
             return False
         # 排除透明/无色
         if r == 0 and g == 0 and b == 0 and len(color) == 4 and color[3] == 0:
@@ -309,12 +322,12 @@ def _is_colored_box(color):
         # CMYK
         c, m, y, k = color[0], color[1], color[2], color[3]
         # 【修复】排除白色（C=M=Y≈0, K≈0），使用容差避免浮点精度问题
-        if abs(c) < 0.01 and abs(m) < 0.01 and abs(y) < 0.01 and abs(k) < 0.01:
+        if abs(c) < COLOR_WHITE_CMYK_THRESHOLD and abs(m) < COLOR_WHITE_CMYK_THRESHOLD and abs(y) < COLOR_WHITE_CMYK_THRESHOLD and abs(k) < COLOR_WHITE_CMYK_THRESHOLD:
             return False
         return True
     elif len(color) == 1:
         # 灰度，排除白色
-        return color[0] < 0.95
+        return color[0] < COLOR_WHITE_GRAY_THRESHOLD
     return False
 
 
@@ -324,13 +337,13 @@ def _is_red_box(color):
         return False
     if len(color) >= 3:
         r, g, b = color[0], color[1], color[2]
-        # 红色：R通道明显高于G和B
-        if r > 0.5 and r > g + 0.15 and r > b + 0.15:
+        # 红色：R通道明显高于G和B（收紧阈值，减少橙/褐/暗洋红误判）
+        if r > RED_RGB_R_THRESHOLD and r > g + RED_RGB_GAP and r > b + RED_RGB_GAP:
             return True
     elif len(color) == 4:
         # CMYK红色：M和Y较高，C和K较低
         c, m, y, k = color[0], color[1], color[2], color[3]
-        if m > 0.3 and y > 0.3 and c < 0.3 and k < 0.5:
+        if m > RED_CMYK_M_THRESHOLD and y > RED_CMYK_Y_THRESHOLD and c < RED_CMYK_C_MAX and k < RED_CMYK_K_MAX:
             return True
     return False
 
@@ -443,11 +456,14 @@ import re
 
 
 def extract_quantity_from_text(text):
-    """从文字中提取数量，如'3块'、'x3'、'数量3'等"""
+    """从文字中提取数量，如'3块'、'x3'、'数量3'、'Qty 3'等"""
     if not text:
         return 1
     patterns = [
         r'(\d+)\s*块',      # "3块"
+        r'(\d+)\s*PCS',     # "3PCS"
+        r'(\d+)\s*pc',      # "3pc"
+        r'[Qq][Tt][Yy]\s*[:：]?\s*(\d+)',  # "Qty:3", "qty 3"
         r'[×xX]\s*(\d+)',   # "x3", "×3"
         r'数量\s*[:：]?\s*(\d+)',  # "数量:3"
         r'(\d+)\s*个',      # "3个"
@@ -483,6 +499,11 @@ def extract_global_quantity_semantic(text):
     if match:
         return int(match.group(1)), 'total'
     
+    # 【新增】"做3块"/"要3个"/"×3"等口语化/符号表达
+    match = re.search(r'[做要订做]\s*(\d+)\s*[块个只片张]', text)
+    if match:
+        return int(match.group(1)), 'each'
+
     # 【新增】"3块"（无"各"字前缀，但带制版上下文）
     # 如"2.0烫板 3块 送小彭" → 默认理解为每个框都做3块
     match = re.search(r'(\d+)\s*[块个只片张]', text)
@@ -548,12 +569,14 @@ def smart_extract_boxes(file_path):
             quantity = extract_quantity_from_text(nearby_text)
 
         results.append({
+            'x': r['x'],
+            'y': r['y'],
+            'width': r['width'],
+            'height': r['height'],
             'length_mm': length_mm,
             'width_mm': width_mm,
             'quantity': quantity,
             'nearby_text': nearby_text.strip().replace('\n', ' ')[:200],
-            'x': r['x'],
-            'y': r['y'],
         })
 
     doc.close()

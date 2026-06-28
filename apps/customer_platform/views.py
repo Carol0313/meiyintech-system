@@ -478,7 +478,7 @@ def submit_orders(request):
             file_processed=draft.get('file_processed', False),
             file_standard_checked=draft.get('file_standard_checked', False),
             is_image_file=draft.get('is_image_file', False),
-            preview_image=draft.get('preview_url', ''),
+            preview_image=None,
             red_box_data=draft.get('boxes_json', ''),
         )
         order.update_total()
@@ -610,12 +610,20 @@ def my_orders(request):
         for item in order.items.all():
             item.preview_url = None
             if item.file:
-                preview_rel = f"customer_previews/{item.id}.png"
-                preview_path = os.path.join(settings.MEDIA_ROOT, preview_rel)
-                if not os.path.exists(preview_path):
-                    generate_pdf_preview(item.file.name, preview_rel, dpi=72)
-                if os.path.exists(preview_path):
-                    item.preview_url = settings.MEDIA_URL + preview_rel
+                # 【修复】优先使用下单页保存的效果图（preview_image）
+                if item.preview_image:
+                    try:
+                        item.preview_url = item.preview_image.url
+                    except Exception:
+                        pass
+                # 没有效果图时回退到基础 PDF 预览
+                if not item.preview_url:
+                    preview_rel = f"customer_previews/{item.id}.png"
+                    preview_path = os.path.join(settings.MEDIA_ROOT, preview_rel)
+                    if not os.path.exists(preview_path):
+                        generate_pdf_preview(item.file.name, preview_rel, dpi=72)
+                    if os.path.exists(preview_path):
+                        item.preview_url = settings.MEDIA_URL + preview_rel
 
     # ===== 自动确认收货：已发货超过7天未确认的订单 =====
     seven_days_ago = timezone.now() - timedelta(days=7)
@@ -696,12 +704,20 @@ def order_detail(request, order_id):
             # 检查文件是否在存储后端（OSS 或本地）存在
             item.file_exists = default_storage.exists(item.file.name)
             if item.file_exists:
-                preview_rel = f"customer_previews/{item.id}.png"
-                preview_path = os.path.join(settings.MEDIA_ROOT, preview_rel)
-                if not os.path.exists(preview_path):
-                    generate_pdf_preview(item.file.name, preview_rel, dpi=72)
-                if os.path.exists(preview_path):
-                    item.preview_url = settings.MEDIA_URL + preview_rel
+                # 【修复】优先使用下单页保存的效果图（preview_image）
+                if item.preview_image:
+                    try:
+                        item.preview_url = item.preview_image.url
+                    except Exception:
+                        pass
+                # 没有效果图时回退到基础 PDF 预览
+                if not item.preview_url:
+                    preview_rel = f"customer_previews/{item.id}.png"
+                    preview_path = os.path.join(settings.MEDIA_ROOT, preview_rel)
+                    if not os.path.exists(preview_path):
+                        generate_pdf_preview(item.file.name, preview_rel, dpi=72)
+                    if os.path.exists(preview_path):
+                        item.preview_url = settings.MEDIA_URL + preview_rel
 
     # 查询快递100物流轨迹
     tracking_data = None
@@ -957,6 +973,60 @@ def batch_upload_files(request):
     return JsonResponse({'success': True, 'files': results})
 
 
+def _save_effect_preview_as_item_preview(item, effect_url):
+    """
+    把下单页生成的效果图保存为 OrderItem.preview_image。
+    effect_url 可能是完整 URL 或相对路径（/media/customer_previews/xxx.png）。
+    保存到 customer_previews/{item.id}.png，方便 my_orders 直接复用。
+    """
+    from django.core.files.storage import default_storage
+    from django.core.files.base import ContentFile
+    import shutil
+
+    # 从 URL 中提取相对路径
+    relative_path = effect_url
+    if relative_path.startswith(settings.MEDIA_URL):
+        relative_path = relative_path[len(settings.MEDIA_URL):]
+    elif relative_path.startswith('/' + settings.MEDIA_URL.lstrip('/')):
+        relative_path = relative_path[len('/' + settings.MEDIA_URL.lstrip('/')):]
+    elif relative_path.startswith('http'):
+        # 完整 http URL，尝试按 MEDIA_URL 截取
+        media_url_full = settings.MEDIA_URL
+        if media_url_full.startswith('/'):
+            media_url_full = settings.BASE_URL.rstrip('/') + media_url_full if hasattr(settings, 'BASE_URL') else relative_path
+        if media_url_full in relative_path:
+            relative_path = relative_path.split(media_url_full, 1)[1]
+        else:
+            # 无法直接映射到本地文件，尝试下载
+            import requests
+            response = requests.get(relative_path, timeout=10)
+            response.raise_for_status()
+            target_rel = f"customer_previews/{item.id}.png"
+            default_storage.save(target_rel, ContentFile(response.content))
+            item.preview_image = target_rel
+            item.save(update_fields=['preview_image'])
+            return
+
+    if not relative_path:
+        return
+
+    source_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+    target_rel = f"customer_previews/{item.id}.png"
+    target_path = os.path.join(settings.MEDIA_ROOT, target_rel)
+
+    if os.path.exists(source_path):
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        shutil.copy2(source_path, target_path)
+        item.preview_image = target_rel
+        item.save(update_fields=['preview_image'])
+    elif default_storage.exists(relative_path):
+        # 文件在存储后端（OSS）上，下载后重新保存
+        content = default_storage.open(relative_path).read()
+        default_storage.save(target_rel, ContentFile(content))
+        item.preview_image = target_rel
+        item.save(update_fields=['preview_image'])
+
+
 @transaction.atomic
 def _handle_quick_order_post(request, profile, tier):
     """处理单页下单的POST请求（支持规格组模式 / 混合规格下单）"""
@@ -1109,11 +1179,19 @@ def _handle_quick_order_post(request, profile, tier):
                 file_processed=file_processed,
                 file_standard_checked=file_standard_checked,
                 is_image_file=is_image_file,
-                preview_image=fd.get('preview_url', ''),
                 red_box_data=json.dumps(fd.get('boxes', [])),
                 special_requests=group_special_requests,
                 scale_ratio=scale_ratio,
             )
+
+            # 【修复】如果用户在下单页选中了效果图，保存为订单预览图
+            selected_effect_url = fd.get('selected_effect_url', '')
+            if selected_effect_url:
+                try:
+                    _save_effect_preview_as_item_preview(item, selected_effect_url)
+                except Exception:
+                    logger.exception('保存订单效果图预览失败')
+
             all_items.append(item)
 
     order.update_total()
@@ -1518,8 +1596,8 @@ def api_pdf_red_boxes(request):
 
         box_list = []
         for idx, r in enumerate(boxes[:10]):  # 最多10个框
-            length_mm = round(max(r['width'], r['height']) * pt_to_mm, 2)
-            width_mm = round(min(r['width'], r['height']) * pt_to_mm, 2)
+            length_mm = round(max(r['length_mm'], r['width_mm']), 2)
+            width_mm = round(min(r['length_mm'], r['width_mm']), 2)
             box_list.append({
                 'id': idx,
                 # 返回基于预览图像素的坐标，前端 Canvas 可直接使用
@@ -1527,6 +1605,11 @@ def api_pdf_red_boxes(request):
                 'y': round(r['y'] * px_scale_y, 2),
                 'width': round(r['width'] * px_scale_x, 2),
                 'height': round(r['height'] * px_scale_y, 2),
+                # 保留原始 PDF 点坐标，供后端生产流程使用
+                'pt_x': r['x'],
+                'pt_y': r['y'],
+                'pt_width': r['width'],
+                'pt_height': r['height'],
                 'area': round(r.get('area', r['width'] * r['height']) * px_scale_x * px_scale_y, 2),
                 'length_mm': length_mm,
                 'width_mm': width_mm,
@@ -1613,16 +1696,16 @@ def api_preview_effect(request):
         remove_red_boxes_from_pdf(doc)
 
         page = doc[0]
-        # 【修复】降低DPI从150到72，大幅减少处理时间和内存占用
+        # 【修复】适度提高DPI到100，改善效果图细节；同时限制最大尺寸避免卡死
         # runserver 单线程 + SQLite 环境下，大图处理会导致后续请求全部阻塞
-        zoom = 72 / 72
+        zoom = 100 / 72
         mat = fitz.Matrix(zoom, zoom)
         pix = page.get_pixmap(matrix=mat)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         doc.close()
 
         # 【修复】限制最大处理尺寸，避免超大PDF卡死
-        max_size = 1200
+        max_size = 1400
         if img.width > max_size or img.height > max_size:
             img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
 
@@ -1638,7 +1721,19 @@ def api_preview_effect(request):
             except Exception:
                 logger.warning('效果预览清理临时PDF文件失败', exc_info=True)
 
-        effect_name = get_effect_name(product_name, effect_type or None)
+        # 【修复】直接根据实际效果类型返回名称，避免 get_effect_name 因 key 命名空间不同返回"普通"
+        effect_name_map = {
+            'normal': '普通',
+            'gold_flat': '烫金光泽',
+            'gold_satin': '金色平雕',
+            'emboss_deboss': '压纹凹陷',
+            'relief_strong': '激凸浮雕',
+            'deboss_strong': '激凹凹陷',
+            'relief_gold': '金色浮雕',
+            'relief_gold_multi': '多层金色浮雕',
+            'film_transparent': '菲林半透明',
+        }
+        effect_name = effect_name_map.get(actual_effect_type, '普通')
 
         effect_url = settings.MEDIA_URL + output_filename
         return JsonResponse({
@@ -1681,9 +1776,15 @@ def api_preview_3d(request):
 
     try:
         from utils.plate_preview_effects import generate_3d_preview_maps
+        from utils.pdf_processor import _get_pdf_local_path
+
+        # 【修复】先获取本地路径，支持 OSS 文件自动下载到临时文件
+        pdf_path = _get_pdf_local_path(file_path)
+        if not pdf_path:
+            return JsonResponse({'success': False, 'error': 'PDF文件不存在或无法读取'})
 
         maps = generate_3d_preview_maps(
-            file_path,
+            pdf_path,
             'customer_previews',
             product_name,
             effect_type or None,
@@ -1691,6 +1792,13 @@ def api_preview_3d(request):
             emboss_direction=emboss_direction,
             emboss_strength=emboss_strength
         )
+
+        # 清理临时文件
+        if pdf_path != file_path and not pdf_path.startswith(str(settings.MEDIA_ROOT)):
+            try:
+                os.unlink(pdf_path)
+            except Exception:
+                logger.warning('3D预览清理临时PDF文件失败', exc_info=True)
 
         if not maps:
             return JsonResponse({'success': False, 'error': '3D贴图生成失败'})
