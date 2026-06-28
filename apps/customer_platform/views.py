@@ -919,18 +919,30 @@ def batch_upload_files(request):
             # 计算面积（优先使用框尺寸）
             area = _calculate_pdf_area(local_path, box_info)
 
-            # 生成预览图
+            # 生成预览图：根据 PDF 尺寸动态降低 DPI，避免大文件处理超时
             preview_url = None
             preview_filename = f"previews/{uuid.uuid4().hex}.png"
             img_width, img_height = 0, 0
             try:
-                preview_url = generate_pdf_preview(local_path, preview_filename, dpi=72, black_only=True)
-                # 读取预览图尺寸，用于计算像素坐标
-                from PIL import Image
-                abs_preview = os.path.join(settings.MEDIA_ROOT, preview_filename)
-                if os.path.exists(abs_preview):
-                    with Image.open(abs_preview) as im:
-                        img_width, img_height = im.size
+                # 计算合适 DPI：限制预览图最大边不超过 800px
+                import fitz
+                doc_tmp = fitz.open(local_path)
+                page_tmp = doc_tmp[0]
+                max_side_pt = max(page_tmp.rect.width, page_tmp.rect.height)
+                doc_tmp.close()
+                max_side_mm = max_side_pt * 25.4 / 72
+                if max_side_mm > 0:
+                    target_dpi = int(800 * 25.4 / max_side_mm)
+                    target_dpi = max(36, min(72, target_dpi))  # 限制 36~72
+                else:
+                    target_dpi = 72
+
+                preview_result = generate_pdf_preview(
+                    local_path, preview_filename,
+                    dpi=target_dpi, black_only=True, return_size=True
+                )
+                if preview_result:
+                    preview_url, img_width, img_height = preview_result
             except Exception:
                 logger.exception('批量上传预览图生成失败')
 

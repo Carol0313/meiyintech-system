@@ -136,14 +136,15 @@ def convert_pdf_to_black(input_path, output_path=None, threshold=240):
     return output_path
 
 
-def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
+def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False, return_size=False):
     """
     生成PDF第一页的预览图，并保存到Django默认存储后端（本地或OSS）
     :param pdf_path: PDF文件路径
     :param output_filename: 输出文件名（相对于MEDIA_ROOT）
     :param dpi: 分辨率
     :param black_only: 是否转为纯黑预览（用于制版显示）
-    :return: 输出文件URL 或 None
+    :param return_size: 是否同时返回图片尺寸 (width, height)
+    :return: 输出文件URL，或 (URL, width, height) 元组，失败返回 None
     """
     try:
         local_pdf_path = _get_pdf_local_path(pdf_path)
@@ -180,13 +181,18 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
             pix.save(tmp_path)
         doc.close()
         
-        # 2. 上传到Django默认存储后端（本地或OSS）
+        # 2. 读取预览图尺寸
+        from PIL import Image
+        with Image.open(tmp_path) as im:
+            img_width, img_height = im.size
+        
+        # 3. 上传到Django默认存储后端（本地或OSS）
         from django.core.files.base import File
         if not default_storage.exists(output_filename):
             with open(tmp_path, 'rb') as f:
                 default_storage.save(output_filename, File(f))
         
-        # 3. 清理临时文件
+        # 4. 清理临时文件
         try:
             os.unlink(tmp_path)
         except:
@@ -197,8 +203,11 @@ def generate_pdf_preview(pdf_path, output_filename, dpi=150, black_only=False):
             except:
                 pass
         
-        # 4. 返回存储后端的URL
-        return default_storage.url(output_filename)
+        # 5. 返回存储后端的URL
+        url = default_storage.url(output_filename)
+        if return_size:
+            return url, img_width, img_height
+        return url
         
     except Exception as e:
         logger.exception("[generate_pdf_preview] 生成预览图失败: %s", e)
