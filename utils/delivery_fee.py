@@ -130,22 +130,42 @@ NANTONG_DEST_MAP = {
 
 
 def _normalize_province(province: str) -> str:
-    """清洗省份名称，去除'市'、'省'后缀，统一格式"""
+    """清洗省份名称，统一为标准省份名。
+    
+    处理常见脏数据：
+    - 上海市 -> 上海
+    - 广东省 -> 广东
+    - 内蒙古自治区 -> 内蒙古
+    - 上海市 — Shanghai Shi -> 上海（带英文/分隔符的地址数据）
+    """
     if not province:
         return ''
     province = province.strip()
-    # 去除'市'后缀：上海市 -> 上海，北京市 -> 北京
+    
+    # 优先从字符串中匹配标准省份名（解决 province 字段里混有英文的情况，
+    # 例如 "上海市 — Shanghai Shi"）
+    province_keywords = [
+        '黑龙江', '内蒙古',
+        '北京', '天津', '上海', '重庆',
+        '河北', '山西', '辽宁', '吉林',
+        '江苏', '浙江', '安徽', '福建', '江西', '山东',
+        '河南', '湖北', '湖南', '广东', '海南',
+        '四川', '贵州', '云南', '陕西', '甘肃', '青海', '台湾',
+        '广西', '西藏', '宁夏', '新疆',
+        '香港', '澳门',
+    ]
+    for keyword in province_keywords:
+        if keyword in province:
+            return keyword
+    
+    # 兜底：去除'市'/'省'/'特别行政区'/'自治区'后缀
     if province.endswith('市'):
         province = province[:-1]
-    # 去除'省'后缀：广东省 -> 广东
     if province.endswith('省'):
         province = province[:-1]
-    # 处理自治区：广西壮族自治区 -> 广西，内蒙古自治区 -> 内蒙古（内蒙古本身不带后缀）
-    # 处理特别行政区：香港特别行政区 -> 香港
     if province.endswith('特别行政区'):
         province = province[:-5]
     if province.endswith('自治区'):
-        # 新疆维吾尔自治区 -> 新疆，西藏自治区 -> 西藏，宁夏回族自治区 -> 宁夏，广西壮族自治区 -> 广西，内蒙古自治区 -> 内蒙古
         if '新疆' in province:
             province = '新疆'
         elif '西藏' in province:

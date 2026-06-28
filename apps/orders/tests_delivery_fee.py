@@ -52,6 +52,14 @@ class NormalizeProvinceTest(TestCase):
         """去除前后空格"""
         self.assertEqual(_normalize_province(' 上海市 '), '上海')
 
+    def test_mixed_with_english(self):
+        """处理 province 字段混有英文/分隔符的脏数据"""
+        self.assertEqual(_normalize_province('上海市 — Shanghai Shi'), '上海')
+        self.assertEqual(_normalize_province('上海市-Shanghai Shi'), '上海')
+        self.assertEqual(_normalize_province('Shanghai 上海'), '上海')
+        self.assertEqual(_normalize_province('Guangdong 广东省'), '广东')
+        self.assertEqual(_normalize_province('Beijing 北京市'), '北京')
+
 
 class SelectFactoryTest(TestCase):
     """工厂选择测试"""
