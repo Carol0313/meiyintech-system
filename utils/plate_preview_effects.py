@@ -792,8 +792,6 @@ def generate_3d_preview_maps(pdf_path, output_dir, product_name, plate_type_key=
         if not os.path.exists(pdf_path):
             return None
         
-        os.makedirs(output_dir, exist_ok=True)
-        
         # 打开PDF
         doc = fitz.open(pdf_path)
         if len(doc) == 0:
@@ -828,20 +826,36 @@ def generate_3d_preview_maps(pdf_path, output_dir, product_name, plate_type_key=
                                                  intensity=emboss_strength / 1.5)
         normal = generate_normal_map(img, effect_type)
         
-        # 保存文件
-        base_name = os.urandom(8).hex()
-        color_path = os.path.join(output_dir, f"{base_name}_color.png")
-        disp_path = os.path.join(output_dir, f"{base_name}_disp.png")
-        normal_path = os.path.join(output_dir, f"{base_name}_normal.png")
+        # 保存到临时目录，然后上传到 Django 默认存储后端（本地或 OSS）
+        import tempfile
+        from django.core.files.base import File
+        from django.core.files.storage import default_storage
         
-        color_img.save(color_path, "PNG")
-        displacement.save(disp_path, "PNG")
-        normal.save(normal_path, "PNG")
+        base_name = os.urandom(8).hex()
+        color_rel = f"customer_previews/{base_name}_color.png"
+        disp_rel = f"customer_previews/{base_name}_disp.png"
+        normal_rel = f"customer_previews/{base_name}_normal.png"
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            color_path = os.path.join(tmpdir, f"{base_name}_color.png")
+            disp_path = os.path.join(tmpdir, f"{base_name}_disp.png")
+            normal_path = os.path.join(tmpdir, f"{base_name}_normal.png")
+            
+            color_img.save(color_path, "PNG")
+            displacement.save(disp_path, "PNG")
+            normal.save(normal_path, "PNG")
+            
+            with open(color_path, 'rb') as f:
+                default_storage.save(color_rel, File(f))
+            with open(disp_path, 'rb') as f:
+                default_storage.save(disp_rel, File(f))
+            with open(normal_path, 'rb') as f:
+                default_storage.save(normal_rel, File(f))
         
         return {
-            'color_url': settings.MEDIA_URL + f"customer_previews/{base_name}_color.png",
-            'displacement_url': settings.MEDIA_URL + f"customer_previews/{base_name}_disp.png",
-            'normal_url': settings.MEDIA_URL + f"customer_previews/{base_name}_normal.png",
+            'color_url': default_storage.url(color_rel),
+            'displacement_url': default_storage.url(disp_rel),
+            'normal_url': default_storage.url(normal_rel),
             'width': img.width,
             'height': img.height,
         }

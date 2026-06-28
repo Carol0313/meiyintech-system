@@ -1699,8 +1699,6 @@ def api_preview_effect(request):
             return JsonResponse({'success': False, 'error': 'PDF文件不存在或无法读取'})
 
         output_filename = f"customer_previews/{uuid.uuid4().hex}.png"
-        output_path = os.path.join(settings.MEDIA_ROOT, output_filename)
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         doc = fitz.open(pdf_path)
         if len(doc) == 0:
@@ -1728,7 +1726,21 @@ def api_preview_effect(request):
         result = apply_plate_effect(img, actual_effect_type,
                                     emboss_direction=emboss_direction,
                                     emboss_strength=emboss_strength)
-        result.save(output_path, "PNG")
+
+        # 生成到临时文件，然后上传到 Django 默认存储后端（本地或 OSS）
+        import tempfile
+        from django.core.files.base import File
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            result.save(tmp_path, "PNG")
+            with open(tmp_path, 'rb') as f:
+                default_storage.save(output_filename, File(f))
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
         # 清理临时文件
         if pdf_path != file_path and not pdf_path.startswith(str(settings.MEDIA_ROOT)):
@@ -1751,7 +1763,8 @@ def api_preview_effect(request):
         }
         effect_name = effect_name_map.get(actual_effect_type, '普通')
 
-        effect_url = settings.MEDIA_URL + output_filename
+        # 使用 default_storage.url 返回可访问 URL（OSS 私有 Bucket 会返回签名 URL）
+        effect_url = default_storage.url(output_filename)
         return JsonResponse({
             'success': True,
             'effect_url': effect_url,
