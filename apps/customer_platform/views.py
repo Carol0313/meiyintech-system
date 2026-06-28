@@ -700,24 +700,40 @@ def order_detail(request, order_id):
     for item in order.items.all():
         item.file_exists = False
         item.preview_url = None
-        if item.file:
+
+        if item.file and item.file.name:
             # 检查文件是否在存储后端（OSS 或本地）存在
-            item.file_exists = default_storage.exists(item.file.name)
-            if item.file_exists:
-                # 【修复】优先使用下单页保存的效果图（preview_image）
+            try:
+                item.file_exists = default_storage.exists(item.file.name)
+            except Exception as e:
+                logger.warning('检查订单文件是否存在失败: order=%s item=%s file=%s error=%s',
+                               order.id, item.id, item.file.name, str(e))
+                item.file_exists = False
+
+            # 存储后端判断不存在时，再检查本地是否存在（兼容本地存储）
+            if not item.file_exists:
+                local_file_path = os.path.join(settings.MEDIA_ROOT, item.file.name)
+                item.file_exists = os.path.exists(local_file_path)
+
+            # 生成预览图：优先使用下单页保存的效果图（preview_image）
+            if item.file_exists or item.preview_image:
                 if item.preview_image:
                     try:
                         item.preview_url = item.preview_image.url
                     except Exception:
                         pass
+
                 # 没有效果图时回退到基础 PDF 预览
                 if not item.preview_url:
                     preview_rel = f"customer_previews/{item.id}.png"
-                    preview_path = os.path.join(settings.MEDIA_ROOT, preview_rel)
-                    if not os.path.exists(preview_path):
-                        generate_pdf_preview(item.file.name, preview_rel, dpi=72)
-                    if os.path.exists(preview_path):
-                        item.preview_url = settings.MEDIA_URL + preview_rel
+                    try:
+                        # generate_pdf_preview 会处理 OSS/本地，并返回可访问的 URL
+                        preview_url = generate_pdf_preview(item.file.name, preview_rel, dpi=72)
+                        if preview_url:
+                            item.preview_url = preview_url
+                    except Exception as e:
+                        logger.warning('生成订单 PDF 预览失败: order=%s item=%s file=%s error=%s',
+                                       order.id, item.id, item.file.name, str(e))
 
     # 查询快递100物流轨迹
     tracking_data = None
