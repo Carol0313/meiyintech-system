@@ -262,6 +262,9 @@ def verify_callback_sign(param: str, sign: str) -> bool:
     
     expected = _generate_sign(param, key, customer)
     return expected == sign
+
+
+def get_company_code(company_name: str) -> str:
     """
     根据快递公司名称获取编码（常用映射）
     完整列表参见：https://api.kuaidi100.com/document/5f0ff4a29777d50d94e1026a.html
